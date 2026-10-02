@@ -1,0 +1,28 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# osmnx overpass cache
+cache/
+
+# Runtime session state (not the baseline fixture, which is committed) — one
+# per site, see civic_twin/config.py's SiteConfig.session_json_path.
+data/*/session.json
+
+# Raw LiDAR/orthophoto inputs for build_baseline.py, one per-site directory
+# under data/ (see civic_twin/ingestion/lidar.py and ortofoto.py). Re-derived
+# height/roof-shape data lands in the committed baseline JSON; these source
+# rasters are too large and too easily re-fetched to be worth committing.
+data/*/lidar/
+data/*/ortofoto/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/

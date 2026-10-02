@@ -1,0 +1,843 @@
+[
+ {
+  "id": "int-f4f4a2f836d6",
+  "card_type": "plant_grove",
+  "geometry": {
+   "type": "Polygon",
+   "coordinates": [
+    [
+     [
+      11.120183764,
+      46.071445422
+     ],
+     [
+      11.120582029,
+      46.071285195
+     ],
+     [
+      11.120679541,
+      46.071415597
+     ],
+     [
+      11.120786952,
+      46.071650396
+     ],
+     [
+      11.120208451,
+      46.071849715
+     ],
+     [
+      11.120170207,
+      46.071681983
+     ],
+     [
+      11.120183764,
+      46.071445422
+     ]
+    ]
+   ]
+  },
+  "params": {
+   "species": "birch",
+   "spacing": 7
+  },
+  "deleted": false,
+  "created_at": "2026-09-03T06:03:20.756376+00:00",
+  "replaces_element_id": null,
+  "planted_year": 6
+ },
+ {
+  "id": "int-dd66f2be5daf",
+  "card_type": "plant_grove",
+  "geometry": {
+   "type": "Polygon",
+   "coordinates": [
+    [
+     [
+      11.120387059,
+      46.070899275
+     ],
+     [
+      11.120661058,
+      46.070984434
+     ],
+     [
+      11.120551733,
+      46.071184095
+     ],
+     [
+      11.120106973,
+      46.071342751
+     ],
+     [
+      11.119862524,
+      46.07114437
+     ],
+     [
+      11.120047589,
+      46.071125331
+     ],
+     [
+      11.12030792,
+      46.071066559
+     ],
+     [
+      11.120387059,
+      46.070899275
+     ]
+    ]
+   ]
+  },
+  "params": {
+   "species": "oak",
+   "spacing": 9
+  },
+  "deleted": false,
+  "created_at": "2026-09-03T06:04:31.243661+00:00",
+  "replaces_element_id": null,
+  "planted_year": 12
+ },
+ {
+  "id": "int-91b5ac809edb",
+  "card_type": "new_path",
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     11.119984614,
+     46.071327443
+    ],
+    [
+     11.120237071,
+     46.071337129
+    ],
+    [
+     11.120440036,
+     46.071277131
+    ],
+    [
+     11.120588296,
+     46.071183627
+    ],
+    [
+     11.120694877,
+     46.071090734
+    ]
+   ]
+  },
+  "params": {
+   "width": 2,
+   "material": "wood"
+  },
+  "deleted": false,
+  "created_at": "2026-09-03T06:05:37.314139+00:00",
+  "replaces_element_id": null,
+  "planted_year": 0
+ },
+ {
+  "id": "int-56ab0b4ad68a",
+  "card_type": "add_playground",
+  "geometry": {
+   "type": "Polygon",
+   "coordinates": [
+    [
+     [
+      11.120365186,
+      46.070924795
+     ],
+     [
+      11.120685635,
+      46.070802046
+     ],
+     [
+      11.120673001,
+      46.071075994
+     ],
+     [
+      11.120348313,
+      46.071135574
+     ],
+     [
+      11.120365186,
+      46.070924795
+     ]
+    ]
+   ]
+  },
+  "params": {
+   "age_range": "junior"
+  },
+  "deleted": false,
+  "created_at": "2026-09-03T06:06:50.541012+00:00",
+  "replaces_element_id": null,
+  "planted_year": 0
+ },
+ {
+  "id": "int-47131ea7f8b3",
+  "card_type": "add_streetlight",
+  "geometry": {
+   "type": "Point",
+   "coordinates": [
+    11.119703956,
+    46.071185311
+   ]
+  },
+  "params": {},
+  "deleted": false,
+  "created_at": "2026-09-03T06:07:51.028418+00:00",
+  "replaces_element_id": null,
+  "planted_year": 1
+ },
+ {
+  "id": "int-dc2000a9b7de",
+  "card_type": "add_streetlight",
+  "geometry": {
+   "type": "Point",
+   "coordinates": [
+    11.119835629,
+    46.071153783
+   ]
+  },
+  "params": {},
+  "deleted": false,
+  "created_at": "2026-09-03T06:07:54.536297+00:00",
+  "replaces_element_id": null,
+  "planted_year": 1
+ },
+ {
+  "id": "int-6fcda618d080",
+  "card_type": "add_streetlight",
+  "geometry": {
+   "type": "Point",
+   "coordinates": [
+    11.11988058,
+    46.071225604
+   ]
+  },
+  "params": {},
+  "deleted": false,
+  "created_at": "2026-09-03T06:07:59.781055+00:00",
+  "replaces_element_id": null,
+  "planted_year": 1
+ },
+ {
+  "id": "int-376b063486aa",
+  "card_type": "add_streetlight",
+  "geometry": {
+   "type": "Point",
+   "coordinates": [
+    11.119941556,
+    46.071278908
+   ]
+  },
+  "params": {},
+  "deleted": false,
+  "created_at": "2026-09-03T06:08:03.253214+00:00",
+  "replaces_element_id": null,
+  "planted_year": 1
+ },
+ {
+  "id": "int-22b6a4233359",
+  "card_type": "add_streetlight",
+  "geometry": {
+   "type": "Point",
+   "coordinates": [
+    11.119957373,
+    46.071361411
+   ]
+  },
+  "params": {},
+  "deleted": false,
+  "created_at": "2026-09-03T06:08:08.212188+00:00",
+  "replaces_element_id": null,
+  "planted_year": 1
+ },
+ {
+  "id": "int-897a67aa6efb",
+  "card_type": "add_streetlight",
+  "geometry": {
+   "type": "Point",
+   "coordinates": [
+    11.120139452,
+    46.071392238
+   ]
+  },
+  "params": {},
+  "deleted": false,
+  "created_at": "2026-09-03T06:08:12.113752+00:00",
+  "replaces_element_id": null,
+  "planted_year": 1
+ },
+ {
+  "id": "int-51d07a6b4848",
+  "card_type": "add_streetlight",
+  "geometry": {
+   "type": "Point",
+   "coordinates": [
+    11.12032825,
+    46.071373292
+   ]
+  },
+  "params": {},
+  "deleted": false,
+  "created_at": "2026-09-03T06:08:20.840623+00:00",
+  "replaces_element_id": null,
+  "planted_year": 1
+ },
+ {
+  "id": "int-928c776fbd14",
+  "card_type": "add_streetlight",
+  "geometry": {
+   "type": "Point",
+   "coordinates": [
+    11.120538671,
+    46.071294412
+   ]
+  },
+  "params": {},
+  "deleted": false,
+  "created_at": "2026-09-03T06:08:27.868331+00:00",
+  "replaces_element_id": null,
+  "planted_year": 1
+ },
+ {
+  "id": "int-38515d69aed8",
+  "card_type": "add_streetlight",
+  "geometry": {
+   "type": "Point",
+   "coordinates": [
+    11.120584817,
+    46.071142986
+   ]
+  },
+  "params": {},
+  "deleted": false,
+  "created_at": "2026-09-03T06:08:38.089986+00:00",
+  "replaces_element_id": null,
+  "planted_year": 1
+ },
+ {
+  "id": "int-57016f6add72",
+  "card_type": "add_streetlight",
+  "geometry": {
+   "type": "Point",
+   "coordinates": [
+    11.120705221,
+    46.070962489
+   ]
+  },
+  "params": {},
+  "deleted": false,
+  "created_at": "2026-09-03T06:08:51.743222+00:00",
+  "replaces_element_id": null,
+  "planted_year": 1
+ },
+ {
+  "id": "int-288ab9405c1a",
+  "card_type": "add_streetlight",
+  "geometry": {
+   "type": "Point",
+   "coordinates": [
+    11.12077719,
+    46.070859218
+   ]
+  },
+  "params": {},
+  "deleted": false,
+  "created_at": "2026-09-03T06:08:57.690161+00:00",
+  "replaces_element_id": null,
+  "planted_year": 1
+ },
+ {
+  "id": "int-235d859488fc",
+  "card_type": "add_streetlight",
+  "geometry": {
+   "type": "Point",
+   "coordinates": [
+    11.120843354,
+    46.070795727
+   ]
+  },
+  "params": {},
+  "deleted": false,
+  "created_at": "2026-09-03T06:09:01.778053+00:00",
+  "replaces_element_id": null,
+  "planted_year": 1
+ },
+ {
+  "id": "int-b42e31f2d6ac",
+  "card_type": "add_streetlight",
+  "geometry": {
+   "type": "Point",
+   "coordinates": [
+    11.12102642,
+    46.0707737
+   ]
+  },
+  "params": {},
+  "deleted": false,
+  "created_at": "2026-09-03T06:09:05.529095+00:00",
+  "replaces_element_id": null,
+  "planted_year": 1
+ },
+ {
+  "id": "int-750bb92c9fd7",
+  "card_type": "add_streetlight",
+  "geometry": {
+   "type": "Point",
+   "coordinates": [
+    11.121119821,
+    46.070767691
+   ]
+  },
+  "params": {},
+  "deleted": false,
+  "created_at": "2026-09-03T06:09:09.424428+00:00",
+  "replaces_element_id": null,
+  "planted_year": 1
+ },
+ {
+  "id": "int-758e09472e18",
+  "card_type": "add_streetlight",
+  "geometry": {
+   "type": "Point",
+   "coordinates": [
+    11.121240109,
+    46.070803621
+   ]
+  },
+  "params": {},
+  "deleted": false,
+  "created_at": "2026-09-03T06:09:13.547725+00:00",
+  "replaces_element_id": null,
+  "planted_year": 1
+ },
+ {
+  "id": "int-b27f1dd351c3",
+  "card_type": "plant_tree",
+  "geometry": {
+   "type": "Point",
+   "coordinates": [
+    11.1195,
+    46.0715
+   ]
+  },
+  "params": {
+   "species": "pine",
+   "canopy_diameter": 1.5
+  },
+  "deleted": true,
+  "created_at": "2026-09-08T20:20:35.457318+00:00",
+  "replaces_element_id": null,
+  "planted_year": 0
+ },
+ {
+  "id": "int-65e6d702dc58",
+  "card_type": "plant_tree",
+  "geometry": {
+   "type": "Point",
+   "coordinates": [
+    11.120295581,
+    46.071573542
+   ]
+  },
+  "params": {
+   "species": "cypress",
+   "canopy_diameter": 3
+  },
+  "deleted": true,
+  "created_at": "2026-09-09T09:36:38.990206+00:00",
+  "replaces_element_id": null,
+  "planted_year": 0
+ },
+ {
+  "id": "int-081426ba6beb",
+  "card_type": "plant_tree",
+  "geometry": {
+   "type": "Point",
+   "coordinates": [
+    11.120456118,
+    46.071488928
+   ]
+  },
+  "params": {
+   "species": "pine",
+   "canopy_diameter": 3
+  },
+  "deleted": true,
+  "created_at": "2026-09-09T09:36:59.789793+00:00",
+  "replaces_element_id": null,
+  "planted_year": 0
+ },
+ {
+  "id": "int-8cd396475549",
+  "card_type": "plant_tree",
+  "geometry": {
+   "type": "Point",
+   "coordinates": [
+    11.120303492,
+    46.071559169
+   ]
+  },
+  "params": {
+   "species": "pine",
+   "canopy_diameter": 3
+  },
+  "deleted": true,
+  "created_at": "2026-09-09T13:08:54.251746+00:00",
+  "replaces_element_id": null,
+  "planted_year": 0
+ },
+ {
+  "id": "int-bf17900adad1",
+  "card_type": "plant_tree",
+  "geometry": {
+   "type": "Point",
+   "coordinates": [
+    11.120462925,
+    46.071559366
+   ]
+  },
+  "params": {
+   "species": "cypress",
+   "canopy_diameter": 3
+  },
+  "deleted": true,
+  "created_at": "2026-09-09T13:09:04.486100+00:00",
+  "replaces_element_id": null,
+  "planted_year": 0
+ },
+ {
+  "id": "int-fdfb707533ba",
+  "card_type": "plant_tree",
+  "geometry": {
+   "type": "Point",
+   "coordinates": [
+    11.120105773,
+    46.07123503
+   ]
+  },
+  "params": {
+   "species": "pine",
+   "canopy_diameter": 3
+  },
+  "deleted": true,
+  "created_at": "2026-09-09T13:11:00.358464+00:00",
+  "replaces_element_id": null,
+  "planted_year": 0
+ },
+ {
+  "id": "int-31b4e396e345",
+  "card_type": "new_path",
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     11.120411702,
+     46.071864055
+    ],
+    [
+     11.120197343,
+     46.07159133
+    ],
+    [
+     11.120616428,
+     46.071210598
+    ]
+   ]
+  },
+  "params": {
+   "width": 2,
+   "material": "gravel"
+  },
+  "deleted": true,
+  "created_at": "2026-09-10T07:21:34.478522+00:00",
+  "replaces_element_id": null,
+  "planted_year": 17
+ },
+ {
+  "id": "int-464ec583d57e",
+  "card_type": "add_bench",
+  "geometry": {
+   "type": "Point",
+   "coordinates": [
+    11.120392848,
+    46.071571047
+   ]
+  },
+  "params": {},
+  "deleted": true,
+  "created_at": "2026-09-11T07:38:42.452477+00:00",
+  "replaces_element_id": null,
+  "planted_year": 0
+ },
+ {
+  "id": "int-8a041300b80e",
+  "card_type": "add_streetlight",
+  "geometry": {
+   "type": "Point",
+   "coordinates": [
+    11.12026675,
+    46.070142787
+   ]
+  },
+  "params": {},
+  "deleted": false,
+  "created_at": "2026-09-11T07:38:58.089194+00:00",
+  "replaces_element_id": null,
+  "planted_year": 0
+ },
+ {
+  "id": "int-165b08176a31",
+  "card_type": "add_playground",
+  "geometry": {
+   "type": "Polygon",
+   "coordinates": [
+    [
+     [
+      11.119870291,
+      46.070212199
+     ],
+     [
+      11.120034673,
+      46.070116101
+     ],
+     [
+      11.120052454,
+      46.070290572
+     ],
+     [
+      11.119870291,
+      46.070212199
+     ]
+    ]
+   ]
+  },
+  "params": {
+   "age_range": "junior"
+  },
+  "deleted": true,
+  "created_at": "2026-09-11T07:39:21.807943+00:00",
+  "replaces_element_id": null,
+  "planted_year": 0
+ },
+ {
+  "id": "int-719e9f214c65",
+  "card_type": "add_playground",
+  "geometry": {
+   "type": "Polygon",
+   "coordinates": [
+    [
+     [
+      11.120620125,
+      46.070161412
+     ],
+     [
+      11.120916693,
+      46.070178187
+     ],
+     [
+      11.12087134,
+      46.070287895
+     ],
+     [
+      11.120620246,
+      46.070245545
+     ],
+     [
+      11.120620125,
+      46.070161412
+     ]
+    ]
+   ]
+  },
+  "params": {
+   "age_range": "junior"
+  },
+  "deleted": true,
+  "created_at": "2026-09-11T07:40:05.365431+00:00",
+  "replaces_element_id": null,
+  "planted_year": 0
+ },
+ {
+  "id": "int-66f9824d374d",
+  "card_type": "new_path",
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     11.120240147,
+     46.071339071
+    ],
+    [
+     11.120166035,
+     46.071559994
+    ],
+    [
+     11.120290829,
+     46.07173677
+    ],
+    [
+     11.120448212,
+     46.071866802
+    ]
+   ]
+  },
+  "params": {
+   "width": 2,
+   "material": "gravel"
+  },
+  "deleted": false,
+  "created_at": "2026-09-11T09:42:38.501704+00:00",
+  "replaces_element_id": null,
+  "planted_year": 4
+ },
+ {
+  "id": "int-66ca36134391",
+  "card_type": "add_bench",
+  "geometry": {
+   "type": "Point",
+   "coordinates": [
+    11.120466528,
+    46.071576276
+   ]
+  },
+  "params": {},
+  "deleted": true,
+  "created_at": "2026-09-15T13:55:19.081835+00:00",
+  "replaces_element_id": null,
+  "planted_year": 0
+ },
+ {
+  "id": "int-6226c0224d12",
+  "card_type": "add_bench",
+  "geometry": {
+   "type": "Point",
+   "coordinates": [
+    11.120122822,
+    46.07118788
+   ]
+  },
+  "params": {},
+  "deleted": true,
+  "created_at": "2026-09-16T09:42:19.463725+00:00",
+  "replaces_element_id": null,
+  "planted_year": 0
+ },
+ {
+  "id": "int-c5b2a37644a2",
+  "card_type": "add_bench",
+  "geometry": {
+   "type": "Point",
+   "coordinates": [
+    11.120682146,
+    46.070821056
+   ]
+  },
+  "params": {},
+  "deleted": true,
+  "created_at": "2026-09-17T11:25:19.938828+00:00",
+  "replaces_element_id": null,
+  "planted_year": 0
+ },
+ {
+  "id": "int-f94abd0e1f44",
+  "card_type": "plant_tree",
+  "geometry": {
+   "type": "Point",
+   "coordinates": [
+    11.120637945,
+    46.071500307
+   ]
+  },
+  "params": {
+   "species": "unknown",
+   "canopy_diameter": 1
+  },
+  "deleted": false,
+  "created_at": "2026-09-28T12:56:01.799068+00:00",
+  "replaces_element_id": null,
+  "planted_year": 20
+ },
+ {
+  "id": "int-5edd6a29a063",
+  "card_type": "plant_grove",
+  "geometry": {
+   "type": "Polygon",
+   "coordinates": [
+    [
+     [
+      11.120115889,
+      46.071180653
+     ],
+     [
+      11.120022254,
+      46.071146081
+     ],
+     [
+      11.120115283,
+      46.070944082
+     ],
+     [
+      11.120442182,
+      46.070881397
+     ],
+     [
+      11.120352044,
+      46.0711856
+     ],
+     [
+      11.120115889,
+      46.071180653
+     ]
+    ]
+   ]
+  },
+  "params": {
+   "species": "linden",
+   "spacing": 3
+  },
+  "deleted": false,
+  "created_at": "2026-09-28T13:21:07.037567+00:00",
+  "replaces_element_id": null,
+  "planted_year": 6
+ },
+ {
+  "id": "int-972d117d12b8",
+  "card_type": "add_fitness_area",
+  "geometry": {
+   "type": "Polygon",
+   "coordinates": [
+    [
+     [
+      11.120335171,
+      46.07152332
+     ],
+     [
+      11.120455696,
+      46.071331945
+     ],
+     [
+      11.120589951,
+      46.071371847
+     ],
+     [
+      11.120445625,
+      46.071591829
+     ],
+     [
+      11.120335171,
+      46.07152332
+     ]
+    ]
+   ]
+  },
+  "params": {
+   "target_age": "mixed"
+  },
+  "deleted": false,
+  "created_at": "2026-09-30T15:22:22.408266+00:00",
+  "replaces_element_id": null,
+  "planted_year": 0
+ }
+]

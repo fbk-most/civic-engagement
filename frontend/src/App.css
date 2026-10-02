@@ -1,0 +1,1289 @@
+.app {
+  --top-bar-height: 48px;
+  position: relative;
+  height: 100%;
+  width: 100%;
+}
+
+.top-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--top-bar-height);
+  box-sizing: border-box;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 12px;
+  background: #fff;
+  border-bottom: 1px solid #ddd;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+
+.view-tabs {
+  display: flex;
+  align-self: stretch;
+  gap: 4px;
+}
+
+.view-tabs__tab {
+  padding: 0 16px;
+  border: none;
+  border-bottom: 3px solid transparent;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  color: #555;
+}
+
+.view-tabs__tab:hover {
+  color: #222;
+}
+
+.view-tabs__tab--active {
+  border-bottom-color: #2e6b1f;
+  color: #2e6b1f;
+  font-weight: 600;
+}
+
+/* Everything below the top bar: the three views are stacked in this area and
+   only the active one is visible. */
+.map-container,
+.view-3d,
+.indicators-view {
+  position: absolute;
+  top: var(--top-bar-height);
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+.indicators-view {
+  z-index: 1;
+  overflow-y: auto;
+  background: #f4f3ef;
+  /* Room at the bottom for the floating year slider. */
+  padding: 20px 24px 96px;
+  box-sizing: border-box;
+}
+
+.indicators-view__inner {
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.indicators-view__header h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+}
+
+.indicators-view__legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 18px;
+  font-size: 13px;
+  color: #444;
+}
+
+.indicators-view__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.indicators-view__status {
+  color: #2f7fd6;
+}
+
+.indicators-view__options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.indicators-view__hint {
+  margin: 0;
+  font-size: 12px;
+  color: #777;
+}
+
+.indicators-view__scale {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #555;
+}
+
+.indicators-view__scale button {
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background: #fff;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.indicators-view__scale button[aria-pressed="true"] {
+  background: #2e6b1f;
+  color: #fff;
+  border-color: #2e6b1f;
+}
+
+.indicators-view section {
+  margin-top: 18px;
+}
+
+.indicators-view section h3 {
+  margin: 4px 0 8px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #555;
+}
+
+.indicators-view__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 14px;
+}
+
+.indicator-card {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  padding: 12px 14px 8px;
+  font-size: 13px;
+}
+
+.indicator-card--wide {
+  grid-column: 1 / -1;
+}
+
+.indicator-card h4 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.indicator-card__values {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 2px 0 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.indicator-card__baseline {
+  color: #888;
+}
+
+.indicator-card__arrow {
+  color: #aaa;
+  font-size: 11px;
+}
+
+.indicator-card__scenario {
+  font-weight: 600;
+  color: #2e6b1f;
+}
+
+.indicator-card__delta {
+  font-size: 12px;
+}
+
+.indicator-card__year {
+  font-size: 12px;
+  font-weight: normal;
+  color: #888;
+}
+
+.indicator-card__delta--better,
+.indicator-card__gain {
+  color: #2e6b1f;
+  font-weight: 600;
+}
+
+.indicator-card__delta--worse {
+  color: #b33;
+}
+
+.indicator-card__pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* Same scale as the single charts (the SVG text grows with the chart's
+   width otherwise). */
+.indicator-card__pair .chart {
+  max-width: 440px;
+}
+
+.indicator-card__subtitle {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #666;
+}
+
+.indicator-card__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 6px 0 4px;
+  font-size: 12px;
+}
+
+.indicator-card__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.indicator-card__legend-values {
+  color: #777;
+  font-variant-numeric: tabular-nums;
+}
+
+.indicator-card__swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.indicator-card__table {
+  margin-top: 8px;
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.indicator-card__table th,
+.indicator-card__table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid #eee;
+  text-align: center;
+}
+
+.indicator-card__table td:first-child {
+  text-align: left;
+}
+
+.indicator-card__table th {
+  font-weight: 600;
+  color: #666;
+  font-size: 12px;
+}
+
+.chart {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.chart__axis text {
+  font-size: 10px;
+  fill: #888;
+}
+
+.chart__axis line {
+  stroke: #ccc;
+}
+
+.chart__axis .chart__grid {
+  stroke: #eee;
+}
+
+.chart__line {
+  fill: none;
+  stroke-linejoin: round;
+}
+
+.chart__line--baseline {
+  stroke: #999;
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+
+.chart__line--scenario {
+  stroke: #2e6b1f;
+  stroke-width: 2.2;
+}
+
+.chart__cursor line {
+  stroke: #2f7fd6;
+  stroke-width: 1;
+}
+
+.chart__dot {
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+
+.chart__dot--baseline {
+  fill: #999;
+}
+
+.chart__dot--scenario {
+  fill: #2e6b1f;
+}
+
+.chart__click-area {
+  fill: transparent;
+  cursor: pointer;
+}
+
+.chart__empty {
+  color: #999;
+  font-size: 12px;
+}
+
+/* Its own stacking context, so MapLibre's controls (attribution) stay under
+   the 3D and indicator views stacked on top of the map. */
+.map-container {
+  z-index: 0;
+}
+
+/* Terra Draw re-applies its own inline cursor style on the canvas as the
+   pointer moves, so a one-off JS assignment after re-arming a card for a
+   second placement loses to the very next mousemove. `!important` here beats
+   both MapLibre's own (non-important) cursor CSS and any inline style Terra
+   Draw sets, so the crosshair sticks for as long as a card is selected. */
+.map-container--drawing .maplibregl-canvas {
+  cursor: crosshair !important;
+}
+
+.status-banner {
+  position: absolute;
+  top: calc(var(--top-bar-height) + 12px);
+  left: 12px;
+  z-index: 1;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.left-rail {
+  position: absolute;
+  top: calc(var(--top-bar-height) + 12px);
+  left: 12px;
+  bottom: 12px;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  /* Safety net: if the palette ever grows past the viewport (many cards on a
+     short screen), the rail scrolls as a whole rather than pushing the page
+     into a body-level scrollbar. */
+  overflow-y: auto;
+}
+
+.card-palette {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 10px;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  width: 240px;
+  flex-shrink: 0;
+}
+
+
+.card-palette__category-label {
+  margin: 0 0 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #777;
+}
+
+.card-palette__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Bottom-right (above MapLibre's attribution), opening upwards: the one
+   corner of the 2D view with nothing else in it — bottom-left collides with
+   the year slider once expanded. */
+.map-legend {
+  position: absolute;
+  right: 12px;
+  bottom: 40px;
+  z-index: 1;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 10px 12px;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  font-size: 12px;
+}
+
+.map-legend--collapsed {
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: #444;
+  padding: 6px 12px;
+}
+
+.map-legend h4 {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #555;
+}
+
+.map-legend__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 3px 0;
+}
+
+.map-legend__swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.map-legend__swatch--tree {
+  background: #2e6b1f;
+}
+
+.map-legend__swatch--stump {
+  background: #e4d7bf;
+  border: 2px solid #7a4a24;
+  width: 8px;
+  height: 8px;
+}
+
+.map-legend__swatch--bench {
+  background: #6b7280;
+}
+
+.map-legend__swatch--water {
+  background: #2f7fb3;
+}
+
+.map-legend__swatch--streetlight {
+  background: #e8b93d;
+}
+
+.map-legend__swatch--pergola {
+  background: #9c6b3e;
+}
+
+.map-legend__swatch--kiosk {
+  background: #b5482f;
+}
+
+.map-legend__swatch--playground {
+  background: #d94f70;
+}
+
+.map-legend__swatch--fitness {
+  background: #3f8f8f;
+}
+
+.map-legend__swatch--crossing {
+  background: #2f6690;
+}
+
+.map-legend__swatch--traffic-signal {
+  background: #c0392b;
+}
+
+/* A "physical" card face: fixed proportions, a category-colored top band,
+   an icon and a label — deliberately card-shaped rather than a toolbar
+   button, so picking one reads as drawing a card from a deck. */
+.card-button {
+  --card-color: #2e6b1f;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 3px;
+  width: 66px;
+  height: 68px;
+  padding: 6px 4px 5px;
+  border-radius: 7px;
+  border: 1px solid #d8d8d8;
+  border-top: 4px solid var(--card-color);
+  background: #fff;
+  cursor: pointer;
+  font-size: 9.5px;
+  line-height: 1.15;
+  text-align: center;
+  color: #333;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.card-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.2);
+}
+
+.card-button__icon {
+  color: var(--card-color);
+  display: flex;
+}
+
+.card-button__icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.card-button__label {
+  font-weight: 600;
+}
+
+.card-button--selected {
+  transform: translateY(-4px);
+  background: var(--card-color);
+  color: #fff;
+  border-color: var(--card-color);
+  box-shadow: 0 5px 10px rgba(0, 0, 0, 0.35);
+}
+
+.card-button--selected .card-button__icon {
+  color: #fff;
+}
+
+.right-rail {
+  position: absolute;
+  top: calc(var(--top-bar-height) + 12px);
+  right: 12px;
+  bottom: 12px;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.right-rail > * {
+  pointer-events: auto;
+  /* Must be allowed to shrink (not 0) with min-height reset to 0 — otherwise
+     when both this and its sibling are near their max-height, flexbox lets
+     the pair overflow `.right-rail`'s own fixed height instead of shrinking
+     them to fit, which pushes content past the viewport and puts a
+     scrollbar on the whole page. With shrinking allowed, each panel is
+     compressed to fit instead, and its own `overflow-y: auto` takes over
+     from there. */
+  flex-shrink: 1;
+  min-height: 0;
+  max-height: 45%;
+}
+
+.param-form {
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.97);
+  padding: 16px;
+  border-radius: 8px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
+  min-width: 220px;
+}
+
+.param-form h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.param-form__planted-year {
+  margin: -4px 0 0;
+  font-size: 12px;
+  color: #666;
+}
+
+.param-form__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.param-form__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.param-form__actions button {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  cursor: pointer;
+}
+
+.param-form__actions button[type="submit"] {
+  background: #2e6b1f;
+  color: #fff;
+  border-color: #2e6b1f;
+}
+
+.tree-identity-card p {
+  margin: 2px 0;
+  font-size: 13px;
+}
+
+.param-form__delete {
+  margin-left: auto;
+  background: #fff;
+  color: #b33;
+  border-color: #b33 !important;
+}
+
+.intervention-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.97);
+  padding: 12px;
+  border-radius: 8px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
+  width: 236px;
+  /* The panel most likely to grow long in a real session: it takes whatever
+     height the left rail has left and scrolls within it, rather than pushing
+     the map tools off the bottom. */
+  flex-shrink: 1;
+  min-height: 120px;
+  overflow-y: auto;
+  /* A native scrollbar can be easy to miss (thin/auto-hiding on some
+     platforms); make it an obvious, always-visible affordance instead. */
+  scrollbar-width: thin;
+  scrollbar-color: #b7b2a8 transparent;
+}
+
+.intervention-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.intervention-list::-webkit-scrollbar-thumb {
+  background: #b7b2a8;
+  border-radius: 4px;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0 0 4px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+.panel-header h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.panel-header__chevron {
+  font-size: 12px;
+  color: #777;
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+.intervention-list__empty {
+  margin: 0;
+  font-size: 12px;
+  color: #777;
+}
+
+.intervention-card {
+  --card-color: #999;
+  /* `.intervention-list` is a column flex container, so without this its
+     rows are flex items too — by default (flex-shrink: 1) the browser
+     compresses every row to squeeze more of them into the available space
+     instead of letting the list overflow into its own scrollbar. Fixing
+     each row at its natural height forces the list to scroll instead,
+     which is the actual "too many interventions" behaviour that was asked
+     for — rows kept shrinking down to illegibility with no scrollbar. */
+  flex-shrink: 0;
+  border: 1px solid #ddd;
+  border-left: 4px solid var(--card-color);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.intervention-card__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+}
+
+.intervention-card__icon {
+  color: var(--card-color);
+  display: flex;
+  flex-shrink: 0;
+}
+
+.intervention-card__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.intervention-card__label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.intervention-card__year {
+  font-weight: 400;
+  color: #888;
+}
+
+.intervention-card__summary {
+  font-size: 11px;
+  color: #777;
+}
+
+.time-slider {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 8px 12px;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  font-size: 14px;
+}
+
+.time-slider--embedded {
+  position: static;
+  transform: none;
+  box-shadow: none;
+  background: none;
+  padding: 8px 10px 0;
+  font-size: 12px;
+}
+
+/* Matches SunControl's own row labels ("Giorno", "Ora"). */
+.time-slider--embedded .time-slider__label {
+  color: #555;
+  margin-right: 0;
+}
+
+.time-slider--embedded input[type="range"] {
+  flex: 1;
+}
+
+.time-slider__label {
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+.time-slider input[type="range"] {
+  width: 160px;
+}
+
+.time-slider__readout {
+  min-width: 34px;
+  font-variant-numeric: tabular-nums;
+}
+
+.time-slider__presets {
+  display: flex;
+  gap: 4px;
+  margin-left: 4px;
+  padding-left: 8px;
+  border-left: 1px solid #ddd;
+}
+
+.time-slider__preset {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background: #fff;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.time-slider__preset--active {
+  background: #2e6b1f;
+  color: #fff;
+  border-color: #2e6b1f;
+}
+
+.interventions-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.interventions-toggle__button {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background: #fff;
+  cursor: pointer;
+}
+
+.interventions-toggle__button--active {
+  background: #2e6b1f;
+  color: #fff;
+  border-color: #2e6b1f;
+}
+
+.kpi-panel {
+  background: rgba(255, 255, 255, 0.97);
+  padding: 12px 14px;
+  border-radius: 8px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
+  width: 236px;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.kpi-panel__row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  column-gap: 8px;
+  padding: 4px 0;
+  border-top: 1px solid #eee;
+}
+
+.kpi-panel__label {
+  color: #555;
+}
+
+.kpi-panel__value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.kpi-panel__delta {
+  grid-column: 2;
+  font-size: 11px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi-panel__delta--better {
+  color: #2e6b1f;
+}
+
+.kpi-panel__delta--worse {
+  color: #b33;
+}
+
+/* Realistic 3D view --------------------------------------------------- */
+
+.view-3d {
+  z-index: 1;
+  background: #cfd8dc;
+}
+
+/* Mini-map with the view's own actions underneath. */
+.view-3d__left {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.mini-map {
+  background: rgba(255, 255, 255, 0.97);
+  padding: 10px;
+  border-radius: 8px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
+  width: 280px;
+  box-sizing: border-box;
+}
+
+.mini-map__map {
+  position: relative;
+  height: 220px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.mini-map--large {
+  width: 480px;
+}
+
+.mini-map--large .mini-map__map {
+  height: 400px;
+}
+
+.mini-map__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mini-map__header .panel-header {
+  flex: 1;
+}
+
+.mini-map__size {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 8px;
+  margin-bottom: 4px;
+}
+
+.mini-map__hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: #2f7fd6;
+}
+
+.mini-map__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.mini-map__actions button {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 5px 10px;
+}
+
+.mini-map__actions button:hover {
+  background: #f2f2f2;
+}
+
+.mini-map__actions button[aria-pressed="true"] {
+  border-color: #2f7fd6;
+  background: #e8f1fb;
+  font-weight: 600;
+}
+
+.view-3d__tools {
+  display: flex;
+  gap: 6px;
+}
+
+.view-3d__tools button {
+  border: none;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 6px 12px;
+}
+
+.view-3d__tools button:hover {
+  background: rgba(0, 0, 0, 0.72);
+}
+
+/* `?perf=1` readout, at the bottom of the left column (the time panel
+   covers the bottom-right corner on narrower windows). */
+.perf-panel {
+  max-width: 520px;
+  background: rgba(0, 0, 0, 0.78);
+  color: #fff;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.perf-panel__actions {
+  display: flex;
+  gap: 6px;
+}
+
+.perf-panel button {
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 3px;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 3px 8px;
+}
+
+.perf-panel button:disabled {
+  cursor: default;
+  opacity: 0.8;
+}
+
+.perf-panel__table {
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.perf-panel__table th,
+.perf-panel__table td {
+  padding: 2px 6px;
+  text-align: right;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.perf-panel__table th:nth-child(-n + 2),
+.perf-panel__table td:nth-child(-n + 2) {
+  text-align: left;
+}
+
+/* People and traffic: hidden / still / moving. */
+.view-3d__life {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 4px;
+  padding: 6px 8px;
+  color: #fff;
+  font-size: 12px;
+}
+
+.view-3d__life > div {
+  display: flex;
+  gap: 2px;
+}
+
+.view-3d__life button {
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 3px;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 3px 8px;
+}
+
+.view-3d__life button[aria-pressed="true"] {
+  background: #fff;
+  color: #222;
+  border-color: #fff;
+}
+
+/* Year, day and hour together: the year is the shared scenario slider,
+   day and hour only move the sun. */
+.view-3d__time {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 560px;
+  max-width: calc(100% - 24px);
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.viewer-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.viewer-canvas canvas {
+  display: block;
+}
+
+.view-3d__caption {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+}
+
+.sun-control {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.sun-control__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sun-control__field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sun-control__field--grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.sun-control__field--grow input[type="range"] {
+  flex: 1;
+  min-width: 60px;
+}
+
+.sun-control__label {
+  color: #555;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.sun-control__field select,
+.sun-control__field input[type="number"] {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 12px;
+  font-family: inherit;
+}
+
+.sun-control__field input[type="number"] {
+  width: 44px;
+}
+
+.sun-control__year {
+  color: #999;
+  font-size: 12px;
+}
+
+.sun-control__presets {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.sun-control__presets button {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 3px 7px;
+  white-space: nowrap;
+}
+
+.sun-control__presets button[aria-pressed="true"] {
+  border-color: #c98a2e;
+  background: #fbf1e0;
+  font-weight: 600;
+}
+
+.sun-control__readout {
+  color: #555;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.viewer-stage {
+  position: absolute;
+  inset: 0;
+}
+
+/* Top-centre, clear of the mini-map, the indicators and the time panel. */
+.viewer-walk-button {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  transform: translateX(-50%);
+  border: none;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 6px 12px;
+}
+
+.viewer-walk-button:hover {
+  background: rgba(0, 0, 0, 0.72);
+}
+
+.viewer-walk-hint {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 6px 12px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 12px;
+  pointer-events: none;
+}
+
+
+.intervention-info {
+  border-top: 4px solid var(--card-color);
+}
+
+.intervention-info__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.intervention-info__icon {
+  width: 24px;
+  height: 24px;
+  color: var(--card-color);
+  flex-shrink: 0;
+}
+
+.intervention-info__summary {
+  margin: 0;
+  font-size: 13px;
+  color: #444;
+}

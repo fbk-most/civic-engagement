@@ -1,0 +1,38 @@
+import type { CSSProperties } from "react";
+import type { CardSpec, Intervention } from "../api/types";
+import { summarizeParams, yearLabel } from "../i18n/labels";
+import { CardIcon } from "./cardIcons";
+import { CATEGORY_COLORS } from "./categoryColors";
+
+interface Props {
+  intervention: Intervention;
+  card: CardSpec | null;
+  onEdit: () => void;
+  onClose: () => void;
+}
+
+/** Read-only details of a placard picked in the 3D view. Editing stays on
+ * the 2D map, so this only offers the way there. */
+export function InterventionInfoCard({ intervention, card, onEdit, onClose }: Props) {
+  const color = card ? CATEGORY_COLORS[card.category] : "#999";
+  return (
+    <div className="param-form intervention-info" style={{ "--card-color": color } as CSSProperties}>
+      <div className="intervention-info__title">
+        <span className="intervention-info__icon">{card && <CardIcon cardType={card.card_type} />}</span>
+        <h3>{card?.label ?? intervention.card_type}</h3>
+      </div>
+      <p className="param-form__planted-year">
+        In vigore da: <strong>{yearLabel(intervention.planted_year)}</strong>
+      </p>
+      <p className="intervention-info__summary">{summarizeParams(card ?? undefined, intervention.params)}</p>
+      <div className="param-form__actions">
+        <button type="submit" onClick={onEdit}>
+          Modifica nella mappa 2D
+        </button>
+        <button type="button" onClick={onClose}>
+          Chiudi
+        </button>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Tree lab</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: #f2f2f0;
+        font-family: system-ui, sans-serif;
+      }
+      h1 {
+        font-size: 16px;
+        margin: 0 0 12px;
+      }
+      /* #grid holds one shared canvas (see treeLab.ts's scissor/viewport
+         rendering) plus absolutely-positioned caption overlays — not a real
+         CSS grid despite the id. */
+      #grid {
+        background: #fff;
+        border: 1px solid #ccc;
+      }
+      .caption {
+        margin: 0;
+        padding: 4px 6px;
+        box-sizing: border-box;
+        font-size: 11px;
+        line-height: 1.3;
+        white-space: pre-wrap;
+        font-family: ui-monospace, monospace;
+        border-top: 1px solid #eee;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Tree lab — dev-only parameter sweep, not part of the shipped app</h1>
+    <div id="grid"></div>
+    <script type="module" src="/src/treeLab.ts"></script>
+  </body>
+</html>
