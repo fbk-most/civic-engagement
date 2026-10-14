@@ -1,0 +1,284 @@
+[
+ {
+  "id": "int-cultivation-00",
+  "card_type": "add_bench",
+  "geometry": {
+   "type": "Point",
+   "coordinates": [
+    11.12035699669599,
+    46.0712270890306
+   ]
+  },
+  "params": {},
+  "deleted": false,
+  "created_at": "2026-09-30T00:00:00+00:00",
+  "replaces_element_id": null,
+  "planted_year": 0
+ },
+ {
+  "id": "int-cultivation-01",
+  "card_type": "add_streetlight",
+  "geometry": {
+   "type": "Point",
+   "coordinates": [
+    11.120384219475905,
+    46.07126258561452
+   ]
+  },
+  "params": {},
+  "deleted": false,
+  "created_at": "2026-09-30T00:00:00+00:00",
+  "replaces_element_id": null,
+  "planted_year": 0
+ },
+ {
+  "id": "int-cultivation-02",
+  "card_type": "add_pergola",
+  "geometry": {
+   "type": "Point",
+   "coordinates": [
+    11.120333219617294,
+    46.071281533039446
+   ]
+  },
+  "params": {
+   "size": "small"
+  },
+  "deleted": false,
+  "created_at": "2026-09-30T00:00:00+00:00",
+  "replaces_element_id": null,
+  "planted_year": 0
+ },
+ {
+  "id": "int-cultivation-03",
+  "card_type": "add_playground",
+  "geometry": {
+   "type": "Polygon",
+   "coordinates": [
+    [
+     [
+      11.12057736396307,
+      46.07124099989546
+     ],
+     [
+      11.120579776213019,
+      46.071303958305045
+     ],
+     [
+      11.120489320417294,
+      46.07130563722945
+     ],
+     [
+      11.120486908270056,
+      46.07124267881621
+     ],
+     [
+      11.12057736396307,
+      46.07124099989546
+     ]
+    ]
+   ]
+  },
+  "params": {
+   "age_range": "mixed"
+  },
+  "deleted": false,
+  "created_at": "2026-09-30T00:00:00+00:00",
+  "replaces_element_id": null,
+  "planted_year": 0
+ },
+ {
+  "id": "int-cultivation-04",
+  "card_type": "plant_grove",
+  "geometry": {
+   "type": "Polygon",
+   "coordinates": [
+    [
+     [
+      11.120405929027587,
+      46.07115417723796
+     ],
+     [
+      11.120409374812501,
+      46.07124411783419
+     ],
+     [
+      11.120280152370123,
+      46.0712465160807
+     ],
+     [
+      11.120276706794815,
+      46.071156575476984
+     ],
+     [
+      11.120405929027587,
+      46.07115417723796
+     ]
+    ]
+   ]
+  },
+  "params": {
+   "species": "birch",
+   "spacing": 4.0
+  },
+  "deleted": false,
+  "created_at": "2026-09-30T00:00:00+00:00",
+  "replaces_element_id": null,
+  "planted_year": 0
+ },
+ {
+  "id": "int-cultivation-05",
+  "card_type": "new_path",
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     11.120304618611051,
+     46.07121006020238
+    ],
+    [
+     11.120563063305157,
+     46.071205263510954
+    ]
+   ]
+  },
+  "params": {
+   "width": 2.0,
+   "material": "gravel"
+  },
+  "deleted": false,
+  "created_at": "2026-09-30T00:00:00+00:00",
+  "replaces_element_id": null,
+  "planted_year": 0
+ },
+ {
+  "id": "int-cultivation-06",
+  "card_type": "cultivate_terrain",
+  "geometry": {
+   "type": "Polygon",
+   "coordinates": [
+    [
+     [
+      11.120536529639795,
+      46.07118775508864
+     ],
+     [
+      11.120542732453565,
+      46.07134964814605
+     ],
+     [
+      11.120310131622237,
+      46.0713539651636
+     ],
+     [
+      11.120303929487605,
+      46.071192072081935
+     ],
+     [
+      11.120536529639795,
+      46.07118775508864
+     ]
+    ]
+   ]
+  },
+  "params": {
+   "purpose": "botanical"
+  },
+  "deleted": false,
+  "created_at": "2026-09-30T00:00:00+00:00",
+  "replaces_element_id": null,
+  "planted_year": 4
+ },
+ {
+  "id": "int-cultivation-07",
+  "card_type": "add_bench",
+  "geometry": {
+   "type": "Point",
+   "coordinates": [
+    11.120434530132329,
+    46.07122565004855
+   ]
+  },
+  "params": {},
+  "deleted": false,
+  "created_at": "2026-09-30T00:00:00+00:00",
+  "replaces_element_id": null,
+  "planted_year": 8
+ },
+ {
+  "id": "int-cultivation-08",
+  "card_type": "cultivate_terrain",
+  "geometry": {
+   "type": "Polygon",
+   "coordinates": [
+    [
+     [
+      11.120485529903815,
+      46.07120670257971
+     ],
+     [
+      11.120488286638922,
+      46.071278655052446
+     ],
+     [
+      11.120384908627129,
+      46.0712805737338
+     ],
+     [
+      11.120382152026172,
+      46.07120862125628
+     ],
+     [
+      11.120485529903815,
+      46.07120670257971
+     ]
+    ]
+   ]
+  },
+  "params": {
+   "purpose": "gardening"
+  },
+  "deleted": false,
+  "created_at": "2026-09-30T00:00:00+00:00",
+  "replaces_element_id": null,
+  "planted_year": 12
+ },
+ {
+  "id": "int-cultivation-09",
+  "card_type": "cultivate_terrain",
+  "geometry": {
+   "type": "Polygon",
+   "coordinates": [
+    [
+     [
+      11.12063401921135,
+      46.0705412864797
+     ],
+     [
+      11.120638843730399,
+      46.07066720330894
+     ],
+     [
+      11.120457934218235,
+      46.07067056114414
+     ],
+     [
+      11.12045311011001,
+      46.07054464430024
+     ],
+     [
+      11.12063401921135,
+      46.0705412864797
+     ]
+    ]
+   ]
+  },
+  "params": {
+   "purpose": "commercial"
+  },
+  "deleted": false,
+  "created_at": "2026-09-30T00:00:00+00:00",
+  "replaces_element_id": null,
+  "planted_year": 6
+ }
+]

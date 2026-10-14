@@ -14,7 +14,10 @@ Sessions recorded per site:
   recorded — frozen into the fixtures, since session.json itself is live,
   gitignored workshop state;
 - `synthetic`: every card type, cards placed at later years, overlapping
-  covers, and the replant of a baseline tree cut within the horizon.
+  covers, and the replant of a baseline tree cut within the horizon;
+- `cultivation`: the "coltiva il terreno" card clearing what earlier cards
+  placed (and the baseline), a later card cleared by a second one, and the
+  pond drained where a site has one.
 """
 
 import argparse
@@ -27,6 +30,8 @@ from shapely.geometry import LineString, Point, box, mapping
 
 from civic_twin import scene
 from civic_twin.config import SITE
+from civic_twin.domains.urban.clearing import analyse
+from civic_twin.domains.urban.layout import build_layout
 from civic_twin.geo_utils import to_projected
 from civic_twin.models.schema import Intervention
 from civic_twin.scene import MAX_T, MIN_T, current_scene, indicator_series, load_baseline
@@ -110,6 +115,79 @@ def _synthetic_session() -> list[dict]:
     return [i.model_dump(mode="json") for i in interventions]
 
 
+def _cultivation_session() -> list[dict]:
+    """Cards that get cleared, placed around the same point as the synthetic
+    session's, and the cards that clear them: a first one at year 4 over most
+    of them, a bench placed at year 8 inside its area, and a second one at
+    year 12 that clears the bench and replaces part of the first one's cover.
+    A site with a pond also gets it drained at year 6."""
+    baseline = load_baseline()
+    site = to_projected(baseline.site_boundary)
+    layout = build_layout(baseline, [])
+    pond = next((to_projected(cv.geometry) for cv in baseline.covers if cv.cover_type == "water"), None)
+
+    def cards_around(c: Point):
+        """The cards laid out around `c`, or None if one falls outside the site."""
+
+        def at(dx: float, dy: float) -> Point | None:
+            point = Point(c.x + dx, c.y + dy)
+            return point if site.contains(point) else None
+
+        def square(dx: float, dy: float, size: float):
+            return box(c.x + dx, c.y + dy, c.x + dx + size, c.y + dy + size)
+
+        ends = (at(-10, -2), at(10, -2))
+        if None in ends or any(at(dx, dy) is None for dx, dy in ((-6, 0), (-4, 4), (-8, 6), (0, 0))):
+            return None
+        # (card type, geometry in projected metres, params, planted year)
+        cards = [
+            ("add_bench", at(-6, 0), {}, 0),
+            ("add_streetlight", at(-4, 4), {}, 0),
+            ("add_pergola", at(-8, 6), {"size": "small"}, 0),
+            ("add_playground", square(4, 2, 7), {"age_range": "mixed"}, 0),
+            ("plant_grove", square(-12, -8, 10), {"species": "birch", "spacing": 4.0}, 0),
+            ("new_path", LineString(ends), {"width": 2.0, "material": "gravel"}, 0),
+            ("cultivate_terrain", square(-10, -4, 18), {"purpose": "botanical"}, 4),
+            ("add_bench", at(0, 0), {}, 8),
+            ("cultivate_terrain", square(-4, -2, 8), {"purpose": "gardening"}, 12),
+        ]
+        if pond is not None:
+            p = pond.representative_point()
+            cards.append(("cultivate_terrain", box(p.x - 7, p.y - 7, p.x + 7, p.y + 7), {"purpose": "commercial"}, 6))
+        return cards
+
+    def free(cards) -> bool:
+        """Whether no clearing of the cards has a protected object (a street, a
+        building...) under it: such a card would be refused."""
+        return all(
+            not analyse(layout, _to_wgs84(geometry), year).blocking
+            for card_type, geometry, _, year in cards
+            if card_type == "cultivate_terrain"
+        )
+
+    # The nearest spot to the site's middle where everything fits, on a 4 m grid.
+    middle = site.representative_point()
+    min_x, min_y, max_x, max_y = site.bounds
+    grid = [Point(x, y) for x in range(int(min_x), int(max_x), 4) for y in range(int(min_y), int(max_y), 4)]
+    for c in sorted(grid, key=middle.distance):
+        cards = cards_around(c)
+        if cards is not None and free(cards):
+            break
+    else:
+        raise RuntimeError("no spot of the site fits the cultivation session")
+    return [
+        Intervention(
+            id=f"int-cultivation-{i:02d}",
+            card_type=card_type,
+            geometry=_to_wgs84(geometry),
+            params=params,
+            created_at=CREATED_AT,
+            planted_year=planted_year,
+        ).model_dump(mode="json")
+        for i, (card_type, geometry, params, planted_year) in enumerate(cards)
+    ]
+
+
 def _sessions(site_dir: Path) -> dict[str, list[Intervention]]:
     saved_path = site_dir / "saved_session.json"
     if not saved_path.exists():
@@ -119,11 +197,19 @@ def _sessions(site_dir: Path) -> dict[str, list[Intervention]]:
     synthetic_path = site_dir / "synthetic_session.json"
     if not synthetic_path.exists():
         synthetic_path.write_text(json.dumps(_synthetic_session(), indent=1))
+    cultivation_path = site_dir / "cultivation_session.json"
+    if not cultivation_path.exists():
+        cultivation_path.write_text(json.dumps(_cultivation_session(), indent=1))
 
     def load(path: Path) -> list[Intervention]:
         return [Intervention(**i) for i in json.loads(path.read_text()) if not i.get("deleted")]
 
-    sessions = {"empty": [], "saved": load(saved_path), "synthetic": load(synthetic_path)}
+    sessions = {
+        "empty": [],
+        "saved": load(saved_path),
+        "synthetic": load(synthetic_path),
+        "cultivation": load(cultivation_path),
+    }
     # A site with no saved session would only duplicate `empty`.
     return {name: interventions for name, interventions in sessions.items() if name == "empty" or interventions}
 
