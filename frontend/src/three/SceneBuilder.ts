@@ -26,7 +26,7 @@ import { MaterialLibrary } from "./materials";
 import type { SeasonState } from "./sun";
 import type { Footprint } from "./walk";
 
-const FULL_LEAF_SEASON: SeasonState = { leafDensity: 1, autumnMix: 0 };
+const FULL_LEAF_SEASON: SeasonState = { leafDensity: 1, autumnMix: 0, month: 7 };
 
 export interface BuiltScene {
   group: THREE.Group;

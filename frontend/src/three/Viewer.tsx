@@ -14,7 +14,7 @@ import { buildCrops, disposeCrops, setCropGrowth, type Crops } from "./builders/
 import { Lighting } from "./Lighting";
 import { MaterialLibrary } from "./materials";
 import { terminateTreeWorkerPool } from "./workers/treeWorkerPool";
-import type { SeasonState, SunPosition } from "./sun";
+import { cropGrowth, type SeasonState, type SunPosition } from "./sun";
 import { DEFAULT_FOV_DEG, LOOK_DISTANCE_M, MIN_CAMERA_HEIGHT_M, OVERVIEW_FOV_DEG, type CameraPose } from "./camera";
 import { anchorFromPolygon, bearingToDirection, directionToBearing, toLocal, toLngLat, type GeoAnchor } from "./geo";
 import { WalkController } from "./walk";
@@ -135,6 +135,10 @@ export function Viewer({
   const builtRef = useRef<BuiltScene | null>(null);
   const placardsRef = useRef<Placards | null>(null);
   const cropsRef = useRef<Crops | null>(null);
+  // The month the plants are grown to: read when they are built (they are
+  // not rebuilt for a change of month, only regrown).
+  const monthRef = useRef(season.month);
+  monthRef.current = season.month;
   const crowdRef = useRef<Crowd | null>(null);
   // What the crowd was last planned against: the elements actually built
   // (with or without interventions) and the build's anchor/footprints.
@@ -703,8 +707,8 @@ export function Viewer({
   }, [scene, cards, mode]);
 
   // The plants of the cultivated covers are built apart from the main build
-  // too: they are a lot of instances but cheap, and only the main build is
-  // redone for a change of season (see below), which the plants do not need.
+  // too: they are a lot of instances but cheap, and a change of season only
+  // regrows them (the next effect), where the main build is redone for it.
   // Like the covers they stand on, they are part of the simulation only.
   useEffect(() => {
     const threeScene = threeSceneRef.current;
@@ -717,10 +721,16 @@ export function Viewer({
     }
     if (!scene) return;
     const crops = buildCrops(visibleIn(scene.covers, showInterventions), anchorFromPolygon(scene.site_boundary), materials);
-    setCropGrowth(crops, () => 1);
+    setCropGrowth(crops, (coverType) => cropGrowth(coverType, monthRef.current));
     threeScene.add(crops.group);
     cropsRef.current = crops;
   }, [scene, showInterventions]);
+
+  // A change of month regrows the plants where they stand: no rebuild, so
+  // moving the month picker stays as cheap for them as it is for the sun.
+  useEffect(() => {
+    if (cropsRef.current) setCropGrowth(cropsRef.current, (coverType) => cropGrowth(coverType, season.month));
+  }, [season.month]);
 
   useImperativeHandle(handleRef, () => ({
     captureFrame,

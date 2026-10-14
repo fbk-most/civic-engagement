@@ -140,13 +140,63 @@ export function autumnMix(month: number): number {
 export interface SeasonState {
   leafDensity: number;
   autumnMix: number;
+  /** The month (1-12) both are read at, for what is driven by the month
+   * itself rather than by one of those two (the plants of a cultivated
+   * cover, see `cropGrowth`). */
+  month: number;
 }
 
 /** Bundles both season curves for a given month — the single value
  * `View3D.tsx` computes once from `sunSetting.month` and threads down
  * through `Viewer`/`SceneBuilder` to `builders/vegetation.ts`. */
 export function seasonState(month: number): SeasonState {
-  return { leafDensity: leafDensity(month), autumnMix: autumnMix(month) };
+  return { leafDensity: leafDensity(month), autumnMix: autumnMix(month), month };
+}
+
+// How grown the plants of each cultivated cover are, by month (see
+// `builders/crops.ts`): 0 is bare soil, 1 fully grown. The same rough
+// temperate-climate approximation as the leaf curves above, for Trento, not a
+// crop model. Autumn and winter are bare soil.
+const CROP_GROWTH_POINTS: Record<string, Array<[number, number]>> = {
+  // Sown in spring, ripe in July and August, harvested in September.
+  crop_field: [
+    [3, 0],
+    [4, 0.2],
+    [5, 0.5],
+    [6, 0.8],
+    [7, 1],
+    [8, 1],
+    [9, 0],
+  ],
+  // In bloom from late spring to the first cold of autumn.
+  flowerbed: [
+    [3, 0],
+    [4, 0.3],
+    [5, 0.8],
+    [6, 1],
+    [8, 1],
+    [9, 0.7],
+    [10, 0.2],
+    [11, 0],
+  ],
+  // Planted out late, at its fullest in August, picked until the frost.
+  vegetable_garden: [
+    [4, 0],
+    [5, 0.3],
+    [6, 0.6],
+    [7, 0.9],
+    [8, 1],
+    [9, 0.8],
+    [10, 0.3],
+    [11, 0],
+  ],
+};
+
+/** 0 (bare soil) to 1 (fully grown): how far along the plants of a cultivated
+ * cover are in a month. */
+export function cropGrowth(coverType: string, month: number): number {
+  const points = CROP_GROWTH_POINTS[coverType];
+  return points ? piecewiseLinear(points, month) : 0;
 }
 
 export function sunPosition(setting: SunSetting, year: number, lat: number, lng: number): SunPosition {
