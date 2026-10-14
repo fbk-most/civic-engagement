@@ -152,6 +152,22 @@ CULTIVATION_COVER_BY_PURPOSE = {
 }
 DEFAULT_CULTIVATION_PURPOSE = "commercial"
 
+# What a clearing (the first half of the "coltiva il terreno" card) does to
+# what is already on its area. Plain tables, so a new site (the Giudicarie, with
+# stones, say) only adds a line here.
+#
+# Objects that may be removed; everything else is either protected or left
+# alone. Paths are cut at the edge of the area rather than removed whole.
+CLEARABLE_ELEMENT_TYPES = {
+    "tree", "bench", "streetlight", "pergola", "kiosk", "playground", "fitness_area", "water_feature", "path",
+}
+# Objects that must not be under the area: it is refused if it overlaps one.
+PROTECTED_ELEMENT_TYPES = {"building", "street", "crossing", "lane_divider", "traffic_signal"}
+# Covers that are not simply built over: clearing one needs a warning, and its
+# cleared area is filled with the cover around it (a drained pond becomes the
+# lawn it sat in). Any other cover is just replaced by the new one.
+CLEARED_COVER_WARNING_TYPES = {"water"}
+
 # ---------------------------------------------------------------------------
 # Indicators
 # ---------------------------------------------------------------------------

@@ -48,12 +48,18 @@ class TreeSlot:
 
 @dataclass(frozen=True)
 class Entry:
-    """One element or cover of the scene, in the order it is served."""
+    """One element or cover of the scene, in the order it is served.
+
+    It exists from `start` up to (not including) `end`, if it has one: a
+    clearing (see `clearing.py`) ends what it takes away, and `cleared_by`
+    names the intervention that did."""
 
     start: int
     element: DiscreteElement | None = None
     cover: CoverPolygon | None = None
     tree: int | None = None  # index into Layout.trees
+    end: int | None = None
+    cleared_by: str | None = None
 
 
 @dataclass
