@@ -29,6 +29,12 @@ class DiscreteElement(BaseModel):
     properties: dict[str, Any] = {}
     source: Source
     intervention_id: str | None = None
+    cleared_by: str | None = Field(
+        default=None,
+        description="Set on a baseline object an intervention's clearing has taken away from this year "
+        "on, to that intervention's id. It is still served, so the views that show the situation as it "
+        "is (not the simulation) can keep drawing it; the simulation hides it.",
+    )
 
 
 class CoverPolygon(BaseModel):
@@ -37,6 +43,7 @@ class CoverPolygon(BaseModel):
     cover_type: CoverType
     source: Source
     intervention_id: str | None = None
+    cleared_by: str | None = Field(default=None, description="As for DiscreteElement.cleared_by.")
 
 
 class BaselineScene(BaseModel):

@@ -78,7 +78,9 @@ def element_id(layout, entry_index: int) -> str:
 
 
 def ids(s) -> tuple[set[str], set[str]]:
-    return {e.id for e in s.elements}, {c.id for c in s.covers}
+    """What the simulation shows: everything but what a clearing has taken
+    away (which is still served, flagged)."""
+    return {e.id for e in s.elements if not e.cleared_by}, {c.id for c in s.covers if not c.cleared_by}
 
 
 def test_nothing_changes_before_the_year_of_the_card(baseline, session):
@@ -110,9 +112,11 @@ def test_the_pond_is_replaced_by_the_cover_around_it(baseline, session):
     session([cultivate(polygon)])
 
     at = scene.current_scene(CLEAR_YEAR)
-    assert pond.id not in {c.id for c in at.covers}
+    flagged = [c for c in at.covers if c.id == pond.id]
+    assert flagged and flagged[0].cleared_by == "int-cultivate"  # still served, for the views of the current situation
+    assert pond.id not in ids(at)[1]  # but not part of the simulation
     area = to_projected(polygon)
-    water = [to_projected(c.geometry) for c in at.covers if c.cover_type == "water"]
+    water = [to_projected(c.geometry) for c in at.covers if c.cover_type == "water" and not c.cleared_by]
     assert water and sum(w.intersection(area).area for w in water) < 1.0  # none of it left under the area
     assert sum(w.area for w in water) == pytest.approx(to_projected(pond.geometry).area - inside, rel=0.01)
     fill = [c for c in at.covers if c.id == "cover-int-cultivate-fill-1"]
@@ -140,11 +144,38 @@ def test_a_path_is_cut_not_removed(baseline, session):
     session([cultivate(polygon)])
 
     def length(t: int) -> float:
-        return sum(to_projected(e.geometry).length for e in scene.current_scene(t).elements if e.type == "path")
+        paths = [e for e in scene.current_scene(t).elements if e.type == "path" and not e.cleared_by]
+        return sum(to_projected(e.geometry).length for e in paths)
 
     assert length(CLEAR_YEAR - 1) - length(CLEAR_YEAR) == pytest.approx(expected, rel=0.001)
     pieces = [e for e in scene.current_scene(CLEAR_YEAR).elements if e.id.endswith("~int-cultivate")]
     assert pieces and all(e.source == "intervention" for e in pieces)
+
+
+def test_cleared_baseline_objects_are_still_served_flagged(baseline, session):
+    polygon = across_pond(baseline)
+    layout = build_layout(baseline, [])
+    cleared = {element_id(layout, c.entry) for c in analyse(layout, polygon, CLEAR_YEAR).elements if c.type != "path"}
+    session([])
+    plain = {e.id: e for e in scene.current_scene(CLEAR_YEAR + 3).elements}
+    session([cultivate(polygon)])
+
+    assert not [e for e in scene.current_scene(CLEAR_YEAR - 1).elements if e.cleared_by]  # nothing yet
+    served = {e.id: e for e in scene.current_scene(CLEAR_YEAR + 3).elements}
+    assert cleared <= served.keys()
+    for id in cleared:
+        assert served[id].cleared_by == "int-cultivate" and served[id].source == "baseline"
+        # drawn as it is without the card (a tree keeps growing, or is cut, as it would have)
+        assert served[id].properties == plain[id].properties
+    assert not [e for e in served.values() if e.cleared_by and e.id not in cleared and e.type != "path"]
+
+
+def test_what_a_card_placed_is_gone_not_flagged(baseline, session):
+    spot = next(free_spots(baseline, 5.0))
+    bench = card("add_bench", to_wgs84(spot), 0, "int-bench")
+    session([bench, cultivate(square(spot, 5.0))])
+    assert "element-int-bench" in {e.id for e in scene.current_scene(CLEAR_YEAR - 1).elements}
+    assert "element-int-bench" not in {e.id for e in scene.current_scene(CLEAR_YEAR).elements}
 
 
 def test_cleared_trees_stop_cooling_and_absorbing(baseline, session):

@@ -35,6 +35,8 @@ export interface DiscreteElement {
   properties: Record<string, unknown>;
   source: Source;
   intervention_id: string | null;
+  /** The intervention whose clearing took this away from this year on; see `visibility.ts`. */
+  cleared_by: string | null;
 }
 
 export interface CoverPolygon {
@@ -43,6 +45,7 @@ export interface CoverPolygon {
   cover_type: CoverType;
   source: Source;
   intervention_id: string | null;
+  cleared_by: string | null;
 }
 
 export interface BaselineScene {

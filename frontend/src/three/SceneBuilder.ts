@@ -14,6 +14,7 @@
 import * as THREE from "three";
 import { Water } from "three/examples/jsm/objects/Water.js";
 import type { DiscreteElement, SceneResponse } from "../api/types";
+import { visibleIn } from "../api/visibility";
 import { buildGround } from "./builders/ground";
 import { buildPaths } from "./builders/paths";
 import { buildVegetation } from "./builders/vegetation";
@@ -73,12 +74,8 @@ export async function buildScene(
   showInterventions = true,
   season: SeasonState = FULL_LEAF_SEASON
 ): Promise<BuiltScene> {
-  const elements = showInterventions
-    ? scene.elements
-    : scene.elements.filter((element) => element.source === "baseline");
-  const covers = showInterventions
-    ? scene.covers
-    : scene.covers.filter((cover) => cover.source === "baseline");
+  const elements = visibleIn(scene.elements, showInterventions);
+  const covers = visibleIn(scene.covers, showInterventions);
 
   // Textures must be in hand before the first material is created: materials
   // are cached on first use, so a map arriving later never reaches them.

@@ -122,22 +122,47 @@ def _tree_element(slot: TreeSlot, output: UrbanOutput, k: int, t: int) -> Discre
     )
 
 
-def _assemble(evaluated: Evaluated, t: int) -> tuple[list[DiscreteElement], list[CoverPolygon]]:
+def _assemble(evaluated: Evaluated, as_is: Evaluated, t: int) -> tuple[list[DiscreteElement], list[CoverPolygon]]:
+    layout = evaluated.layout
     elements: list[DiscreteElement] = []
     covers: list[CoverPolygon] = []
-    for entry in evaluated.layout.entries:
-        # Not there yet, or already taken away by a clearing.
-        if t < entry.start or (entry.end is not None and t >= entry.end):
+    for entry in layout.entries:
+        if t < entry.start:
+            continue
+        if entry.end is not None and t >= entry.end:
+            # Taken away by a clearing. What a card placed is simply gone; what
+            # the baseline had is kept, flagged, so that the views of the
+            # situation as it is can still draw it (the simulation hides it).
+            kept = _cleared_baseline(layout, as_is, entry, t)
+            if kept is not None:
+                (covers if isinstance(kept, CoverPolygon) else elements).append(kept)
             continue
         if entry.cover is not None:
             covers.append(entry.cover)
         elif entry.element is not None:
             elements.append(entry.element)
         else:
-            tree = _tree_element(evaluated.layout.trees[entry.tree], evaluated.output, entry.tree, t)
+            tree = _tree_element(layout.trees[entry.tree], evaluated.output, entry.tree, t)
             if tree is not None:
                 elements.append(tree)
     return elements, covers
+
+
+def _cleared_baseline(layout: Layout, as_is: Evaluated, entry, t: int) -> DiscreteElement | CoverPolygon | None:
+    flag = {"cleared_by": entry.cleared_by}
+    if entry.cover is not None:
+        return entry.cover.model_copy(update=flag) if entry.cover.source == "baseline" else None
+    if entry.element is not None:
+        return entry.element.model_copy(update=flag) if entry.element.source == "baseline" else None
+    if layout.trees[entry.tree].origin != "baseline":
+        return None
+    # A baseline tree is the same tree in the evaluation without interventions
+    # (baseline trees come first in both layouts): it is drawn as it would
+    # have been there, which the scenario's own evaluation no longer says.
+    slot = as_is.layout.trees[entry.tree]
+    assert slot.element_id == layout.trees[entry.tree].element_id
+    tree = _tree_element(slot, as_is.output, entry.tree, t)
+    return tree.model_copy(update=flag) if tree is not None else None
 
 
 def _optional(value: float, digits: int) -> float | None:
@@ -180,7 +205,7 @@ def current_scene(t: int = 0, session_id: str = "default") -> SceneResponse:
     interventions = store.list_interventions(session_id)
     scenario = _scenario(interventions)
 
-    elements, covers = _assemble(scenario, t)
+    elements, covers = _assemble(scenario, _as_is(), t)
     if not SITE.show_road_markings:
         elements = [e for e in elements if e.type not in ROAD_MARKING_TYPES]
 

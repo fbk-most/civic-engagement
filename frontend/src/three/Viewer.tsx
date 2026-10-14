@@ -5,6 +5,7 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import type { CardSpec, DiscreteElement, InterventionDisplayMode, SceneResponse } from "../api/types";
+import { visibleIn } from "../api/visibility";
 import { buildScene, disposeGroup, type BuiltScene } from "./SceneBuilder";
 import { applyNightLights, updateStreetlightShadows } from "./builders/streetlights";
 import { updateWaterSun } from "./builders/water";
@@ -561,7 +562,7 @@ export function Viewer({
       }
       threeScene.add(built.group);
       builtRef.current = built;
-      const crowdElements = showInterventions ? scene.elements : scene.elements.filter((e) => e.source === "baseline");
+      const crowdElements = visibleIn(scene.elements, showInterventions);
       const networkKey = JSON.stringify([
         scene.site_boundary,
         crowdElements.filter((e) => WALK_NETWORK_TYPES.has(e.type)).map((e) => [e.type, e.geometry]),

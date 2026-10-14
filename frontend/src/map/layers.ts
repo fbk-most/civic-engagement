@@ -5,6 +5,7 @@ import {
   type ExpressionSpecification,
 } from "maplibre-gl";
 import type { CardSpec, DiscreteElement, InterventionDisplayMode, SceneResponse } from "../api/types";
+import { visibleIn } from "../api/visibility";
 import { CATEGORY_COLORS } from "../ui/categoryColors";
 import { anchorFromPolygon, representativePoint, toLocal, toLngLat, type GeoAnchor } from "../three/geo";
 import { hashString } from "../three/hash";
@@ -181,8 +182,8 @@ export function renderScene(
   framing: { pitch: number; bearing: number; padding: number } = { pitch: 55, bearing: -20, padding: 40 }
 ): void {
   const showFull = mode === "simulated";
-  const elements = showFull ? scene.elements : scene.elements.filter((e) => e.source === "baseline");
-  const covers = showFull ? scene.covers : scene.covers.filter((c) => c.source === "baseline");
+  const elements = visibleIn(scene.elements, showFull);
+  const covers = visibleIn(scene.covers, showFull);
   const byType = (type: string) => elementsToFeatures(elements.filter((e) => e.type === type));
   const anchor = anchorFromPolygon(scene.site_boundary);
 
