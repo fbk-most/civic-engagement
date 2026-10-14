@@ -3,6 +3,7 @@ import type {
   CardSpec,
   IndicatorSeries,
   Intervention,
+  InterventionCheck,
   InterventionCreate,
   SceneResponse,
 } from "./types";
@@ -29,12 +30,37 @@ export function fetchIndicatorSeries(): Promise<IndicatorSeries> {
   return getJson("/api/indicators/series");
 }
 
+/** A placement the backend refused because something protected is under it
+ * (a 422 carrying the same answer as the check): what is in the way. */
+export class InterventionBlockedError extends Error {
+  readonly check: InterventionCheck;
+
+  constructor(check: InterventionCheck) {
+    super("Placement refused: something protected is under the area");
+    this.check = check;
+  }
+}
+
+export async function checkIntervention(data: InterventionCreate, t: number = 0): Promise<InterventionCheck> {
+  const res = await fetch(`/api/interventions/check?t=${t}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(`POST /api/interventions/check failed: ${res.status}`);
+  return res.json();
+}
+
 export async function createIntervention(data: InterventionCreate, t: number = 0): Promise<SceneResponse> {
   const res = await fetch(`/api/interventions?t=${t}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
+  if (res.status === 422) {
+    const body = await res.json().catch(() => null);
+    if (Array.isArray(body?.detail?.blocking)) throw new InterventionBlockedError(body.detail);
+  }
   if (!res.ok) throw new Error(`POST /api/interventions failed: ${res.status}`);
   return res.json();
 }

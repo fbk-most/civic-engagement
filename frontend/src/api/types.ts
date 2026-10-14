@@ -170,6 +170,17 @@ export interface InterventionCreate {
   replaces_element_id?: string | null;
 }
 
+/** What placing a card would do, without placing it (POST /api/interventions/check):
+ * what is in the way (it is refused), what to confirm first, what it clears. */
+export interface InterventionCheck {
+  blocking: { id: string; type: ElementType }[];
+  warnings: { code: "cover_replaced"; cover_type: CoverType; area_m2: number }[];
+  clearing: {
+    elements_by_type: Record<string, number>;
+    cover_area_m2_by_type: Record<string, number>;
+  };
+}
+
 export type AgeClass = "sapling" | "young" | "mature" | "veteran";
 export type TreeStatus = "alive" | "stump";
 

@@ -601,6 +601,8 @@
   border-radius: 8px;
   box-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
   min-width: 220px;
+  /* A long line (a check's warning) wraps instead of stretching the form. */
+  max-width: 340px;
 }
 
 .param-form h3 {
@@ -650,6 +652,57 @@
   background: #fff;
   color: #b33;
   border-color: #b33 !important;
+}
+
+.param-form__actions button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.param-form__redraw {
+  background: #b33;
+  color: #fff;
+  border-color: #b33 !important;
+}
+
+/* What the backend says about the area just drawn, before the card is placed
+   (see ui/CheckReport.tsx): in the way, to confirm, or just to know. */
+.check-report {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border-left: 4px solid;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.check-report p {
+  margin: 0 0 6px;
+}
+
+.check-report--error {
+  background: #fbeaea;
+  border-color: #b33;
+  color: #7a1f1f;
+}
+
+.check-report--warning {
+  background: #fff4dc;
+  border-color: #d08a1f;
+  color: #6b4a0d;
+}
+
+.check-report--info {
+  background: #eef3ec;
+  border-color: #2e6b1f;
+  color: #2f4a27;
+}
+
+.check-report__confirm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
 }
 
 .intervention-list {

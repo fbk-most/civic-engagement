@@ -10,8 +10,16 @@ import { frustumWedge, type CameraPose } from "./three/camera";
 import { anchorFromPolygon } from "./three/geo";
 import { readDebugParams } from "./debugParams";
 import { createDraw } from "./map/terraDrawSetup";
-import { createIntervention, deleteIntervention, fetchCards, fetchScene, updateIntervention } from "./api/client";
-import type { CardSpec, InterventionDisplayMode, PlacementType, SceneResponse } from "./api/types";
+import {
+  checkIntervention,
+  createIntervention,
+  deleteIntervention,
+  fetchCards,
+  fetchScene,
+  InterventionBlockedError,
+  updateIntervention,
+} from "./api/client";
+import type { CardSpec, InterventionCheck, InterventionDisplayMode, PlacementType, SceneResponse } from "./api/types";
 import { CardPalette } from "./ui/CardPalette";
 import { ParamForm } from "./ui/ParamForm";
 import { TimeSlider } from "./ui/TimeSlider";
@@ -49,6 +57,8 @@ function App() {
   // after the fetch for where the drag actually stopped). Only the response
   // matching the most recently *issued* request is allowed to apply.
   const timeRequestSeqRef = useRef(0);
+  // Same idea for the check of a freshly drawn area (see the effect below).
+  const checkSeqRef = useRef(0);
   const interventionModeRef = useRef<InterventionDisplayMode>("simulated");
   const cardsRef = useRef<CardSpec[]>([]);
   const selectedCardRef = useRef<CardSpec | null>(null);
@@ -58,6 +68,9 @@ function App() {
   cardsRef.current = cards;
   const [selectedCard, setSelectedCard] = useState<CardSpec | null>(null);
   const [pendingGeometry, setPendingGeometry] = useState<GeoJSON.Geometry | null>(null);
+  // What the backend says about the area just drawn, before the card is placed.
+  const [check, setCheck] = useState<InterventionCheck | null>(null);
+  const [checking, setChecking] = useState(false);
   const [t, setT] = useState(initialDebugParams.t ?? 0);
   const [scene, setScene] = useState<SceneResponse | null>(null);
   const [interventionMode, setInterventionMode] = useState<InterventionDisplayMode>("simulated");
@@ -274,6 +287,30 @@ function App() {
     setHighlight(mapRef.current, iv ? iv.geometry : null);
   }, [selectedInterventionId, scene]);
 
+  // Asks the backend about a freshly drawn area as soon as there is one, so the
+  // form can say what is in the way, what to confirm and what will be cleared
+  // before anything is placed. A check that fails is not a reason to block the
+  // card: placing it checks again.
+  useEffect(() => {
+    if (!pendingGeometry || !selectedCard) {
+      checkSeqRef.current++;
+      setCheck(null);
+      setChecking(false);
+      return;
+    }
+    const seq = ++checkSeqRef.current;
+    setCheck(null);
+    setChecking(true);
+    checkIntervention({ card_type: selectedCard.card_type, geometry: pendingGeometry, params: {} }, t)
+      .then((result) => {
+        if (seq === checkSeqRef.current) setCheck(result);
+      })
+      .catch(console.error)
+      .finally(() => {
+        if (seq === checkSeqRef.current) setChecking(false);
+      });
+  }, [pendingGeometry, selectedCard, t]);
+
   function rearmDrawing() {
     // clear() throws if the instance is currently stopped (it is, after
     // "finish" paused it), so re-enable before clearing the drawn feature.
@@ -359,7 +396,11 @@ function App() {
         applyScene(scene);
         rearmDrawing();
       })
-      .catch(console.error);
+      .catch((error) => {
+        // Something protected is under the area: say what, and keep it drawn.
+        if (error instanceof InterventionBlockedError) setCheck(error.check);
+        else console.error(error);
+      });
   }
 
   function handleTimeChange(newT: number) {
@@ -434,7 +475,14 @@ function App() {
               {scene && <KpiPanel indicators={scene.indicators} baselineIndicators={scene.baseline_indicators} />}
               {view === "2d" &&
                 (pendingGeometry && selectedCard ? (
-                  <ParamForm card={selectedCard} plantedYear={t} onSubmit={handleSubmit} onCancel={rearmDrawing} />
+                  <ParamForm
+                    card={selectedCard}
+                    plantedYear={t}
+                    check={check}
+                    checking={checking}
+                    onSubmit={handleSubmit}
+                    onCancel={rearmDrawing}
+                  />
                 ) : selectedIntervention && selectedInterventionCard ? (
                   <ParamForm
                     card={selectedInterventionCard}

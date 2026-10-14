@@ -1,6 +1,7 @@
-import { useState } from "react";
-import type { CardSpec } from "../api/types";
+import { useEffect, useState } from "react";
+import type { CardSpec, InterventionCheck } from "../api/types";
 import { optionLabel, yearLabel } from "../i18n/labels";
+import { CheckReport } from "./CheckReport";
 
 interface Props {
   card: CardSpec;
@@ -12,6 +13,12 @@ interface Props {
    * one. Shown so it's never a surprise that something doesn't appear
    * before this point. */
   plantedYear?: number;
+  /** What the backend says about the area just drawn, for a card that clears
+   * it (see CheckReport): while it is being asked (`checking`), or its answer.
+   * Placing is held until the check is in, refused when something is in the
+   * way, and needs a confirmation when there are warnings. */
+  check?: InterventionCheck | null;
+  checking?: boolean;
   onSubmit: (params: Record<string, unknown>) => void;
   onCancel: () => void;
   onDelete?: () => void;
@@ -22,6 +29,8 @@ export function ParamForm({
   initialValues,
   submitLabel = "Posiziona",
   plantedYear,
+  check = null,
+  checking = false,
   onSubmit,
   onCancel,
   onDelete,
@@ -29,6 +38,12 @@ export function ParamForm({
   const [values, setValues] = useState<Record<string, unknown>>(
     () => initialValues ?? Object.fromEntries(card.params.map((p) => [p.key, p.default]))
   );
+  const [confirmed, setConfirmed] = useState(false);
+  // A new answer is a new thing to confirm.
+  useEffect(() => setConfirmed(false), [check]);
+
+  const blocked = (check?.blocking.length ?? 0) > 0;
+  const needsConfirmation = !blocked && (check?.warnings.length ?? 0) > 0 && !confirmed;
 
   return (
     <form
@@ -76,11 +91,22 @@ export function ParamForm({
           )}
         </label>
       ))}
+      <CheckReport check={check} checking={checking} confirmed={confirmed} onConfirmedChange={setConfirmed} />
       <div className="param-form__actions">
-        <button type="submit">{submitLabel}</button>
-        <button type="button" onClick={onCancel}>
-          Annulla
-        </button>
+        {blocked ? (
+          <button type="button" className="param-form__redraw" onClick={onCancel}>
+            Ridisegna l'area
+          </button>
+        ) : (
+          <>
+            <button type="submit" disabled={checking || needsConfirmation}>
+              {submitLabel}
+            </button>
+            <button type="button" onClick={onCancel}>
+              Annulla
+            </button>
+          </>
+        )}
         {onDelete && (
           <button type="button" className="param-form__delete" onClick={onDelete}>
             Elimina

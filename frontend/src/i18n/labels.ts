@@ -63,6 +63,30 @@ export const TARGET_AGE_LABELS_IT: Record<string, string> = {
   mixed: "Tutte le età",
 };
 
+/** [singular, plural] of every element type, for "3 alberi, 1 panchina". */
+const ELEMENT_TYPE_LABELS_IT: Record<string, [string, string]> = {
+  tree: ["albero", "alberi"],
+  bench: ["panchina", "panchine"],
+  streetlight: ["lampione", "lampioni"],
+  pergola: ["pergola", "pergole"],
+  kiosk: ["chiosco", "chioschi"],
+  playground: ["area giochi", "aree giochi"],
+  fitness_area: ["area fitness", "aree fitness"],
+  water_feature: ["fontana", "fontane"],
+  path: ["percorso", "percorsi"],
+  building: ["edificio", "edifici"],
+  street: ["strada", "strade"],
+  crossing: ["attraversamento pedonale", "attraversamenti pedonali"],
+  lane_divider: ["linea di mezzeria", "linee di mezzeria"],
+  traffic_signal: ["semaforo", "semafori"],
+};
+
+/** "1 albero" / "3 alberi". */
+export function countLabel(elementType: string, count: number): string {
+  const [singular, plural] = ELEMENT_TYPE_LABELS_IT[elementType] ?? [elementType, elementType];
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
 export const CULTIVATION_PURPOSE_LABELS_IT: Record<string, string> = {
   commercial: "Commerciale (campo coltivato)",
   botanical: "Botanico (aiuola fiorita)",
