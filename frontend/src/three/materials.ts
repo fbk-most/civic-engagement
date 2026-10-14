@@ -346,6 +346,17 @@ export class MaterialLibrary {
     return this.get("fitness-equipment", () => toMaterial({ color: 0x3f8f8f, roughness: 0.5, metalness: 0.3 }));
   }
 
+  /** Plants of the cultivated covers (`builders/crops.ts`): white, because
+   * each instance carries its own colour (a crop's ripeness, a flower's
+   * petals, a bed's vegetable). */
+  cropPlant(): THREE.MeshStandardMaterial {
+    return this.get("crop-plant", () => toMaterial({ color: 0xffffff, roughness: 0.85 }));
+  }
+
+  cropStem(): THREE.MeshStandardMaterial {
+    return this.get("crop-stem", () => toMaterial({ color: 0x5f8a3c, roughness: 0.9 }));
+  }
+
   dispose(): void {
     for (const material of this.cache.values()) material.dispose();
     this.cache.clear();
