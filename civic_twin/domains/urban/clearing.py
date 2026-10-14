@@ -47,6 +47,11 @@ MIN_OVERLAP_LENGTH_M = 0.5
 # Width of a street whose width is not known, and of a marking's.
 DEFAULT_STREET_WIDTH_M = 6.0
 DEFAULT_MARKING_WIDTH_M = 0.5
+# How far a cover's remainder goes on under the cover that replaced part of it.
+# They meet along one line that, drawn from two separately rounded copies of
+# it, leaves hairline cracks the background shows through; the new cover is
+# above, so this overlap is never seen.
+SEAM_M = 0.05
 # How far around a cleared area to look for the cover that surrounds it, and
 # what to fill it with when there is none.
 SURROUND_RING_M = 3.0
@@ -277,7 +282,7 @@ def _clear(layout: Layout, intervention, report: ClearingReport) -> None:
         cover = layout.entries[covered.entry].cover
         ended[covered.entry] = replace(layout.entries[covered.entry], end=year, cleared_by=by)
         pieces: list[Entry] = []
-        rest = polygonal(project([cover.geometry])[0].difference(area))
+        rest = polygonal(project([cover.geometry])[0].difference(area.buffer(-SEAM_M)))
         if rest is not None and rest.area > MIN_OVERLAP_M2:
             piece = cover.model_copy(
                 update={"id": f"{cover.id}~{by}", "source": "intervention", "intervention_id": by,

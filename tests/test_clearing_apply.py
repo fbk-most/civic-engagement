@@ -6,7 +6,7 @@ import pytest
 from shapely.geometry import Point, box
 
 from civic_twin import scene
-from civic_twin.domains.urban.clearing import analyse, apply_clearing, project, to_wgs84
+from civic_twin.domains.urban.clearing import SEAM_M, analyse, apply_clearing, project, to_wgs84
 from civic_twin.domains.urban.layout import build_layout
 from civic_twin.geo_utils import to_projected
 from civic_twin.models.schema import Intervention
@@ -117,8 +117,12 @@ def test_the_pond_is_replaced_by_the_cover_around_it(baseline, session):
     assert pond.id not in ids(at)[1]  # but not part of the simulation
     area = to_projected(polygon)
     water = [to_projected(c.geometry) for c in at.covers if c.cover_type == "water" and not c.cleared_by]
-    assert water and sum(w.intersection(area).area for w in water) < 1.0  # none of it left under the area
-    assert sum(w.area for w in water) == pytest.approx(to_projected(pond.geometry).area - inside, rel=0.01)
+    # None of it is left under the area, but for the seam it tucks under the new cover by.
+    assert water and sum(w.intersection(area.buffer(-SEAM_M - 0.01)).area for w in water) == 0
+    seam = sum(w.intersection(area).area for w in water)
+    assert 0 < seam <= area.length * SEAM_M
+    left = to_projected(pond.geometry).area - inside
+    assert sum(w.area for w in water) == pytest.approx(left + seam, rel=0.001)
     fill = [c for c in at.covers if c.id == "cover-int-cultivate-fill-1"]
     assert fill and fill[0].cover_type == "lawn"  # the lawn the pond sits in
     assert to_projected(fill[0].geometry).area == pytest.approx(inside, rel=0.01)
