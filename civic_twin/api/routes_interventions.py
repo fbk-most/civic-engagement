@@ -1,7 +1,13 @@
 from fastapi import APIRouter, HTTPException
 
-from civic_twin.models.schema import Intervention, InterventionCreate, InterventionUpdate, SceneResponse
-from civic_twin.scene import MAX_T, MIN_T, current_scene
+from civic_twin.models.schema import (
+    Intervention,
+    InterventionCheck,
+    InterventionCreate,
+    InterventionUpdate,
+    SceneResponse,
+)
+from civic_twin.scene import MAX_T, MIN_T, check_intervention, current_scene
 from civic_twin.store.state import store
 
 router = APIRouter()
@@ -18,9 +24,20 @@ def list_interventions() -> list[Intervention]:
     return store.list_interventions()
 
 
+@router.post("/interventions/check", response_model=InterventionCheck)
+def check_new_intervention(data: InterventionCreate, t: int = 0) -> InterventionCheck:
+    """What placing this card would do, without placing it: the errors that
+    would refuse it, the warnings to confirm, and what it would clear."""
+    return check_intervention(data, _validated_t(t))
+
+
 @router.post("/interventions", response_model=SceneResponse)
 def create_intervention(data: InterventionCreate, t: int = 0) -> SceneResponse:
     validated_t = _validated_t(t)
+    check = check_intervention(data, validated_t)
+    if check.blocking:
+        # The same answer as the check's, so the client can show what is in the way.
+        raise HTTPException(status_code=422, detail=check.model_dump(mode="json"))
     store.add_intervention(data, planted_year=validated_t)
     return current_scene(validated_t)
 

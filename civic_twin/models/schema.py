@@ -84,6 +84,38 @@ class InterventionUpdate(BaseModel):
     params: dict[str, Any]
 
 
+class CheckBlocking(BaseModel):
+    """A protected object (a building, a street...) under the area of a card
+    that clears its area: the card is refused while it is there."""
+
+    id: str
+    type: ElementType
+
+
+class CheckWarning(BaseModel):
+    """Something the user should confirm before going on."""
+
+    code: Literal["cover_replaced"]  # a cover that is not just built over (the pond) will be replaced
+    cover_type: CoverType
+    area_m2: float
+
+
+class ClearingSummary(BaseModel):
+    """What the card would remove from its area."""
+
+    elements_by_type: dict[str, int] = {}
+    cover_area_m2_by_type: dict[str, float] = {}
+
+
+class InterventionCheck(BaseModel):
+    """What would happen if a card were placed, without placing it: the same
+    answer the placement itself is refused or accepted on."""
+
+    blocking: list[CheckBlocking] = []
+    warnings: list[CheckWarning] = []
+    clearing: ClearingSummary = ClearingSummary()
+
+
 class ParamSpec(BaseModel):
     key: str
     label: str

@@ -17,7 +17,7 @@ from functools import lru_cache
 import numpy as np
 
 from civic_twin.config import SITE
-from civic_twin.domains.urban.clearing import apply_clearing
+from civic_twin.domains.urban.clearing import CLEARING_CARDS, analyse, apply_clearing
 from civic_twin.domains.urban.encode import encode
 from civic_twin.domains.urban.layout import Layout, TreeSlot, build_layout
 from civic_twin.domains.urban.model import COVER_TYPES, INCLUSION_GROUPS, UrbanEvaluator, UrbanOutput, build_model
@@ -25,10 +25,15 @@ from civic_twin.domains.urban.parameters import HORIZON_YEARS
 from civic_twin.domains.urban.trees import species_traits
 from civic_twin.models.schema import (
     BaselineScene,
+    CheckBlocking,
+    CheckWarning,
+    ClearingSummary,
     CoverPolygon,
     DiscreteElement,
     IndicatorSeries,
     Intervention,
+    InterventionCheck,
+    InterventionCreate,
     SceneResponse,
 )
 from civic_twin.store.state import store
@@ -219,6 +224,33 @@ def current_scene(t: int = 0, session_id: str = "default") -> SceneResponse:
         indicators=_indicators(scenario.output, t),
         baseline_indicators=_indicators(_as_is().output, t),
         interventions=interventions,
+    )
+
+
+def check_intervention(data: InterventionCreate, t: int, session_id: str = "default") -> InterventionCheck:
+    """What placing this card at year `t` would do, without placing it.
+
+    Only a card that clears its area has anything to say (see clearing.py);
+    any other gets an empty answer. It is looked at against the scenario as
+    it is now, earlier clearings included, and it is the same analysis the
+    clearing is then applied from, so what is shown is what happens."""
+    if data.card_type not in CLEARING_CARDS:
+        return InterventionCheck()
+    report = analyse(_scenario(store.list_interventions(session_id)).layout, data.geometry, t)
+    replaced: dict[str, float] = {}
+    for covered in report.covers:
+        if covered.needs_warning:
+            replaced[covered.cover_type] = replaced.get(covered.cover_type, 0.0) + covered.region.area
+    return InterventionCheck(
+        blocking=[CheckBlocking(id=b.id, type=b.type) for b in report.blocking],
+        warnings=[
+            CheckWarning(code="cover_replaced", cover_type=cover_type, area_m2=round(area, 1))
+            for cover_type, area in sorted(replaced.items())
+        ],
+        clearing=ClearingSummary(
+            elements_by_type=dict(sorted(report.elements_by_type.items())),
+            cover_area_m2_by_type={k: round(v, 1) for k, v in sorted(report.cover_area_by_type.items())},
+        ),
     )
 
 
