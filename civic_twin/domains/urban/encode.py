@@ -12,7 +12,7 @@ from shapely.geometry import Polygon, shape
 
 from civic_twin.config import PROJECTED_CRS, WGS84_CRS
 from civic_twin.domains.urban import cdt_compat
-from civic_twin.domains.urban.layout import Layout
+from civic_twin.domains.urban.layout import Layout, cultivation_cover
 from civic_twin.domains.urban.model import (
     AGE_CLASSES,
     COVER_TYPES,
@@ -112,6 +112,8 @@ def _cost_items(layout: Layout) -> dict[str, np.ndarray]:
             items.append((quantity, keyed("path", params.get("material", "gravel")), start))
         elif card == "change_ground_cover":
             items.append((area_m2(iv.geometry), keyed("cover", params.get("cover_type", "meadow")), start))
+        elif card == "cultivate_terrain":
+            items.append((area_m2(iv.geometry), keyed("cover", cultivation_cover(params)), start))
         elif card == "plant_grove":
             items.append((area_m2(iv.geometry), "cover:lawn", start))
             items.append((float(grove_trees.get(iv.id, 0)), tree_key(params.get("species", "unknown")), start))

@@ -141,6 +141,17 @@ STUMP_HEIGHT = 0.3
 # Canopy diameter of every tree of a grove at planting time.
 GROVE_PLANTING_DIAMETER = 1.0
 
+# What the "coltiva il terreno" card turns its area into, by the purpose the
+# user picks: a commercial field, a flowerbed or a (small-scale) vegetable
+# garden. Each is its own cover type, since a cover carries nothing but its
+# type (space use, colours, prices and 3D materials all key on it).
+CULTIVATION_COVER_BY_PURPOSE = {
+    "commercial": "crop_field",
+    "botanical": "flowerbed",
+    "gardening": "vegetable_garden",
+}
+DEFAULT_CULTIVATION_PURPOSE = "commercial"
+
 # ---------------------------------------------------------------------------
 # Indicators
 # ---------------------------------------------------------------------------
@@ -164,6 +175,11 @@ COST_PER_COVER_M2_EUR = {
     "water": 150,
     "playground_surface": 120,
     "sport_surface": 70,
+    # Placeholders until a domain expert reviews them (soil preparation and
+    # sowing/planting, no running costs).
+    "crop_field": 5,
+    "flowerbed": 30,
+    "vegetable_garden": 18,
 }
 
 # Originally only covered the "nuovo percorso" card's own material options

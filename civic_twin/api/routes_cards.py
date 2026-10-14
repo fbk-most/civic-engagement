@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from civic_twin.domains.urban.parameters import CULTIVATION_COVER_BY_PURPOSE, DEFAULT_CULTIVATION_PURPOSE
 from civic_twin.models.schema import CardSpec
 
 router = APIRouter()
@@ -63,6 +64,21 @@ CARDS: list[CardSpec] = [
                 "type": "select",
                 "default": "meadow",
                 "options": ["lawn", "meadow", "wood", "permeable_paving"],
+            },
+        ],
+    ),
+    CardSpec(
+        card_type="cultivate_terrain",
+        label="Coltiva il terreno",
+        category="copertura_suolo",
+        placement_type="area",
+        params=[
+            {
+                "key": "purpose",
+                "label": "Scopo",
+                "type": "select",
+                "default": DEFAULT_CULTIVATION_PURPOSE,
+                "options": list(CULTIVATION_COVER_BY_PURPOSE),
             },
         ],
     ),

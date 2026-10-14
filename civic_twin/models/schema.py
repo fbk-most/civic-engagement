@@ -10,12 +10,13 @@ ElementType = Literal[
 CoverType = Literal[
     "paving", "lawn", "meadow", "wood", "water", "gravel", "permeable_paving",
     "playground_surface", "sport_surface",
+    "crop_field", "flowerbed", "vegetable_garden",
 ]
 Source = Literal["baseline", "intervention"]
 CardType = Literal[
     "plant_tree", "new_path", "change_ground_cover", "plant_grove",
     "add_streetlight", "add_bench", "add_pergola", "add_kiosk",
-    "add_playground", "add_fitness_area",
+    "add_playground", "add_fitness_area", "cultivate_terrain",
 ]
 CardCategory = Literal["vegetazione", "copertura_suolo", "elementi_architettonici", "sociale"]
 PlacementType = Literal["point", "polyline", "area"]

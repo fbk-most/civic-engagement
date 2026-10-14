@@ -18,7 +18,11 @@ puts the two together for a given year.
 from dataclasses import dataclass, field
 from typing import Literal
 
-from civic_twin.domains.urban.parameters import GROVE_PLANTING_DIAMETER
+from civic_twin.domains.urban.parameters import (
+    CULTIVATION_COVER_BY_PURPOSE,
+    DEFAULT_CULTIVATION_PURPOSE,
+    GROVE_PLANTING_DIAMETER,
+)
 from civic_twin.geo_utils import centroid_point, grove_points_within
 from civic_twin.models.schema import BaselineScene, CoverPolygon, DiscreteElement, Intervention
 
@@ -102,6 +106,13 @@ def _planted_tree(
     )
 
 
+def cultivation_cover(params: dict) -> str:
+    """The cover a "coltiva il terreno" card turns its area into, from its
+    `purpose` (an unknown or missing one falls back to the default)."""
+    purpose = params.get("purpose", DEFAULT_CULTIVATION_PURPOSE)
+    return CULTIVATION_COVER_BY_PURPOSE.get(purpose, CULTIVATION_COVER_BY_PURPOSE[DEFAULT_CULTIVATION_PURPOSE])
+
+
 def _add_intervention(layout: Layout, intervention: Intervention) -> None:
     start = intervention.planted_year
     params = intervention.params
@@ -124,6 +135,8 @@ def _add_intervention(layout: Layout, intervention: Intervention) -> None:
         element("pergola", {"size": params.get("size", "medium")})
     elif card == "change_ground_cover":
         cover(params.get("cover_type", "meadow"))
+    elif card == "cultivate_terrain":
+        cover(cultivation_cover(params))
     elif card == "plant_grove":
         # The area always converts to lawn, with small trees scattered in it.
         cover("lawn")
