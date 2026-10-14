@@ -143,23 +143,28 @@ SCENARIO_INPUT_AXES: dict[str, tuple] = {
     "path_length": (PATH,),
     "path_material": (PATH, MATERIAL),
     "path_start": (PATH,),
+    "path_end": (PATH,),
     "cost_quantity": (COST_ITEM,),
     "cost_price_key": (COST_ITEM, PRICE_KEY),
     "cost_start": (COST_ITEM,),
     "cover_area": (COVER,),
     "cover_type": (COVER, COVER_TYPE),
     "cover_start": (COVER,),
+    "cover_end": (COVER,),
     "cover_wkb": (COVER_WKB,),
     "cover_wkb_offsets": (COVER_WKB_OFFSET,),
     "lamp_x": (LAMP,),
     "lamp_y": (LAMP,),
     "lamp_start": (LAMP,),
+    "lamp_end": (LAMP,),
     "shelter_x": (SHELTER,),
     "shelter_y": (SHELTER,),
     "shelter_kind": (SHELTER, SHELTER_KIND),
     "shelter_start": (SHELTER,),
+    "shelter_end": (SHELTER,),
     "card_group": (CARD, INCLUSION_GROUP),
     "card_start": (CARD,),
+    "card_end": (CARD,),
     "site_wkb": (SITE_WKB,),
     "site_area": (),
 }
@@ -323,6 +328,7 @@ class Thermal(Model):
         cover_area: CoverIndex
         cover_type: Index  # (cover, cover_type), one-hot
         cover_start: CoverIndex
+        cover_end: CoverIndex
         hardscape: Index  # (cover_type,)
         cooling_per_m2_canopy: Index
         warming_per_m2_hardscape: Index
@@ -345,7 +351,9 @@ class Thermal(Model):
         warming = TimeseriesIndex(
             "warming",
             graph.where(
-                (i.years >= i.cover_start) & (hardscape > 0.5), i.cover_area * i.warming_per_m2_hardscape, 0.0
+                (i.years >= i.cover_start) & (i.years < i.cover_end) & (hardscape > 0.5),
+                i.cover_area * i.warming_per_m2_hardscape,
+                0.0,
             ).sum(axis=COVER),
         )
         delta = TimeseriesIndex("temperature delta", cooling + warming)
@@ -369,6 +377,7 @@ class Accessibility(Model):
         length: PathIndex
         material: Index  # (path, material), one-hot
         start: PathIndex
+        end: PathIndex
         material_score: MaterialIndex
         material_fragile: MaterialIndex
 
@@ -384,7 +393,7 @@ class Accessibility(Model):
 
     def compute(self, inputs: Inputs) -> tuple[Outputs, Expose]:
         i = inputs
-        active = i.years >= i.start
+        active = (i.years >= i.start) & (i.years < i.end)
         score = PathIndex("path score", _lookup(i.material, i.material_score, MATERIAL))
         fragile = PathIndex("path fragile", _lookup(i.material, i.material_fragile, MATERIAL))
         total = TimeseriesIndex("total path length", graph.where(active, i.length, 0.0).sum(axis=PATH))
@@ -441,12 +450,15 @@ class Social(Model):
         lamp_x: LampIndex
         lamp_y: LampIndex
         lamp_start: LampIndex
+        lamp_end: LampIndex
         shelter_x: ShelterIndex
         shelter_y: ShelterIndex
         shelter_kind: Index  # (shelter, shelter_kind), one-hot
         shelter_start: ShelterIndex
+        shelter_end: ShelterIndex
         card_group: Index  # (card, inclusion_group), one-hot
         card_start: CardIndex
+        card_end: CardIndex
         site_wkb: Index  # (site_wkb,)
         streetlight_radius: Index
         shelter_radius: Index  # (shelter_kind,)
@@ -472,7 +484,7 @@ class Social(Model):
         safety = TimeseriesIndex(
             "safety",
             graph.function_call(
-                "lit_share", i.years, i.lamp_x, i.lamp_y, i.lamp_start, i.streetlight_radius, i.site_wkb,
+                "lit_share", i.years, i.lamp_x, i.lamp_y, i.lamp_start, i.lamp_end, i.streetlight_radius, i.site_wkb,
                 functor=fns.lit_share,
             ),
         )
@@ -483,10 +495,11 @@ class Social(Model):
                 "shelter_reach", i.shelter_x, i.shelter_y, radius, i.site_wkb, functor=fns.shelter_reach
             ),
         )
-        shelter = TimeseriesIndex("shelter", graph.where(i.years >= i.shelter_start, reach, 0.0).max(axis=SHELTER))
+        in_place = (i.years >= i.shelter_start) & (i.years < i.shelter_end)
+        shelter = TimeseriesIndex("shelter", graph.where(in_place, reach, 0.0).max(axis=SHELTER))
         inclusion = Index(
             "inclusion",
-            graph.where(i.years >= i.card_start, i.card_group, 0.0).max(axis=CARD),
+            graph.where((i.years >= i.card_start) & (i.years < i.card_end), i.card_group, 0.0).max(axis=CARD),
             axes=(INCLUSION_GROUP, TIME),
         )
         evening_winter = TimeseriesIndex("evening winter", (safety + shelter) / 2)
@@ -508,6 +521,7 @@ class SpaceUse(Model):
         cover_wkb_offsets: Index  # (cover_wkb_offset,)
         cover_type: Index  # (cover, cover_type), one-hot
         cover_start: CoverIndex
+        cover_end: CoverIndex
         site_wkb: Index  # (site_wkb,)
         site_area: Index
 
@@ -524,7 +538,8 @@ class SpaceUse(Model):
         areas = Index(
             "cover type areas",
             graph.function_call(
-                "cover_areas", i.years, i.cover_wkb, i.cover_wkb_offsets, i.cover_start, i.cover_type, i.site_wkb,
+                "cover_areas", i.years, i.cover_wkb, i.cover_wkb_offsets, i.cover_start, i.cover_end, i.cover_type,
+                i.site_wkb,
                 functor=fns.cover_areas,
             ),
             axes=(COVER_TYPE, TIME),
@@ -551,23 +566,28 @@ class UrbanModel(Model):
         path_length: PathIndex
         path_material: Index  # (path, material), one-hot
         path_start: PathIndex
+        path_end: PathIndex
         cost_quantity: CostItemIndex
         cost_price_key: Index  # (cost_item, price_key), one-hot
         cost_start: CostItemIndex
         cover_area: CoverIndex
         cover_type: Index  # (cover, cover_type), one-hot
         cover_start: CoverIndex
+        cover_end: CoverIndex
         cover_wkb: Index  # (cover_wkb,)
         cover_wkb_offsets: Index  # (cover_wkb_offset,)
         lamp_x: LampIndex
         lamp_y: LampIndex
         lamp_start: LampIndex
+        lamp_end: LampIndex
         shelter_x: ShelterIndex
         shelter_y: ShelterIndex
         shelter_kind: Index  # (shelter, shelter_kind), one-hot
         shelter_start: ShelterIndex
+        shelter_end: ShelterIndex
         card_group: Index  # (card, inclusion_group), one-hot
         card_start: CardIndex
+        card_end: CardIndex
         site_wkb: Index  # (site_wkb,)
         site_area: Index
         # parameters (see parameters.py)
@@ -638,12 +658,13 @@ class UrbanModel(Model):
         ))
         thermal = Thermal(inputs=Thermal.Inputs(
             years=years, canopy_area=trees.outputs.canopy_area,
-            cover_area=i.cover_area, cover_type=i.cover_type, cover_start=i.cover_start, hardscape=i.hardscape,
+            cover_area=i.cover_area, cover_type=i.cover_type, cover_start=i.cover_start, cover_end=i.cover_end,
+            hardscape=i.hardscape,
             cooling_per_m2_canopy=i.cooling_per_m2_canopy, warming_per_m2_hardscape=i.warming_per_m2_hardscape,
             reference_temperature=i.reference_temperature,
         ))
         accessibility = Accessibility(inputs=Accessibility.Inputs(
-            years=years, length=i.path_length, material=i.path_material, start=i.path_start,
+            years=years, length=i.path_length, material=i.path_material, start=i.path_start, end=i.path_end,
             material_score=i.material_score, material_fragile=i.material_fragile,
         ))
         costs = Costs(inputs=Costs.Inputs(
@@ -651,9 +672,10 @@ class UrbanModel(Model):
         ))
         social = Social(
             inputs=Social.Inputs(
-                years=years, lamp_x=i.lamp_x, lamp_y=i.lamp_y, lamp_start=i.lamp_start,
+                years=years, lamp_x=i.lamp_x, lamp_y=i.lamp_y, lamp_start=i.lamp_start, lamp_end=i.lamp_end,
                 shelter_x=i.shelter_x, shelter_y=i.shelter_y, shelter_kind=i.shelter_kind,
-                shelter_start=i.shelter_start, card_group=i.card_group, card_start=i.card_start,
+                shelter_start=i.shelter_start, shelter_end=i.shelter_end, card_group=i.card_group,
+                card_start=i.card_start, card_end=i.card_end,
                 site_wkb=i.site_wkb, streetlight_radius=i.streetlight_radius, shelter_radius=i.shelter_radius,
             ),
             fns=Social.Functions(lit_share=fns.lit_share, shelter_reach=fns.shelter_reach),
@@ -661,7 +683,7 @@ class UrbanModel(Model):
         space_use = SpaceUse(
             inputs=SpaceUse.Inputs(
                 years=years, cover_wkb=i.cover_wkb, cover_wkb_offsets=i.cover_wkb_offsets, cover_type=i.cover_type,
-                cover_start=i.cover_start, site_wkb=i.site_wkb, site_area=i.site_area,
+                cover_start=i.cover_start, cover_end=i.cover_end, site_wkb=i.site_wkb, site_area=i.site_area,
             ),
             fns=SpaceUse.Functions(cover_areas=fns.cover_areas),
         )
@@ -745,14 +767,17 @@ def build_model() -> UrbanModel:
     }
     functors = UrbanModel.Functions(
         lit_share=cdt_compat.on_axes(
-            geometry.lit_share, [(TIME,), (LAMP,), (LAMP,), (LAMP,), (), (SITE_WKB,)], (TIME,), LAYOUT_AXES
+            geometry.lit_share,
+            [(TIME,), (LAMP,), (LAMP,), (LAMP,), (LAMP,), (), (SITE_WKB,)],
+            (TIME,),
+            LAYOUT_AXES,
         ),
         shelter_reach=cdt_compat.on_axes(
             geometry.shelter_reach, [(SHELTER,), (SHELTER,), (SHELTER,), (SITE_WKB,)], (SHELTER,), LAYOUT_AXES
         ),
         cover_areas=cdt_compat.on_axes(
             geometry.cover_areas,
-            [(TIME,), (COVER_WKB,), (COVER_WKB_OFFSET,), (COVER,), (COVER, COVER_TYPE), (SITE_WKB,)],
+            [(TIME,), (COVER_WKB,), (COVER_WKB_OFFSET,), (COVER,), (COVER,), (COVER, COVER_TYPE), (SITE_WKB,)],
             (COVER_TYPE, TIME),
             LAYOUT_AXES,
         ),

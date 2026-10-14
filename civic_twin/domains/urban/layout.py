@@ -44,6 +44,8 @@ class TreeSlot:
     age_class: str | None = None
     cut_year: int | None = None
     replant_year: int | None = None
+    # Set by a clearing (see clearing.py): from this year on the tree is gone.
+    clear_year: int | None = None
 
 
 @dataclass(frozen=True)

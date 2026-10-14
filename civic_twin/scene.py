@@ -17,6 +17,7 @@ from functools import lru_cache
 import numpy as np
 
 from civic_twin.config import SITE
+from civic_twin.domains.urban.clearing import apply_clearing
 from civic_twin.domains.urban.encode import encode
 from civic_twin.domains.urban.layout import Layout, TreeSlot, build_layout
 from civic_twin.domains.urban.model import COVER_TYPES, INCLUSION_GROUPS, UrbanEvaluator, UrbanOutput, build_model
@@ -61,6 +62,7 @@ class Evaluated:
 
 def _evaluate(interventions: list[Intervention]) -> Evaluated:
     layout = build_layout(load_baseline(), interventions)
+    apply_clearing(layout)
     return Evaluated(layout=layout, output=_evaluator().run(encode(layout)))
 
 
@@ -124,7 +126,8 @@ def _assemble(evaluated: Evaluated, t: int) -> tuple[list[DiscreteElement], list
     elements: list[DiscreteElement] = []
     covers: list[CoverPolygon] = []
     for entry in evaluated.layout.entries:
-        if t < entry.start:
+        # Not there yet, or already taken away by a clearing.
+        if t < entry.start or (entry.end is not None and t >= entry.end):
             continue
         if entry.cover is not None:
             covers.append(entry.cover)

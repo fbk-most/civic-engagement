@@ -1,6 +1,7 @@
 """A scenario's layout as the urban model's per-scenario inputs: one array
 per input of `model.SCENARIO_INPUT_AXES`, one entry per tree, path, cost
-item, cover, lamp, shelter and card — each with the year it appears from.
+item, cover, lamp, shelter and card — each with the year it appears from, and
+the year a clearing takes it away, if one does.
 
 Only plain measurements are taken here (lengths, areas, projected
 coordinates); everything that combines them is the model's.
@@ -49,9 +50,12 @@ def _trees(layout: Layout) -> dict[str, np.ndarray]:
     for slot in layout.trees:
         species = slot.species if slot.species in SPECIES_KEYS else "unknown"
         baseline = slot.origin == "baseline"
-        cut = slot.cut_year if slot.cut_year is not None else NEVER
+        # A clearing (see clearing.py) cuts a tree short: it is gone from that
+        # year on, stump included, whatever its own lifecycle was going to do.
+        cleared = slot.clear_year if slot.clear_year is not None else NEVER
+        cut = min(slot.cut_year if slot.cut_year is not None else NEVER, cleared)
         replanted = slot.cut_year is not None and slot.replant_year is not None
-        end = max(slot.cut_year, slot.replant_year) if replanted else NEVER
+        end = min(max(slot.cut_year, slot.replant_year) if replanted else NEVER, cleared)
         rows.append((
             _onehot(SPECIES_KEYS, species),
             _onehot(AGE_CLASSES, slot.age_class) if baseline else np.zeros(len(AGE_CLASSES)),
@@ -74,6 +78,11 @@ def _elements(layout: Layout, element_type: str) -> list:
     return [e for e in layout.entries if e.element is not None and e.element.type == element_type]
 
 
+def _ends(entries: list) -> list[float]:
+    """The year each entry ends (a clearing took it away), or never."""
+    return [NEVER if e.end is None else e.end for e in entries]
+
+
 def _paths(layout: Layout) -> dict[str, np.ndarray]:
     entries = _elements(layout, "path")
     materials = []
@@ -86,6 +95,7 @@ def _paths(layout: Layout) -> dict[str, np.ndarray]:
             [_onehot(MATERIALS, m) for m in materials], np.zeros(len(MATERIALS))
         ),
         "path_start": cdt_compat.with_sentinel([e.start for e in entries], NEVER),
+        "path_end": cdt_compat.with_sentinel(_ends(entries), NEVER),
     }
 
 
@@ -146,6 +156,7 @@ def _covers(layout: Layout) -> dict[str, np.ndarray]:
             [_onehot(COVER_TYPES, e.cover.cover_type) for e in entries], np.zeros(len(COVER_TYPES))
         ),
         "cover_start": cdt_compat.with_sentinel([e.start for e in entries], NEVER),
+        "cover_end": cdt_compat.with_sentinel(_ends(entries), NEVER),
         "cover_wkb": wkb,
         "cover_wkb_offsets": offsets,
     }
@@ -158,6 +169,7 @@ def _lamps(layout: Layout) -> dict[str, np.ndarray]:
         "lamp_x": cdt_compat.with_sentinel(xs, 0.0),
         "lamp_y": cdt_compat.with_sentinel(ys, 0.0),
         "lamp_start": cdt_compat.with_sentinel([e.start for e in entries], NEVER),
+        "lamp_end": cdt_compat.with_sentinel(_ends(entries), NEVER),
     }
 
 
@@ -178,16 +190,25 @@ def _shelters(layout: Layout) -> dict[str, np.ndarray]:
             [_onehot(SHELTER_KINDS, k) for k in kinds], _onehot(SHELTER_KINDS, SHELTER_KINDS[0])
         ),
         "shelter_start": cdt_compat.with_sentinel([e.start for e in entries], NEVER),
+        "shelter_end": cdt_compat.with_sentinel(_ends(entries), NEVER),
     }
 
 
 def _cards(layout: Layout) -> dict[str, np.ndarray]:
     cards = [iv for iv in layout.interventions if iv.card_type in INCLUSION_CARDS]
+    # A card stops counting for its age group once a clearing took its
+    # equipment away.
+    cleared_at = {
+        e.element.intervention_id: e.end
+        for e in layout.entries
+        if e.element is not None and e.end is not None and e.element.intervention_id is not None
+    }
     return {
         "card_group": cdt_compat.with_sentinel(
             [_onehot(INCLUSION_GROUPS, INCLUSION_CARDS[iv.card_type]) for iv in cards], np.zeros(len(INCLUSION_GROUPS))
         ),
         "card_start": cdt_compat.with_sentinel([iv.planted_year for iv in cards], NEVER),
+        "card_end": cdt_compat.with_sentinel([cleared_at.get(iv.id, NEVER) for iv in cards], NEVER),
     }
 
 

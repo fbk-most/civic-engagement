@@ -27,13 +27,14 @@ def _coverage(site, xs, ys, radius) -> float:
     return 100 * covered.area / site.area
 
 
-def _by_active_set(years: np.ndarray, start: np.ndarray, compute) -> np.ndarray:
+def _by_active_set(years: np.ndarray, start: np.ndarray, end: np.ndarray, compute) -> np.ndarray:
     """`compute(active)` for every year, computed once per distinct set of
-    active entries (they only change in the years something is placed)."""
+    active entries (they only change in the years something is placed or
+    cleared). An entry is active from `start` up to, not including, `end`."""
     cache: dict[bytes, float | np.ndarray] = {}
     values = []
     for t in years:
-        active = start <= t
+        active = (start <= t) & (t < end)
         key = active.tobytes()
         if key not in cache:
             cache[key] = compute(active)
@@ -41,12 +42,12 @@ def _by_active_set(years: np.ndarray, start: np.ndarray, compute) -> np.ndarray:
     return np.stack([np.asarray(v, dtype=float) for v in values], axis=-1)
 
 
-def lit_share(years, x, y, start, radius, site_wkb) -> np.ndarray:
+def lit_share(years, x, y, start, end, radius, site_wkb) -> np.ndarray:
     """Per year: % of the site within `radius` of at least one active
     streetlight. Axes: (time,)."""
     site = _site(site_wkb)
     radius = float(radius)
-    return _by_active_set(years, start, lambda active: _coverage(site, x[active], y[active], radius))
+    return _by_active_set(years, start, end, lambda active: _coverage(site, x[active], y[active], radius))
 
 
 def shelter_reach(x, y, radius, site_wkb) -> np.ndarray:
@@ -55,7 +56,7 @@ def shelter_reach(x, y, radius, site_wkb) -> np.ndarray:
     return np.array([_coverage(site, [px], [py], float(r)) for px, py, r in zip(x, y, radius)])
 
 
-def cover_areas(years, cover_wkb, cover_offsets, start, cover_type, site_wkb) -> np.ndarray:
+def cover_areas(years, cover_wkb, cover_offsets, start, end, cover_type, site_wkb) -> np.ndarray:
     """Per cover type and year: area of the site it occupies, where later
     covers take precedence over earlier ones wherever they overlap; NaN
     where a type occupies nothing (not even an empty-area sliver). Axes:
@@ -76,4 +77,4 @@ def cover_areas(years, cover_wkb, cover_offsets, start, cover_type, site_wkb) ->
             remaining = remaining.difference(geom)
         return by_type
 
-    return _by_active_set(years, start, areas)
+    return _by_active_set(years, start, end, areas)

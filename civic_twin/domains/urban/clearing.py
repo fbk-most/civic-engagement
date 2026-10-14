@@ -20,7 +20,7 @@ Everything is measured in the projected CRS, in metres.
 """
 
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import geopandas as gpd
 from shapely.geometry import GeometryCollection, MultiPolygon, Polygon, mapping, shape
@@ -35,6 +35,10 @@ from civic_twin.domains.urban.parameters import (
     PROTECTED_ELEMENT_TYPES,
 )
 from civic_twin.geo_utils import to_projected
+from civic_twin.models.schema import CoverPolygon
+
+# The cards that clear their area before they act on it.
+CLEARING_CARDS = {"cultivate_terrain"}
 
 # An overlap smaller than this is two shapes touching, not one on the other.
 MIN_OVERLAP_M2 = 0.5
@@ -43,6 +47,10 @@ MIN_OVERLAP_LENGTH_M = 0.5
 # Width of a street whose width is not known, and of a marking's.
 DEFAULT_STREET_WIDTH_M = 6.0
 DEFAULT_MARKING_WIDTH_M = 0.5
+# How far around a cleared area to look for the cover that surrounds it, and
+# what to fill it with when there is none.
+SURROUND_RING_M = 3.0
+DEFAULT_FILL_COVER = "paving"
 
 LINES = ("LineString", "MultiLineString")
 AREAS = ("Polygon", "MultiPolygon")
@@ -193,7 +201,103 @@ def analyse(
                 if geometry.intersection(area).length < MIN_OVERLAP_LENGTH_M:
                     continue
                 rest = geometry.difference(area)
-                report.elements.append(ClearedElement(index, kind, rest if rest.length >= MIN_OVERLAP_LENGTH_M else None))
+                kept = rest if rest.length >= MIN_OVERLAP_LENGTH_M else None
+                report.elements.append(ClearedElement(index, kind, kept))
             elif area.intersects(geometry):
                 report.elements.append(ClearedElement(index, kind))
     return report
+
+
+def surrounding_cover_type(layout: Layout, region: BaseGeometry, year: int, own_id: str) -> str:
+    """The cover around a cleared region: the one with most area in a ring
+    around it (leaving out the covers that are not simply built over, such as
+    the water being drained)."""
+    ring = region.buffer(SURROUND_RING_M).difference(region)
+    covers = [
+        e
+        for e in layout.entries
+        if e.cover is not None
+        and exists_at(e, year)
+        and e.cover.intervention_id != own_id
+        and e.cover.cover_type not in CLEARED_COVER_WARNING_TYPES
+    ]
+    areas: Counter = Counter()
+    for entry, geometry in zip(covers, project([e.cover.geometry for e in covers]), strict=True):
+        areas[entry.cover.cover_type] += geometry.intersection(ring).area
+    best = areas.most_common(1)
+    return best[0][0] if best and best[0][1] > 0 else DEFAULT_FILL_COVER
+
+
+def apply_clearing(layout: Layout) -> None:
+    """Applies every clearing card of the layout, in order of year, to what
+    was there before it (earlier clearings included).
+
+    What is cleared ends in the year of the card, and is marked as cleared by
+    it. A path cut at the edge of the area, and a cover only partly under it,
+    continue as new entries for what lies outside; a cover that needs a
+    warning (the pond) also leaves its cleared area filled with the cover
+    around it. The new entries take the place of the old in the order covers
+    are drawn in, so what was above a cover stays above what replaces it."""
+    clearings = sorted(
+        ((index, iv) for index, iv in enumerate(layout.interventions) if iv.card_type in CLEARING_CARDS),
+        key=lambda pair: (pair[1].planted_year, pair[0]),
+    )
+    for index, intervention in clearings:
+        later = frozenset(iv.id for iv in layout.interventions[index + 1 :])
+        report = analyse(
+            layout, intervention.geometry, intervention.planted_year, own_id=intervention.id, later_ids=later
+        )
+        _clear(layout, intervention, report)
+
+
+def _clear(layout: Layout, intervention, report: ClearingReport) -> None:
+    year, by = intervention.planted_year, intervention.id
+    area = to_projected(intervention.geometry)
+    ended: dict[int, Entry] = {}
+    after: dict[int, list[Entry]] = {}
+
+    for cleared in report.elements:
+        entry = layout.entries[cleared.entry]
+        ended[cleared.entry] = replace(entry, end=year, cleared_by=by)
+        if entry.tree is not None:
+            layout.trees[entry.tree] = replace(layout.trees[entry.tree], clear_year=year)
+        elif cleared.remainder is not None:
+            rest = entry.element.model_copy(
+                update={
+                    "id": f"{entry.element.id}~{by}",
+                    "source": "intervention",
+                    "intervention_id": by,
+                    "geometry": to_wgs84(cleared.remainder),
+                }
+            )
+            after[cleared.entry] = [Entry(start=year, element=rest)]
+
+    fills = 0
+    for covered in report.covers:
+        cover = layout.entries[covered.entry].cover
+        ended[covered.entry] = replace(layout.entries[covered.entry], end=year, cleared_by=by)
+        pieces: list[Entry] = []
+        rest = polygonal(project([cover.geometry])[0].difference(area))
+        if rest is not None and rest.area > MIN_OVERLAP_M2:
+            piece = cover.model_copy(
+                update={"id": f"{cover.id}~{by}", "source": "intervention", "intervention_id": by,
+                        "geometry": to_wgs84(rest)}
+            )
+            pieces.append(Entry(start=year, cover=piece))
+        if covered.needs_warning:
+            fills += 1
+            fill = CoverPolygon(
+                id=f"cover-{by}-fill-{fills}",
+                geometry=to_wgs84(covered.region),
+                cover_type=surrounding_cover_type(layout, covered.region, year, by),
+                source="intervention",
+                intervention_id=by,
+            )
+            pieces.append(Entry(start=year, cover=fill))
+        after[covered.entry] = pieces
+
+    entries: list[Entry] = []
+    for index, entry in enumerate(layout.entries):
+        entries.append(ended.get(index, entry))
+        entries.extend(after.get(index, ()))
+    layout.entries = entries
