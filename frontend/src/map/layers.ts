@@ -45,6 +45,9 @@ export const COVER_COLORS: Record<string, string> = {
   water: "#7fb3d5",
   playground_surface: "#e3a0b5",
   sport_surface: "#8fc4c4",
+  crop_field: "#d4b86a",
+  flowerbed: "#c58bd0",
+  vegetable_garden: "#8f7a52",
 };
 
 // Must stay in sync with `ui/MapLegend.tsx`'s swatch colors.

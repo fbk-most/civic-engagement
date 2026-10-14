@@ -27,6 +27,7 @@ export const ALL_CARD_TYPES: CardType[] = [
   "add_kiosk",
   "add_playground",
   "add_fitness_area",
+  "cultivate_terrain",
 ];
 
 export function buildCardMarkerImage(cardType: CardType): ImageData {

@@ -8,8 +8,9 @@ interface Props {
 
 // Cover types counted as "green" ground. Tree canopy isn't a cover type (it
 // overhangs whatever ground is below it), so it doesn't count here — hence
-// "Superficie verde", not "Copertura arborea".
-const GREEN_COVER_TYPES = ["lawn", "meadow", "wood"];
+// "Superficie verde", not "Copertura arborea". The three cultivated covers
+// (field, flowerbed, vegetable garden) count: they are planted ground.
+const GREEN_COVER_TYPES = ["lawn", "meadow", "wood", "crop_field", "flowerbed", "vegetable_garden"];
 
 function greenPct(indicators: Indicators): number {
   return GREEN_COVER_TYPES.reduce((sum, type) => sum + (indicators.space_use_pct[type] ?? 0), 0);

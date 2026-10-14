@@ -69,4 +69,11 @@ export const CARD_ICON_SHAPES: Record<CardType, IconShape[]> = {
     { kind: "rect", x: 1.5, y: 9, w: 3, h: 6, rx: 1 },
     { kind: "rect", x: 19.5, y: 9, w: 3, h: 6, rx: 1 },
   ],
+  // A seedling in a furrow.
+  cultivate_terrain: [
+    { kind: "line", x1: 3, y1: 19, x2: 21, y2: 19 },
+    { kind: "line", x1: 12, y1: 19, x2: 12, y2: 10 },
+    { kind: "path", d: "M12 14c-4 0-5-3-5-5 4 0 5 2 5 5" },
+    { kind: "path", d: "M12 12c4 0 5-3 5-5-4 0-5 2-5 5" },
+  ],
 };

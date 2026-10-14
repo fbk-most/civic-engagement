@@ -37,6 +37,12 @@ const COVER_SURFACES: Record<string, Surface> = {
   meadow: { color: 0xd8dba2, roughness: 0.95, texture: "lawn" },
   wood: { color: 0x7d9c72, roughness: 0.95, texture: "lawn" },
   water: { color: 0x3f6f92, roughness: 0.15, metalness: 0.1 },
+  // Bare cultivated soil. The gravel texture is neutral, so a brown tint reads
+  // as earth; the lawn texture is green and would multiply into olive. The
+  // crops themselves are drawn on top of this, by purpose and season.
+  crop_field: { color: 0xb89a62, roughness: 1.0, texture: "gravel" },
+  flowerbed: { color: 0x6e5a48, roughness: 1.0, texture: "gravel" },
+  vegetable_garden: { color: 0x8c6f4e, roughness: 1.0, texture: "gravel" },
 };
 
 // Keys span both OSM `surface` values found in the baseline (sett,

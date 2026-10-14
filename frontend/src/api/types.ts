@@ -22,7 +22,10 @@ export type CoverType =
   | "gravel"
   | "permeable_paving"
   | "playground_surface"
-  | "sport_surface";
+  | "sport_surface"
+  | "crop_field"
+  | "flowerbed"
+  | "vegetable_garden";
 export type Source = "baseline" | "intervention";
 
 export interface DiscreteElement {
@@ -116,7 +119,8 @@ export type CardType =
   | "add_pergola"
   | "add_kiosk"
   | "add_playground"
-  | "add_fitness_area";
+  | "add_fitness_area"
+  | "cultivate_terrain";
 export type CardCategory = "vegetazione" | "copertura_suolo" | "elementi_architettonici" | "sociale";
 export type PlacementType = "point" | "polyline" | "area";
 
