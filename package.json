@@ -1,0 +1,15 @@
+{
+  "name": "civic-engagement-workspace",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "packs/bologna-civic-dt/frontend"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w bologna-civic-dt",
+    "build": "npm run build -w bologna-civic-dt",
+    "preview": "npm run preview -w bologna-civic-dt",
+    "lint": "npm run lint --workspaces",
+    "typecheck": "npm run typecheck --workspaces"
+  }
+}

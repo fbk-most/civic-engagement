@@ -13,6 +13,30 @@ XX Settembre, Bologna) and how the active one is selected. The app
 supports one active site per process — switch sites by relaunching with
 `CIVIC_TWIN_SITE=<site_id>` (defaults to `piazza_dante`), not live in-session.
 
+## Structure: core and domain packs
+
+The code is split into a **core** and **domain packs**, which will move to
+separate repositories:
+
+| | Backend (Python) | Frontend (TypeScript) |
+| --- | --- | --- |
+| Core, `civic-engagement` | `civic_engagement/` | `frontend/` |
+| Urban pack, `bologna-civic-dt` | `packs/bologna-civic-dt/bologna_civic_dt/` | `packs/bologna-civic-dt/frontend/` |
+
+The core holds what every domain shares: the API, sessions and scenarios,
+scene assembly and caching, indicators as descriptors, the 2D map and the
+3D view. A pack holds its domain — sites, cards, model, indicators,
+ingestion — and **is the app**: it builds the API with the core's
+`create_app(pack)` (`civic_engagement/app.py`) and the interface with its
+`startApp(pack)` (`frontend/src/index.ts`). The core never imports a pack
+(`tests/test_package_boundaries.py` checks it).
+
+A feature often starts in one domain and moves to the core once a second
+domain needs it: the felt-temperature field and the 3D life (people, dogs,
+traffic) are urban for now. The 3D models and textures are all still under
+`frontend/public/`, which the urban app serves; how they split between
+the core and the packs is to be decided when a second domain needs its own.
+
 ## Status
 
 Early PoC, in active development. Milestone build order and design rationale live in
@@ -80,10 +104,14 @@ Vite + React + TypeScript. MapLibre GL JS for the plan view, three.js for the
 realistic view.
 
 ```bash
-cd frontend
-npm install
-npm run dev     # http://localhost:5173, proxies /api to the backend on :8000
+npm install     # once, at the repository root: npm workspaces for the core
+                # (frontend/) and the urban app (packs/bologna-civic-dt/frontend/)
+npm run dev     # the urban app on http://localhost:5173, proxies /api to the backend on :8000
+npm run typecheck && npm run lint   # both workspaces
 ```
+
+The core's own dev server (`cd frontend && npm run dev`) serves only the
+tree lab, `/tree-lab.html`.
 
 For workshops, demos and performance measurements, use the production build
 instead:

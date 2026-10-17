@@ -33,6 +33,7 @@ import { CardPalette } from "./ui/CardPalette";
 import { ParamForm } from "./ui/ParamForm";
 import { TimeSlider } from "./ui/TimeSlider";
 import { IndicatorsView } from "./ui/IndicatorsView";
+import { activePack } from "./pack";
 import { KpiPanel } from "./ui/KpiPanel";
 import { InterventionsToggle } from "./ui/InterventionsToggle";
 import { InterventionList } from "./ui/InterventionList";
@@ -749,7 +750,8 @@ function App() {
 
   const siteName = scene?.site_name;
   useEffect(() => {
-    document.title = siteName ? `Bologna Civic Digital Twin — ${siteName}` : "Bologna Civic Digital Twin";
+    const { title } = activePack();
+    document.title = siteName ? `${title} — ${siteName}` : title;
   }, [siteName]);
 
   // Another window (say, the projected one and the facilitator's) may have

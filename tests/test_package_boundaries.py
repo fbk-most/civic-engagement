@@ -1,13 +1,19 @@
-"""The core (civic_engagement) must not import the domain packs (packs/):
-they are going to separate repositories, and each pack app is built on top
-of the core, never the other way round."""
+"""The core must not import the domain packs (packs/), neither the backend
+(civic_engagement) nor the frontend (frontend/src): they are going to
+separate repositories, and each pack app is built on top of the core, never
+the other way round."""
 
 import ast
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 CORE = ROOT / "civic_engagement"
 PACKS = {"bologna_civic_dt", "rural_digital_twin"}
+FRONTEND_CORE = ROOT / "frontend" / "src"
+FRONTEND_PACKS = {"bologna-civic-dt", "rural-digital-twin"}
+# Static imports, `export ... from`, dynamic imports and `new URL(...)`.
+TS_SPECIFIER = re.compile(r"""(?:\bfrom\s*|\bimport\s*\(?\s*|new URL\(\s*)["']([^"']+)["']""")
 
 
 def _pack_imports(path: Path) -> set[str]:
@@ -26,4 +32,17 @@ def test_core_does_not_import_packs():
         imports = _pack_imports(path)
         if imports:
             found[path.relative_to(ROOT).as_posix()] = imports
+    assert found == {}
+
+
+def test_frontend_core_does_not_import_packs():
+    found = {}
+    for path in sorted([*FRONTEND_CORE.rglob("*.ts"), *FRONTEND_CORE.rglob("*.tsx")]):
+        specifiers = {
+            spec
+            for spec in TS_SPECIFIER.findall(path.read_text())
+            if spec.split("/")[0] in FRONTEND_PACKS or "packs/" in spec
+        }
+        if specifiers:
+            found[path.relative_to(ROOT).as_posix()] = specifiers
     assert found == {}

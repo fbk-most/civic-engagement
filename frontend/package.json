@@ -1,13 +1,16 @@
 {
-  "name": "frontend",
+  "name": "civic-engagement",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
+  "description": "The core of the civic co-design demonstrator's frontend; each domain pack's app is built on it (startApp)",
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "typecheck": "tsc -p tsconfig.app.json --noEmit"
   },
   "dependencies": {
     "maplibre-gl": "^6.0.0",
