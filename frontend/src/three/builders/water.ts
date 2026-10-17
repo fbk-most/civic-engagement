@@ -21,6 +21,8 @@ import type { GeoAnchor } from "../geo";
 import { geometryToShapes } from "../shapes";
 import { daylightFraction, type SunPosition } from "../sun";
 import { waterNormalTexture } from "../water";
+import type { ScenePart } from "../parts";
+import { activePack } from "../../pack";
 
 // Muted, slightly murky green-brown rather than a clean blue — closer to
 // how a small, still urban pond actually looks (sediment/algae, not open
@@ -35,18 +37,16 @@ const RIPPLE_SIZE = 2.5;
 // literal mirror than water — at any angle, not just straight down.
 const DISTORTION_SCALE = 3.2;
 
-export interface BuiltWater {
-  group: THREE.Group;
-  surfaces: Water[];
-}
-
-export function buildWater(covers: CoverPolygon[], anchor: GeoAnchor): BuiltWater {
+/** The pack's water covers (`FrontendPack.scene3d.waterCoverTypes`) as
+ * animated water surfaces, rippling every frame and lit by the sun. */
+export function buildWater(covers: CoverPolygon[], anchor: GeoAnchor): ScenePart {
   const group = new THREE.Group();
   group.name = "water";
   const surfaces: Water[] = [];
+  const waterTypes = new Set(activePack().scene3d.waterCoverTypes);
 
   for (const cover of covers) {
-    if (cover.cover_type !== "water") continue;
+    if (!waterTypes.has(cover.cover_type)) continue;
     const shapes = geometryToShapes(anchor, cover.geometry);
     if (shapes.length === 0) continue;
 
@@ -96,7 +96,20 @@ export function buildWater(covers: CoverPolygon[], anchor: GeoAnchor): BuiltWate
     surfaces.push(water);
   }
 
-  return { group, surfaces };
+  return {
+    object: group,
+    // A rebuild's fresh Water instances start with a placeholder sun
+    // direction until this runs — without it a pond would briefly show the
+    // wrong specular highlight after every model edit, not just the ones
+    // that happen to also change the sun.
+    setSun: (sun) => updateWaterSun(surfaces, sun),
+    frame: (camera, elapsedS) => {
+      for (const water of surfaces) {
+        water.material.uniforms.time.value = elapsedS;
+        water.material.uniforms.eye.value.copy(camera.position);
+      }
+    },
+  };
 }
 
 /** Points the sun-specular highlight at the site's real sun and fades its
@@ -104,7 +117,7 @@ export function buildWater(covers: CoverPolygon[], anchor: GeoAnchor): BuiltWate
  * this, `Water`'s own default direction is meaningless for this scene, and
  * a fixed-brightness highlight would keep glinting at full strength after
  * the actual directional light has faded out for the night. */
-export function updateWaterSun(surfaces: Water[], sun: SunPosition): void {
+function updateWaterSun(surfaces: Water[], sun: SunPosition): void {
   const brightness = daylightFraction(sun.altitudeDeg);
   for (const water of surfaces) {
     water.material.uniforms.sunDirection.value.copy(sun.direction);

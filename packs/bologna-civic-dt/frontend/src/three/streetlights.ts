@@ -20,13 +20,20 @@
  */
 
 import * as THREE from "three";
-import type { DiscreteElement } from "../../api/types";
-import { toLocal, type GeoAnchor } from "../geo";
-import type { MaterialLibrary } from "../materials";
-import { daylightFraction } from "../sun";
+import {
+  daylightFraction,
+  readDebugParams,
+  setLampIntensity,
+  setLampLayout,
+  setRealLamps,
+  toLocal,
+  type DiscreteElement,
+  type GeoAnchor,
+  type MaterialLibrary,
+  type PartBuilder,
+} from "civic-engagement";
 import { buildStreetlightGlobeGeometry, buildStreetlightPoleGeometry, STREETLIGHT_GLOBE_Y_M } from "./furniture";
-import { readDebugParams } from "../../debugParams";
-import { setLampIntensity, setLampLayout, setRealLamps } from "../lampLighting";
+import { streetlightGlobe, streetlightMetal } from "./materials";
 
 // Read once: comparison/test switches, not something that changes live.
 const DEBUG = readDebugParams();
@@ -143,8 +150,8 @@ export function buildStreetlights(
   let poleMesh: THREE.InstancedMesh | null = null;
   let globeMesh: THREE.InstancedMesh | null = null;
   if (transforms.length > 0) {
-    poleMesh = instanced(buildStreetlightPoleGeometry(), materials.streetlightMetal(), transforms, "streetlights");
-    globeMesh = instanced(buildStreetlightGlobeGeometry(), materials.streetlightGlobe(), transforms, "streetlight-globes");
+    poleMesh = instanced(buildStreetlightPoleGeometry(), streetlightMetal(materials), transforms, "streetlights");
+    globeMesh = instanced(buildStreetlightGlobeGeometry(), streetlightGlobe(materials), transforms, "streetlight-globes");
   }
   if (CHEAP) setLampLayout(lamps, LIGHT_DISTANCE_M, LIGHT_COLOR);
 
@@ -293,7 +300,26 @@ export function applyNightLights(build: StreetlightBuild, materials: MaterialLib
   }
   if (CHEAP) setLampIntensity(LIGHT_INTENSITY * factor);
 
-  const globeMaterial = materials.streetlightGlobe();
+  const globeMaterial = streetlightGlobe(materials);
   globeMaterial.emissive.setHex(LIGHT_COLOR);
   globeMaterial.emissiveIntensity = factor * 1.4;
 }
+
+/** The streetlights as a scene part: lit after dark (`applyNightLights`),
+ * their real lights following the camera (`updateStreetlightShadows`). */
+export const buildStreetlightPart: PartBuilder = ({ elements, anchor, materials }) => {
+  const build = buildStreetlights(elements, anchor, materials);
+  const group = new THREE.Group();
+  group.name = "streetlights";
+  if (build.poleMesh) group.add(build.poleMesh);
+  if (build.globeMesh) group.add(build.globeMesh);
+  for (const light of build.lights) group.add(light);
+  return {
+    object: group,
+    setSun: (sun, library) => applyNightLights(build, library, sun.altitudeDeg),
+    // A rebuild creates fresh lights, all starting castShadow=false, so the
+    // viewer calls this right after the build too, not only once the camera
+    // has moved a few metres.
+    cameraMoved: build.lights.length > 0 ? (camera) => updateStreetlightShadows(build, camera) : undefined,
+  };
+};

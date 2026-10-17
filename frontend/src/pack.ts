@@ -1,5 +1,7 @@
 import type { CSSProperties } from "react";
 import type { MapElementLayer } from "./map/layers";
+import type { Surface } from "./three/materials";
+import type { PartBuilder } from "./three/parts";
 import type { IconShape } from "./ui/cardIconShapes";
 
 /** The frontend side of a domain pack (see civic_engagement/domain.py for
@@ -31,6 +33,20 @@ export interface FrontendPack {
      * covers and below the intervention markers (see map/layers.ts). */
     layers: MapElementLayer[];
     legend: { label: Pair; swatch: CSSProperties }[];
+  };
+  scene3d: {
+    /** How each cover type and path material looks (see three/materials.ts);
+     * a default paving otherwise. */
+    coverSurfaces: Record<string, Surface>;
+    pathSurfaces: Record<string, Surface>;
+    /** Element types drawn as flat ribbons along their lines, by their
+     * `width` and `material` (see three/builders/paths.ts). */
+    ribbonTypes: string[];
+    /** Cover types drawn as animated water rather than flat ground. */
+    waterCoverTypes: string[];
+    /** The pack's own parts of the scene, built after the core's ground,
+     * ribbons, buildings and trees, before the water. */
+    parts: PartBuilder[];
   };
 }
 

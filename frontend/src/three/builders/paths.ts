@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import type { DiscreteElement } from "../../api/types";
 import { toLocal, type GeoAnchor } from "../geo";
-import type { MaterialLibrary } from "../materials";
+import { isPaintedPath, type MaterialLibrary } from "../materials";
 import { PATH_HEIGHT_M } from "../shapes";
 
 /** How far a miter join is allowed to stretch before it's cut back to a butt
@@ -12,14 +12,14 @@ const MITER_LIMIT = 3;
 const DEFAULT_WIDTH_M = 2;
 const MIN_PATH_WIDTH_M = 0.5;
 
-// Paint markings (crossing stripes, lane lines) ride on top of a street
+// Paint markings (crossing stripes, lane lines: path materials marked
+// `painted`, see materials.ts's Surface) ride on top of a street
 // ribbon at the same nominal height. A depth bias alone (materials.ts's
 // polygonOffset) wasn't enough to stop them flickering against the asphalt
 // at street-level viewing distance, so they're also physically lifted a
 // couple of centimetres — invisible at any real viewing angle, but a real
 // depth separation. They're also exempt from the path width floor: a 0.12m
 // lane line clamped to 0.5m read as a smeared band, not a painted line.
-const MARKING_MATERIALS = new Set(["crossing_marking", "lane_divider"]);
 const MARKING_LIFT_M = 0.02;
 const MIN_MARKING_WIDTH_M = 0.05;
 
@@ -143,7 +143,7 @@ export function buildPaths(
   for (const path of paths) {
     const material = String(path.properties.material ?? "paving");
     const width = Number(path.properties.width ?? DEFAULT_WIDTH_M);
-    const isMarking = MARKING_MATERIALS.has(material);
+    const isMarking = isPaintedPath(material);
     let buffers = byMaterial.get(material);
     if (!buffers) {
       buffers = { positions: [], normals: [], uvs: [], indices: [] };

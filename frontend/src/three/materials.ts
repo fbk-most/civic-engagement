@@ -17,51 +17,24 @@ import { loadGroundTextures, type GroundTextureSet } from "./assets";
 import { facadeEmissiveTexture, facadeNormalTexture, facadePatternTexture, facadeRoughnessTexture } from "./facade";
 import { hashString } from "./hash";
 import { daylightFraction } from "./sun";
+import { activePack } from "../pack";
 
-interface Surface {
+export interface Surface {
   color: number;
   roughness: number;
   metalness?: number;
   /** Key into the vendored tiling ground textures. When set, `color` acts as a
    * tint over the texture rather than as the surface colour itself. */
   texture?: string;
+  /** A path material painted on top of another ribbon (road markings): drawn
+   * in front of it, lifted a little and not widened (see builders/paths.ts). */
+  painted?: boolean;
 }
 
-const COVER_SURFACES: Record<string, Surface> = {
-  paving: { color: 0xd8d5cd, roughness: 0.9, texture: "paving" },
-  gravel: { color: 0xd6cfc0, roughness: 1.0, texture: "gravel" },
-  // Shares the gravel texture with a green cast: permeable paving is a
-  // grass-and-aggregate surface, and at ground level the pattern is what reads.
-  permeable_paving: { color: 0xb9c9ac, roughness: 0.95, texture: "gravel" },
-  lawn: { color: 0xd9e8c8, roughness: 0.95, texture: "lawn" },
-  meadow: { color: 0xd8dba2, roughness: 0.95, texture: "lawn" },
-  wood: { color: 0x7d9c72, roughness: 0.95, texture: "lawn" },
-  water: { color: 0x3f6f92, roughness: 0.15, metalness: 0.1 },
-};
-
-// Keys span both OSM `surface` values found in the baseline (sett,
-// paving_stones, asphalt, ...) and the `material` options offered by the
-// "nuovo percorso" card (gravel, permeable_paving, wood).
-const PATH_SURFACES: Record<string, Surface> = {
-  sett: { color: 0xc9c4bc, roughness: 0.9, texture: "sett" },
-  unhewn_cobblestone: { color: 0xbfb9b0, roughness: 1.0, texture: "sett" },
-  paving_stones: { color: 0xd2cdc5, roughness: 0.85, texture: "paving" },
-  paving: { color: 0xd2cdc5, roughness: 0.85, texture: "paving" },
-  paved: { color: 0xcac5be, roughness: 0.85, texture: "paving" },
-  concrete: { color: 0xd6d4cf, roughness: 0.9, texture: "paving" },
-  // Dry asphalt is quite matte; at 0.8 lamps left a strong glint on it at
-  // night. (Wet weather, if ever modelled, would lower this.)
-  asphalt: { color: 0xbdbbb8, roughness: 0.92, texture: "asphalt" },
-  fine_gravel: { color: 0xe0d8c8, roughness: 1.0, texture: "gravel" },
-  gravel: { color: 0xd6cfc0, roughness: 1.0, texture: "gravel" },
-  permeable_paving: { color: 0xb9c9ac, roughness: 0.95, texture: "gravel" },
-  wood: { color: 0x7a5a35, roughness: 0.85 },
-  // Painted road markings (crossing stripes, lane dividers) — a bright,
-  // slightly warm off-white, distinct from the asphalt/paving they sit on.
-  // Untextured, same as `wood` above: there's no vendored "paint" tile.
-  crossing_marking: { color: 0xf2ecd8, roughness: 0.55 },
-  lane_divider: { color: 0xf2ecd8, roughness: 0.55 },
-};
+/** Whether a path material is painted on another ribbon (`Surface.painted`). */
+export function isPaintedPath(material: string): boolean {
+  return activePack().scene3d.pathSurfaces[material]?.painted === true;
+}
 
 const DEFAULT_COVER: Surface = { color: 0xd8d5cd, roughness: 0.9, texture: "paving" };
 const DEFAULT_PATH: Surface = { color: 0xcac5be, roughness: 0.85, texture: "paving" };
@@ -84,7 +57,7 @@ const DEFAULT_FACADE_PALETTE = [0xd6c9b0, 0xcfc4ae, 0xd9cdb6, 0xc8bda8, 0xded2bb
 
 const ROOF_COLOR = 0x8a5a44;
 
-// Same warm tone as the streetlights (see builders/streetlights.ts's
+// Same warm tone as the urban pack's streetlights (their
 // LIGHT_COLOR) — a square at night should read as one consistent colour
 // temperature, not lamps and windows arguing with each other.
 const WINDOW_GLOW_COLOR = 0xffcc88;
@@ -167,6 +140,13 @@ export class MaterialLibrary {
     });
   }
 
+  /** A material of the pack's (or anyone's), shared by key like the
+   * library's own: created on first use from `surface`, lit by the lamps
+   * like every other (see lampLighting.ts). */
+  shared(key: string, surface: Surface): THREE.MeshStandardMaterial {
+    return this.get(key, () => toMaterial(surface));
+  }
+
   private get(key: string, create: () => THREE.MeshStandardMaterial) {
     let material = this.cache.get(key);
     if (!material) {
@@ -178,7 +158,7 @@ export class MaterialLibrary {
 
   cover(coverType: string): THREE.MeshStandardMaterial {
     return this.get(`cover:${coverType}`, () => {
-      const material = this.surfaceMaterial(COVER_SURFACES[coverType] ?? DEFAULT_COVER);
+      const material = this.surfaceMaterial(activePack().scene3d.coverSurfaces[coverType] ?? DEFAULT_COVER);
       // Ground cover sits just below paths in Y (see shapes.ts's
       // PATH_HEIGHT_M/COVER_BAND_M), which is enough to fix draw order at
       // point-blank range but not reliably at real viewing distance — a
@@ -198,7 +178,7 @@ export class MaterialLibrary {
 
   path(material: string): THREE.MeshStandardMaterial {
     return this.get(`path:${material}`, () => {
-      const mat = this.surfaceMaterial(PATH_SURFACES[material] ?? DEFAULT_PATH);
+      const mat = this.surfaceMaterial(activePack().scene3d.pathSurfaces[material] ?? DEFAULT_PATH);
       // The actual bug behind "paths are invisible": `builders/paths.ts`'s
       // ribbon triangles are geometrically wound facing *down* (confirmed by
       // computing the winding normal directly — it comes out (0,-20,0) for a
@@ -226,7 +206,7 @@ export class MaterialLibrary {
       // an equal offset would leave *them* tied with the asphalt and flicker
       // exactly the way path/cover did before this offset existed. One more
       // step forward breaks that tie the same way.
-      const isMarking = material === "crossing_marking" || material === "lane_divider";
+      const isMarking = isPaintedPath(material);
       mat.polygonOffset = true;
       mat.polygonOffsetFactor = isMarking ? -2 : -1;
       mat.polygonOffsetUnits = isMarking ? -2 : -1;
@@ -253,7 +233,7 @@ export class MaterialLibrary {
         }
       );
       // Starts dark; applyNightWindows drives this from the sun's altitude
-      // the same way builders/streetlights.ts drives its own night switch.
+      // the same way the urban pack's streetlights drive their night switch.
       material.emissiveIntensity = 0;
       this.facadeMaterials.push(material);
       return material;
@@ -322,54 +302,6 @@ export class MaterialLibrary {
 
   bark(): THREE.MeshStandardMaterial {
     return this.get("bark", () => toMaterial({ color: 0x6b5340, roughness: 0.95 }));
-  }
-
-  furniture(): THREE.MeshStandardMaterial {
-    return this.get("furniture", () => toMaterial({ color: 0x4a4640, roughness: 0.8 }));
-  }
-
-  waterFeature(): THREE.MeshStandardMaterial {
-    return this.get("water-feature", () =>
-      toMaterial({ color: 0x3f6f92, roughness: 0.15, metalness: 0.1 })
-    );
-  }
-
-  /** Streetlight pole/lamp housing. The actual night-time glow comes from a
-   * real `THREE.PointLight` per streetlight (see `builders/streetlights.ts`),
-   * not from this material, so it stays a plain dark metal at all hours. */
-  streetlightMetal(): THREE.MeshStandardMaterial {
-    return this.get("streetlight-metal", () => toMaterial({ color: 0x2e2e2e, roughness: 0.5, metalness: 0.6 }));
-  }
-
-  /** Streetlight globe: frosted glass by day; `applyNightLights` (see
-   * `builders/streetlights.ts`) drives its emissive glow after dark. */
-  streetlightGlobe(): THREE.MeshStandardMaterial {
-    return this.get("streetlight-globe", () => toMaterial({ color: 0xe8e4da, roughness: 0.35 }));
-  }
-
-  /** Traffic signal pole/housing — same dark metal family as
-   * `streetlightMetal()` but a distinct, cooler shade, since the two are
-   * near-identical silhouettes (slim pole + small head, see furniture.ts)
-   * and were reading as the same object in the 3D view when they shared a
-   * material outright. */
-  trafficSignalMetal(): THREE.MeshStandardMaterial {
-    return this.get("traffic-signal-metal", () => toMaterial({ color: 0x1c2b33, roughness: 0.45, metalness: 0.7 }));
-  }
-
-  pergolaTimber(): THREE.MeshStandardMaterial {
-    return this.get("pergola-timber", () => toMaterial({ color: 0x8a6a45, roughness: 0.85 }));
-  }
-
-  kioskBody(): THREE.MeshStandardMaterial {
-    return this.get("kiosk-body", () => toMaterial({ color: 0xcabfa9, roughness: 0.8 }));
-  }
-
-  playgroundEquipment(): THREE.MeshStandardMaterial {
-    return this.get("playground-equipment", () => toMaterial({ color: 0xd94f70, roughness: 0.6 }));
-  }
-
-  fitnessEquipment(): THREE.MeshStandardMaterial {
-    return this.get("fitness-equipment", () => toMaterial({ color: 0x3f8f8f, roughness: 0.5, metalness: 0.3 }));
   }
 
   dispose(): void {

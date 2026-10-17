@@ -1,7 +1,8 @@
-/** Trees, stumps and street furniture, drawn as instanced meshes — except
- * tree bark/leaves, which are genuinely unique per tree (see
- * `treeStructure.ts`) and so are merged into a handful of shared meshes
- * instead (see the end of `buildVegetation`).
+/** Trees and stumps, drawn as instanced meshes — except tree bark/leaves,
+ * which are genuinely unique per tree (see `treeStructure.ts`) and so are
+ * merged into a handful of shared meshes instead (see the end of
+ * `buildVegetation`). Other things standing on the ground (the urban pack's
+ * furniture, say) are the pack's own scene parts (see three/parts.ts).
  *
  * Every per-instance transform is driven by the model's own `canopy_diameter`
  * and `height` (see `bologna_civic_dt/model.py`), which is what makes the scenario time
@@ -13,22 +14,13 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { DiscreteElement } from "../../api/types";
 import { toLocal, type GeoAnchor } from "../geo";
-import { elementYaw } from "../hash";
+import { instanced } from "../instancing";
 import { setAutumnMix, type MaterialLibrary } from "../materials";
 import { loadFoliageAtlas } from "../assets";
 import type { SeasonState } from "../sun";
 import type { CrownForm } from "./treeStructure";
 import type { BarkAttributes, FoliageAttributes, TreeJob } from "../workers/treeJobs";
 import { buildTreesInWorkers, treeJobKey } from "../workers/treeWorkerPool";
-import {
-  buildBenchGeometry,
-  buildFitnessGeometry,
-  buildFountainGeometry,
-  buildKioskGeometry,
-  buildPergolaGeometry,
-  buildPlaygroundGeometry,
-  buildTrafficSignalGeometry,
-} from "./furniture";
 
 /** Fraction of total height at which the crown starts. Real broadleaf street
  * trees (plane, oak, linden...) are pruned to clear pedestrians, so their
@@ -45,26 +37,6 @@ function pointPosition(anchor: GeoAnchor, element: DiscreteElement): [number, nu
   if (element.geometry.type !== "Point") return null;
   const [lng, lat] = element.geometry.coordinates;
   return toLocal(anchor, lng, lat);
-}
-
-/** Fills an InstancedMesh from a list of per-instance transforms. */
-function instanced(
-  geometry: THREE.BufferGeometry,
-  material: THREE.Material,
-  transforms: THREE.Matrix4[],
-  name: string
-): THREE.InstancedMesh | null {
-  if (transforms.length === 0) return null;
-  const mesh = new THREE.InstancedMesh(geometry, material, transforms.length);
-  transforms.forEach((matrix, i) => mesh.setMatrixAt(i, matrix));
-  mesh.instanceMatrix.needsUpdate = true;
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  mesh.name = name;
-  // Instanced bounds are computed from the source geometry alone, which sits
-  // at the origin — without this every instance frustum-culls as one blob.
-  mesh.frustumCulled = false;
-  return mesh;
 }
 
 /** Merges a list of already-world-positioned geometries (see the tree loop
@@ -299,15 +271,6 @@ export async function buildVegetation(
 
   const trunks: THREE.Matrix4[] = [];
   const stumps: THREE.Matrix4[] = [];
-  const benches: THREE.Matrix4[] = [];
-  const fountains: THREE.Matrix4[] = [];
-  const kiosks: THREE.Matrix4[] = [];
-  const playgrounds: THREE.Matrix4[] = [];
-  const fitnessAreas: THREE.Matrix4[] = [];
-  const trafficSignals: THREE.Matrix4[] = [];
-  // Pergola geometry depends on the card's `size` param, so instances are
-  // batched by size — same idea as the tree-crown size buckets below.
-  const pergolasBySize = new Map<string, THREE.Matrix4[]>();
 
   // Every tree's bark and leaves are geometrically unique (grown from its
   // own seed/height/diameter — see treeStructure.ts) so, like the old
@@ -322,56 +285,6 @@ export async function buildVegetation(
     const position = pointPosition(anchor, element);
     if (!position) continue;
     const [x, z] = position;
-
-    if (element.type === "bench") {
-      const yaw = elementYaw(element.id);
-      benches.push(new THREE.Matrix4().makeRotationY(yaw).setPosition(x, 0, z));
-      continue;
-    }
-
-    if (element.type === "water_feature") {
-      fountains.push(new THREE.Matrix4().setPosition(x, 0, z));
-      continue;
-    }
-
-    if (element.type === "kiosk") {
-      const yaw = elementYaw(element.id);
-      kiosks.push(new THREE.Matrix4().makeRotationY(yaw).setPosition(x, 0, z));
-      continue;
-    }
-
-    if (element.type === "playground") {
-      const yaw = elementYaw(element.id);
-      playgrounds.push(new THREE.Matrix4().makeRotationY(yaw).setPosition(x, 0, z));
-      continue;
-    }
-
-    if (element.type === "fitness_area") {
-      const yaw = elementYaw(element.id);
-      fitnessAreas.push(new THREE.Matrix4().makeRotationY(yaw).setPosition(x, 0, z));
-      continue;
-    }
-
-    if (element.type === "pergola") {
-      const size = String(element.properties.size ?? "medium");
-      const yaw = elementYaw(element.id);
-      let batch = pergolasBySize.get(size);
-      if (!batch) {
-        batch = [];
-        pergolasBySize.set(size, batch);
-      }
-      batch.push(new THREE.Matrix4().makeRotationY(yaw).setPosition(x, 0, z));
-      continue;
-    }
-
-    // Streetlights are built separately (`builders/streetlights.ts`): each
-    // needs an individual `THREE.PointLight`, not just instanced geometry.
-    if (element.type === "streetlight") continue;
-
-    if (element.type === "traffic_signal") {
-      trafficSignals.push(new THREE.Matrix4().setPosition(x, 0, z));
-      continue;
-    }
 
     if (element.type !== "tree") continue;
 
@@ -438,49 +351,6 @@ export async function buildVegetation(
 
   const stumpMesh = instanced(stumpGeometry, materials.bark(), stumps, "tree-stumps");
   if (stumpMesh) group.add(stumpMesh);
-
-  const benchMesh = instanced(buildBenchGeometry(), materials.furniture(), benches, "benches");
-  if (benchMesh) group.add(benchMesh);
-
-  const fountainMesh = instanced(
-    buildFountainGeometry(),
-    materials.waterFeature(),
-    fountains,
-    "water-features"
-  );
-  if (fountainMesh) group.add(fountainMesh);
-
-  const kioskMesh = instanced(buildKioskGeometry(), materials.kioskBody(), kiosks, "kiosks");
-  if (kioskMesh) group.add(kioskMesh);
-
-  const playgroundMesh = instanced(
-    buildPlaygroundGeometry(),
-    materials.playgroundEquipment(),
-    playgrounds,
-    "playgrounds"
-  );
-  if (playgroundMesh) group.add(playgroundMesh);
-
-  const fitnessMesh = instanced(
-    buildFitnessGeometry(),
-    materials.fitnessEquipment(),
-    fitnessAreas,
-    "fitness-areas"
-  );
-  if (fitnessMesh) group.add(fitnessMesh);
-
-  for (const [size, transforms] of pergolasBySize) {
-    const mesh = instanced(buildPergolaGeometry(size), materials.pergolaTimber(), transforms, `pergolas-${size}`);
-    if (mesh) group.add(mesh);
-  }
-
-  const trafficSignalMesh = instanced(
-    buildTrafficSignalGeometry(),
-    materials.trafficSignalMetal(),
-    trafficSignals,
-    "traffic-signals"
-  );
-  if (trafficSignalMesh) group.add(trafficSignalMesh);
 
   const applySeason = (season: SeasonState) => {
     const density = Math.max(0, Math.min(1, season.leafDensity));

@@ -7,8 +7,6 @@ import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import type { CardSpec, DiscreteElement, InterventionDisplayMode, SceneResponse } from "../api/types";
 import { buildScene, disposeScene, type BuiltScene } from "./SceneBuilder";
-import { applyNightLights, updateStreetlightShadows } from "./builders/streetlights";
-import { updateWaterSun } from "./builders/water";
 import { buildPlacards, disposePlacards, facePlacards, type Placards } from "./builders/placards";
 import { tr, useLang } from "../i18n/lang";
 import { Lighting } from "./Lighting";
@@ -521,8 +519,8 @@ export function Viewer({
     let reportedBearing = Infinity;
     let reportedTime = 0;
 
-    // Re-picking the nearest N shadow-casting streetlights (see
-    // updateStreetlightShadows) touches every light on site and, for
+    // Re-picking the nearest N shadow-casting streetlights (the urban pack's
+    // `cameraMoved` part hook) touches every light on site and, for
     // whichever ones flip on, makes the renderer produce a new cube shadow
     // map that frame — worth throttling the same way view reporting is
     // above, on both time and movement, rather than doing it every frame.
@@ -532,12 +530,13 @@ export function Viewer({
     const casterDirection = new THREE.Vector3();
 
     const updateShadowCasters = (now: number) => {
-      const built = builtRef.current;
-      if (!built || built.streetlights.lights.length === 0) return;
+      // Runs every frame: no array built here, just a check.
+      const parts = builtRef.current?.parts;
+      if (!parts || !parts.some((part) => part.cameraMoved)) return;
       const state = shadowCasterStateRef.current;
       if (now - state.time < SHADOW_CASTER_INTERVAL_MS) return;
-      // Which lamps get real lights depends on what's in view too (see
-      // builders/streetlights.ts), so turning counts as well as moving.
+      // Which lamps get real lights depends on what's in view too (see the
+      // urban pack's streetlights.ts), so turning counts as well as moving.
       camera.getWorldDirection(casterDirection);
       const moved = camera.position.distanceTo(state.position) >= SHADOW_CASTER_MIN_MOVE_M;
       const turned = casterDirection.angleTo(state.direction) >= SHADOW_CASTER_MIN_TURN_RAD;
@@ -545,7 +544,7 @@ export function Viewer({
       state.time = now;
       state.position.copy(camera.position);
       state.direction.copy(casterDirection);
-      updateStreetlightShadows(built.streetlights, camera);
+      for (const part of parts) part.cameraMoved?.(camera);
     };
 
     const reportView = (now: number) => {
@@ -630,10 +629,7 @@ export function Viewer({
       }
       lighting.update(clock.elapsedTime);
       updateShadowCasters(performance.now());
-      for (const water of builtRef.current?.waterSurfaces ?? []) {
-        water.material.uniforms.time.value = clock.elapsedTime;
-        water.material.uniforms.eye.value.copy(camera.position);
-      }
+      for (const part of builtRef.current?.parts ?? []) part.frame?.(camera, clock.elapsedTime);
       if (placardsRef.current) facePlacards(placardsRef.current, camera);
       thermalOverlay.setViewHeight(camera.position.y);
       if (walk.isLocked) reportHere(performance.now());
@@ -786,25 +782,23 @@ export function Viewer({
     // relative to it afterwards.
     lighting.fitTo(built.bounds);
     lighting.setSun(sunRef.current);
-    applyNightLights(built.streetlights, materials, sunRef.current.altitudeDeg);
+    // A rebuild's fresh parts start with no sun (e.g. the water's
+    // placeholder sun direction, a streetlight off at night): without
+    // this they'd show wrong until the sun next changes.
+    for (const part of built.parts) part.setSun?.(sunRef.current, materials);
     // Facade materials are cached/shared by colour (see materials.ts's
     // facade()), not rebuilt per scene — but a rebuild can still be the
     // first time a given colour's material gets created, so this has to
     // run here too, not just from the sun-change effect below.
     materials.applyNightWindows(sunRef.current.altitudeDeg);
-    // A rebuild's fresh Water instances (see builders/water.ts) start with
-    // a placeholder sun direction until this runs — without it a pond
-    // would briefly show the wrong specular highlight after every model
-    // edit, not just the ones that happen to also change the sun.
-    updateWaterSun(built.waterSurfaces, sunRef.current);
-    // A rebuild creates a fresh array of PointLight objects (see
-    // buildStreetlights), all starting castShadow=false — without this the
-    // render loop's throttle (see updateShadowCasters) could wait up to
-    // SHADOW_CASTER_MIN_MOVE_M of camera movement before picking any
-    // casters for them, leaving newly-placed or newly-loaded streetlights
+    // A rebuild's parts that follow the camera (the urban pack's
+    // streetlights, whose fresh lights all start castShadow=false) are told
+    // where it is now — without this the render loop's throttle (see
+    // updateShadowCasters) could wait up to SHADOW_CASTER_MIN_MOVE_M of
+    // camera movement, leaving newly-placed or newly-loaded streetlights
     // shadowless until the facilitator happens to walk a few metres.
     if (cameraRef.current) {
-      updateStreetlightShadows(built.streetlights, cameraRef.current);
+      for (const part of built.parts) part.cameraMoved?.(cameraRef.current);
       shadowCasterStateRef.current.time = performance.now();
       shadowCasterStateRef.current.position.copy(cameraRef.current.position);
       cameraRef.current.getWorldDirection(shadowCasterStateRef.current.direction);
@@ -873,11 +867,8 @@ export function Viewer({
   useEffect(() => {
     lightingRef.current?.setSun(sun);
     if (builtRef.current && materialsRef.current) {
-      applyNightLights(builtRef.current.streetlights, materialsRef.current, sun.altitudeDeg);
+      for (const part of builtRef.current.parts) part.setSun?.(sun, materialsRef.current);
       materialsRef.current.applyNightWindows(sun.altitudeDeg);
-    }
-    if (builtRef.current) {
-      updateWaterSun(builtRef.current.waterSurfaces, sun);
     }
   }, [sun]);
 

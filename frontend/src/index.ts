@@ -15,3 +15,14 @@ export function startApp(pack: FrontendPack, root: HTMLElement): void {
   registerPack(pack);
   createRoot(root).render(createElement(StrictMode, null, createElement(App)));
 }
+
+// For the packs' own scene parts (FrontendPack.scene3d.parts).
+export type { DiscreteElement, CoverPolygon } from "./api/types";
+export type { PartBuilder, PartInputs, ScenePart } from "./three/parts";
+export { MaterialLibrary, type Surface } from "./three/materials";
+export { instanced } from "./three/instancing";
+export { toLocal, type GeoAnchor } from "./three/geo";
+export { elementYaw } from "./three/hash";
+export { daylightFraction, type SunPosition } from "./three/sun";
+export { setLampIntensity, setLampLayout, setRealLamps } from "./three/lampLighting";
+export { readDebugParams } from "./debugParams";

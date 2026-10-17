@@ -3,6 +3,7 @@ import type { CoverPolygon } from "../../api/types";
 import type { GeoAnchor } from "../geo";
 import type { MaterialLibrary } from "../materials";
 import { coverHeight, flatGeometry } from "../shapes";
+import { activePack } from "../../pack";
 
 /** Ground cover as flat horizontal meshes, one per cover polygon.
  *
@@ -22,10 +23,11 @@ export function buildGround(
   const group = new THREE.Group();
   group.name = "ground";
 
+  const waterTypes = new Set(activePack().scene3d.waterCoverTypes);
   for (const [index, cover] of covers.entries()) {
     // Ponds get a real animated Water surface instead — see builders/water.ts,
     // wired in by SceneBuilder alongside this group.
-    if (cover.cover_type === "water") continue;
+    if (waterTypes.has(cover.cover_type)) continue;
 
     const geometry = flatGeometry(anchor, cover.geometry, coverHeight(index, covers.length));
     if (!geometry) continue;

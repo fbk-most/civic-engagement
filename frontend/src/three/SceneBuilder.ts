@@ -19,11 +19,12 @@ import type { DiscreteElement, SceneResponse } from "../api/types";
 import { buildGround } from "./builders/ground";
 import { buildPaths } from "./builders/paths";
 import { buildVegetation } from "./builders/vegetation";
-import { buildStreetlights, type StreetlightBuild } from "./builders/streetlights";
 import { buildWater } from "./builders/water";
 import { ACTIVE_PROVIDER } from "./builders/buildings";
 import { anchorFromPolygon, localBounds, polygonRings, toLocal, type GeoAnchor } from "./geo";
 import { MaterialLibrary } from "./materials";
+import type { ScenePart } from "./parts";
+import { activePack } from "../pack";
 import type { SeasonState } from "./sun";
 import type { Footprint } from "./walk";
 
@@ -37,12 +38,10 @@ export interface BuiltScene {
    * rings only — a courtyard you could only reach through a wall isn't worth
    * the extra tests. */
   footprints: Footprint[];
-  /** The streetlights' live lights, toggled by `Viewer` based on the sun's
-   * altitude rather than rebuilt on every sun change. */
-  streetlights: StreetlightBuild;
-  /** One per pond, updated every frame (camera position, elapsed time) and
-   * on every sun change (direction/colour) — see Viewer.tsx. */
-  waterSurfaces: Water[];
+  /** The parts that follow the sun, the frames or the camera (the water,
+   * the pack's streetlights...): `Viewer` calls their hooks, rather than
+   * rebuilding them on every sun change. */
+  parts: ScenePart[];
   /** Shows the trees as in `season` (leaf density, autumn tint): the scene
    * itself doesn't depend on the date, so a date change needs no rebuild. */
   applySeason: (season: SeasonState) => void;
@@ -77,6 +76,7 @@ export function disposeGroup(object: THREE.Object3D): void {
 /** Disposes a built scene that's no longer drawn. */
 export function disposeScene(built: BuiltScene): void {
   disposeGroup(built.group);
+  for (const part of built.parts) part.dispose?.();
   built.release();
 }
 
@@ -101,40 +101,29 @@ export async function buildScene(
   const group = new THREE.Group();
   group.name = "civic-scene";
 
+  const { scene3d } = activePack();
   group.add(buildGround(covers, anchor, materials));
-  // `buildPaths` is generic on `properties.width`/`properties.material` —
-  // streets, crossing stripes and lane dividers are all just LineString/
-  // MultiLineString elements with their own `material` (see
-  // ingestion/build_baseline.py), so they render through the exact same
-  // ribbon-mesh path as pedestrian paths, no separate builder needed.
-  group.add(
-    buildPaths(
-      elements.filter(
-        (e) => e.type === "path" || e.type === "street" || e.type === "crossing" || e.type === "lane_divider"
-      ),
-      anchor,
-      materials
-    )
-  );
+  // `buildPaths` is generic on `properties.width`/`properties.material`:
+  // whatever the pack draws as ribbons (for the urban one, streets,
+  // crossing stripes and lane dividers as well as paths) renders through
+  // the exact same ribbon-mesh path, no separate builder needed.
+  const ribbonTypes = new Set(scene3d.ribbonTypes);
+  group.add(buildPaths(elements.filter((e) => ribbonTypes.has(e.type)), anchor, materials));
   group.add(await ACTIVE_PROVIDER.build(buildings, { anchor, materials }));
   const vegetation = await buildVegetation(elements, anchor, materials);
   group.add(vegetation.group);
 
-  const streetlights = buildStreetlights(elements, anchor, materials);
-  if (streetlights.poleMesh) group.add(streetlights.poleMesh);
-  if (streetlights.globeMesh) group.add(streetlights.globeMesh);
-  for (const light of streetlights.lights) group.add(light);
-
-  const { group: waterGroup, surfaces: waterSurfaces } = buildWater(covers, anchor);
-  group.add(waterGroup);
+  const parts: ScenePart[] = [];
+  for (const build of scene3d.parts) parts.push(await build({ elements, covers, anchor, materials }));
+  parts.push(buildWater(covers, anchor));
+  for (const part of parts) group.add(part.object);
 
   return {
     group,
     anchor,
     bounds: localBounds(anchor, [scene.site_boundary]),
     footprints: buildingFootprints(buildings, anchor),
-    streetlights,
-    waterSurfaces,
+    parts,
     applySeason: vegetation.applySeason,
     release: vegetation.release,
   };
