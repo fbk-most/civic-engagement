@@ -20,7 +20,7 @@ import { polygonRings, toLocal, type GeoAnchor } from "./geo";
  * lawn), and around Piazza Dante the baseline cover polygons sum to 54,745 m2
  * on a 41,019 m2 site. Covers are therefore lifted by their position in the
  * list, which resolves overlaps in favour of the later cover — matching the
- * precedence the space-use indicator already uses (`domains/urban/geometry.py`), so the
+ * precedence the space-use indicator already uses (`bologna_civic_dt/geometry.py`), so the
  * surface you see is the one the percentages counted.
  *
  * This band only needs to be large enough to force a real depth ordering

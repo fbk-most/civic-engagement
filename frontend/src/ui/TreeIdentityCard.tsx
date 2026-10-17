@@ -10,7 +10,7 @@ interface Props {
 
 // Read-only: baseline tree identity (species/age/size/cut year) is assigned
 // once, offline, as part of the baseline scenario — see
-// civic_twin/domains/urban/trees.py and ingestion/build_baseline.py. Nothing here
+// packs/bologna-civic-dt/bologna_civic_dt/trees.py and ingestion/build_baseline.py. Nothing here
 // is editable in a live session; the only action available is replanting a
 // stump, which creates a normal plant_tree intervention.
 export function TreeIdentityCard({ element, onClose, onReplant }: Props) {

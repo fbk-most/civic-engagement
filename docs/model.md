@@ -113,7 +113,7 @@ on screen. Choose one owner for each axis.
 
 *In the reference implementation:* the scenario year `t` runs from 0 to 30 (`HORIZON_YEARS`).
 The sun control sets month, day and hour, and the calendar year is always the current year plus
-`t` (`frontend/src/three/sun.ts`, `civic_twin/scene.py`).
+`t` (`frontend/src/three/sun.ts`, `civic_engagement/scene.py`).
 
 ## 4. Layer 1: the city model
 
@@ -134,12 +134,12 @@ OpenStreetMap rarely records tree species or ages, and road markings may be miss
 gaps explicitly, for example with seeded plausible values, and record which values are invented.
 These gaps matter later: a tree-disease scenario is meaningless if the species are made up.
 
-*In the reference implementation:* the site registry is `civic_twin/config.py`, with one active
-site per process. Ingestion lives in `civic_twin/ingestion/`. It combines OSM (buildings, streets,
+*In the reference implementation:* the site registry is `civic_engagement/config.py`, with one active
+site per process. Ingestion lives in `civic_engagement/ingestion/`. It combines OSM (buildings, streets,
 paths, trees, furniture, covers), LiDAR building heights and roof shapes and orthophoto roof
 colours (Piazza Dante only), and road markings inferred from OSM. The result is `data/<site>/baseline.json`
-with 14 element types and 9 cover types (`civic_twin/models/schema.py`). Baseline trees get a
-seeded species, age class and cut year (`domains/urban/trees.py`).
+with 14 element types and 9 cover types (`civic_engagement/models/schema.py`). Baseline trees get a
+seeded species, age class and cut year (`bologna_civic_dt/trees.py`).
 
 ## 5. Layer 2: interventions, the co-design language
 
@@ -162,10 +162,10 @@ and covers, never cards. The same session record is what organizers take home af
 Card specifications should be data, not code, so that the views can build palettes and forms from
 them and a new card does not require frontend work.
 
-*In the reference implementation:* there are ten cards (`civic_twin/api/routes_cards.py`), from
+*In the reference implementation:* there are ten cards (`civic_engagement/api/routes_cards.py`), from
 "plant a tree" to "fitness area". Cards are expanded and the timing rules are applied in
-`domains/urban/layout.py`, which is the single place that does so. The session store
-(`civic_twin/store/state.py`) is in memory and mirrored to one JSON file per site, for a single
+`bologna_civic_dt/layout.py`, which is the single place that does so. The session store
+(`civic_engagement/store/state.py`) is in memory and mirrored to one JSON file per site, for a single
 facilitator making sequential edits.
 
 ## 6. Layer 3: the physical model
@@ -209,7 +209,7 @@ the city model's vocabulary and the model's input format.
 `parameters.py`. Spatial computations that the graph cannot express, such as lit area and cover
 overlaps, are functors over Shapely (`geometry.py`). Workarounds for current framework limits,
 such as empty axes and geometry passed as bytes, are collected in `cdt_compat.py` as candidates
-for improving the framework. `civic_twin/scene.py` caches the evaluation and pairs it with "as is".
+for improving the framework. `civic_engagement/scene.py` caches the evaluation and pairs it with "as is".
 
 ## 7. Layer 4: spatial fields, the bridge
 
@@ -234,7 +234,7 @@ field over all years can sample it every few years and interpolate.
 Felt temperature is the first field. Others follow the same pattern: perceived safety or lighting
 at night, noise, accessibility. Each new field gives the social model one more thing to react to.
 
-*In the reference implementation:* felt temperature (`domains/urban/thermal_field.py`) is a second
+*In the reference implementation:* felt temperature (`bologna_civic_dt/thermal_field.py`) is a second
 civic-digital-twins model on a 1 m grid with 24 hourly layers. `field_grid.py` turns the scene into
 rasters, and `solar.py` provides the real sun position, a typical daily air-temperature curve and
 leaf density. A ray-casting functor computes sun exposure through buildings, crowns and pergolas.
@@ -395,16 +395,16 @@ ingestion, view builders and a social layer.
 
 | Concept | Files |
 | --- | --- |
-| Site registry | `civic_twin/config.py` |
-| Ingestion | `civic_twin/ingestion/` |
-| Data schema and API contract | `civic_twin/models/schema.py`, `frontend/src/api/types.ts` |
-| Cards | `civic_twin/api/routes_cards.py` |
-| Session store | `civic_twin/store/state.py` |
-| Scenario layout and encoding | `civic_twin/domains/urban/layout.py`, `encode.py`, `shapes.py` |
-| Physical model (yearly) | `civic_twin/domains/urban/model.py`, `geometry.py`, `parameters.py` |
-| Felt-temperature field | `civic_twin/domains/urban/thermal_field.py`, `field_grid.py`, `solar.py` |
-| Framework workarounds | `civic_twin/domains/urban/cdt_compat.py` |
-| Scene assembly, caching, "as is" pairing | `civic_twin/scene.py` |
+| Site registry | `civic_engagement/config.py` |
+| Ingestion | `civic_engagement/ingestion/` |
+| Data schema and API contract | `civic_engagement/models/schema.py`, `frontend/src/api/types.ts` |
+| Cards | `civic_engagement/api/routes_cards.py` |
+| Session store | `civic_engagement/store/state.py` |
+| Scenario layout and encoding | `packs/bologna-civic-dt/bologna_civic_dt/layout.py`, `encode.py`, `shapes.py` |
+| Physical model (yearly) | `packs/bologna-civic-dt/bologna_civic_dt/model.py`, `geometry.py`, `parameters.py` |
+| Felt-temperature field | `packs/bologna-civic-dt/bologna_civic_dt/thermal_field.py`, `field_grid.py`, `solar.py` |
+| Framework workarounds | `packs/bologna-civic-dt/bologna_civic_dt/cdt_compat.py` |
+| Scene assembly, caching, "as is" pairing | `civic_engagement/scene.py` |
 | App shell and state | `frontend/src/App.tsx` |
 | 2D map | `frontend/src/map/` |
 | 3D view | `frontend/src/three/` |

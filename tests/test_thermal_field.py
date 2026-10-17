@@ -7,8 +7,8 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pytest
 
-from civic_twin.domains.urban.solar import Day, sun_position
-from civic_twin.domains.urban.thermal_field import sun_exposure
+from bologna_civic_dt.solar import Day, sun_position
+from bologna_civic_dt.thermal_field import sun_exposure
 
 TRENTO = (46.072, 11.121)
 

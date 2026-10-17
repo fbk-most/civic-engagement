@@ -55,7 +55,7 @@ export interface CO2Indicator {
 
 /** Felt temperature over the site's open space at a fixed reference moment
  * (a midsummer late morning, see THERMAL_REFERENCE in
- * civic_twin/domains/urban/parameters.py), whatever the 3D view's clock says. */
+ * packs/bologna-civic-dt/bologna_civic_dt/parameters.py), whatever the 3D view's clock says. */
 /** The thermal indicators at year t, with and without the interventions. */
 export interface ThermalIndicators {
   t: number;
@@ -121,7 +121,7 @@ export interface SceneResponse extends BaselineScene {
   site_name: string;
   /** "surveyed": site_boundary is real digitized/sourced data. "provisional":
    * a placeholder (e.g. a plain circle) standing in until real data is
-   * digitized — see civic_twin/config.py's SiteConfig.boundary_status. Only
+   * digitized — see civic_engagement/config.py's SiteConfig.boundary_status. Only
    * a surveyed boundary is drawn on the map (see map/layers.ts). */
   boundary_status: "surveyed" | "provisional";
   t: number;

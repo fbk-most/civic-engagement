@@ -271,7 +271,7 @@ export class MaterialLibrary {
   }
 
   /** `tint` is the median roof colour sampled from the 2015 orthophoto at
-   * ingestion time (see civic_twin/ingestion/ortofoto.py) — real per-building
+   * ingestion time (see civic_engagement/ingestion/ortofoto.py) — real per-building
    * colour where the site has it, the generic default elsewhere. */
   roof(tint?: string): THREE.MeshStandardMaterial {
     const color = tint ? parseInt(tint.slice(1), 16) : ROOF_COLOR;

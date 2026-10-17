@@ -1,0 +1,24 @@
+[project]
+name = "bologna-civic-dt"
+version = "0.1.0"
+description = "Urban domain pack for civic-engagement: the urban model on civic-digital-twins"
+license = "Apache-2.0"
+requires-python = ">=3.12"
+dependencies = [
+    "civic-digital-twins==0.12.0",
+    "civic-engagement",
+    "geopandas>=1.1.4",
+    "numpy",
+    "shapely>=2.1.2",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.0,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "bologna_civic_dt"
+module-root = ""
+
+[tool.uv.sources]
+civic-engagement = { workspace = true }

@@ -7,7 +7,7 @@ printed map — as a 3D digital twin: a facilitator places the same intervention
 live 3D view of a real site, and the scene plus a set of indicators (CO2, thermal
 comfort, accessibility, cost, space use) update immediately.
 
-See `civic_twin/config.py` for the available pilot sites (Piazza Dante, Utopia
+See `civic_engagement/config.py` for the available pilot sites (Piazza Dante, Utopia
 — an imaginary city, built on the data of Piazza Dante in Trento — and Piazza
 XX Settembre, Bologna) and how the active one is selected. The app
 supports one active site per process — switch sites by relaunching with
@@ -25,15 +25,15 @@ Python 3.12, managed with [uv](https://docs.astral.sh/uv/).
 ```bash
 # One-off: fetch OSM data for the active site and build the baseline fixture
 # (CIVIC_TWIN_SITE selects the site; defaults to piazza_dante)
-uv run python -m civic_twin.ingestion.build_baseline
+uv run python -m civic_engagement.ingestion.build_baseline
 
 # Run the API
-uv run uvicorn civic_twin.main:app --reload
+uv run uvicorn civic_engagement.main:app --reload
 # Or, for the other site:
-CIVIC_TWIN_SITE=piazza_xx_settembre uv run uvicorn civic_twin.main:app --reload
+CIVIC_TWIN_SITE=piazza_xx_settembre uv run uvicorn civic_engagement.main:app --reload
 
 # Start from a saved scenario instead of the last session (see below)
-CIVIC_TWIN_SCENARIO=demo uv run uvicorn civic_twin.main:app
+CIVIC_TWIN_SCENARIO=demo uv run uvicorn civic_engagement.main:app
 
 # Tests
 uv run pytest
@@ -53,11 +53,11 @@ is under way.
 
 The model — tree growth, and the indicators computed over the 30-year
 horizon — is a [civic-digital-twins](https://github.com/fbk-most/civic-digital-twins)
-model (a dependency installed by uv), in `civic_twin/domains/urban/`. The
+model (a dependency installed by uv), in `packs/bologna-civic-dt/bologna_civic_dt/`. The
 backend evaluates it once per set of interventions, for every year at once,
 and serves the scene and the indicators for the year asked.
 
-Felt temperature is a second model (`civic_twin/domains/urban/thermal_field.py`):
+Felt temperature is a second model (`packs/bologna-civic-dt/bologna_civic_dt/thermal_field.py`):
 a 1 m grid over the site, hour by hour through one day, from the shade of
 buildings, trees and pergolas (real sun position for the date), the ground's
 surface and a typical day's air temperature for Trento, warming over the
@@ -168,4 +168,4 @@ data:
 - **Provincia autonoma di Trento**: building heights and roof shapes for
   Piazza Dante from the 2014 LiDAR survey, and roof colours from the 2015
   orthophoto. The source rasters are not in the repository (see
-  `civic_twin/ingestion/lidar.py` and `ortofoto.py`).
+  `civic_engagement/ingestion/lidar.py` and `ortofoto.py`).

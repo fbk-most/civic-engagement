@@ -84,7 +84,7 @@ interface Variant {
 
 const UNCAPPED_BARK_LEVEL = 12;
 
-// Real per-species mature canopy diameters from civic_twin/domains/urban/parameters.py's
+// Real per-species mature canopy diameters from packs/bologna-civic-dt/bologna_civic_dt/parameters.py's
 // SPECIES_GROWTH — the shared 5.5m test width used elsewhere in this file
 // is deliberately generic for comparing forms against each other, but a
 // real cypress is meant to be much narrower than a real pine/fir, and that

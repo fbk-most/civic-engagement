@@ -1,12 +1,11 @@
 [project]
 name = "civic-engagement"
 version = "0.1.0"
-description = "Add your description here"
+description = "Civic co-design demonstrator: the core app (API, scene assembly, sessions and scenarios, ingestion)"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.12"
 dependencies = [
-    "civic-digital-twins==0.12.0",
     "fastapi>=0.139.2",
     "geopandas>=1.1.4",
     "osmnx>=2.1.0",
@@ -20,5 +19,23 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    # The domain packs, installed alongside the core while they live in this
+    # repository (packs/). The core must not import them: see
+    # tests/test_package_boundaries.py.
+    "bologna-civic-dt",
     "pytest>=9.1.1",
 ]
+
+[build-system]
+requires = ["uv_build>=0.12.0,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "civic_engagement"
+module-root = ""
+
+[tool.uv.workspace]
+members = ["packs/*"]
+
+[tool.uv.sources]
+bologna-civic-dt = { workspace = true }

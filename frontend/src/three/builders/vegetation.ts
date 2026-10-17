@@ -4,7 +4,7 @@
  * instead (see the end of `buildVegetation`).
  *
  * Every per-instance transform is driven by the model's own `canopy_diameter`
- * and `height` (see `domains/urban/model.py`), which is what makes the scenario time
+ * and `height` (see `bologna_civic_dt/model.py`), which is what makes the scenario time
  * slider work in 3D for free: growing a tree is just a larger scale on the
  * same instance, and felling one swaps it into the stump batch.
  */
@@ -35,7 +35,7 @@ import {
  * crown genuinely starts a third of the way up; real conical/columnar
  * evergreens (pine, cypress) branch almost to the ground and use a much
  * smaller fraction below. The felt-temperature field puts crown bases at
- * the same heights (civic_twin/domains/urban/parameters.py): keep them equal. */
+ * the same heights (packs/bologna-civic-dt/bologna_civic_dt/parameters.py): keep them equal. */
 const CROWN_BASE_FRACTION = 0.3;
 const CROWN_BASE_FRACTION_EVERGREEN = 0.08;
 const MIN_TRUNK_RADIUS_M = 0.06;

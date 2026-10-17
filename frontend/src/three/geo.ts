@@ -6,7 +6,7 @@
  * three.js camera with bearing 0 looks by default). Units are metres.
  *
  * The conversion is a plain equirectangular scaling rather than a real UTM
- * projection like `civic_twin/geo_utils.py` uses. Over a ~350 m site the
+ * projection like `civic_engagement/geo_utils.py` uses. Over a ~350 m site the
  * difference is well under a centimetre, and doing it this way keeps the
  * frontend free of a projection dependency. If the tool ever covers more than
  * a few city blocks, swap this for a proper transform — every caller goes

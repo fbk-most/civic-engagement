@@ -7,7 +7,7 @@ import { coverHeight, flatGeometry } from "../shapes";
 /** Ground cover as flat horizontal meshes, one per cover polygon.
  *
  * Cover polygons overlap freely — OSM double-tags ground constantly, and
- * `domains/urban/layout.py` deliberately layers intervention covers on top of the
+ * `bologna_civic_dt/layout.py` deliberately layers intervention covers on top of the
  * baseline rather than clipping them in. So draw order matters, and it is
  * taken from the list order: a cover later in the list sits above an earlier
  * one. That is the same precedence the space-use indicator applies, which

@@ -14,7 +14,7 @@ story, not for deciding.
 - **Climate**: a summer like 2022 (at the reference station: 24.8 °C on average, the
   second warmest in a century, 65 days above 30 °C) becomes the usual one in
   ten years — about +2 °C in June-August — then +0.5 °C a decade
-  (`CLIMATE_WARMING_C` in `civic_twin/domains/urban/parameters.py`).
+  (`CLIMATE_WARMING_C` in `packs/bologna-civic-dt/bologna_civic_dt/parameters.py`).
 - **People** stay where it's up to 30 °C felt, and leave quickly past 32 °C,
   UTCI's "strong heat stress" (`STAY` in
   `frontend/src/three/people/comfort.ts`).
@@ -28,7 +28,7 @@ story, not for deciding.
 1. Start the backend on the preset (the session it replaces is set aside,
    not lost), and the production build (the dev build is much slower):
 
-       CIVIC_TWIN_SCENARIO=demo uv run uvicorn civic_twin.main:app
+       CIVIC_TWIN_SCENARIO=demo uv run uvicorn civic_engagement.main:app
        cd frontend && npm run build && npm run preview
 
    Or, with the backend already running: "Scenarios" → "Demo Piazza Dante"

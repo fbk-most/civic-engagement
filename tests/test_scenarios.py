@@ -2,9 +2,9 @@ import json
 
 import pytest
 
-from civic_twin.config import SITE
-from civic_twin.models.schema import Intervention
-from civic_twin.store.scenarios import (
+from civic_engagement.config import SITE
+from civic_engagement.models.schema import Intervention
+from civic_engagement.store.scenarios import (
     ScenarioError,
     delete_scenario,
     list_scenarios,
@@ -75,7 +75,7 @@ def test_reads_a_bare_list_and_skips_other_sites(tmp_path):
 
 
 def test_replace_sets_the_old_session_aside(tmp_path, monkeypatch):
-    from civic_twin.store import state
+    from civic_engagement.store import state
 
     monkeypatch.setattr(state, "SESSION_JSON_PATH", tmp_path / "session.json")
     monkeypatch.delenv("CIVIC_TWIN_SCENARIO", raising=False)

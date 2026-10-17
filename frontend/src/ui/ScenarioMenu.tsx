@@ -28,7 +28,7 @@ function cardCount(n: number): string {
   return n === 1 ? tr("1 carta", "1 card") : tr(`${n} carte`, `${n} cards`);
 }
 
-/** Saved scenarios (see civic_twin/store/scenarios.py): save the session's
+/** Saved scenarios (see civic_engagement/store/scenarios.py): save the session's
  * cards under a name, load a saved set in their place, or start afresh. The
  * session is shared, so a load or a clear changes it for every open window
  * (they follow within seconds); the cards replaced are kept on the server. */

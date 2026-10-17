@@ -12,7 +12,7 @@ same.
 Most of the port is about the domain: new cards, new indicators, a new
 model (the models run in the
 [civic-digital-twins](https://github.com/fbk-most/civic-digital-twins)
-framework; see `civic_twin/domains/urban/` for the urban one). That work
+framework; see `packs/bologna-civic-dt/bologna_civic_dt/` for the urban one). That work
 is separate from this study, which is about the one question that could
 make the forest demo unworkable, whatever the model looks like:
 
@@ -56,7 +56,7 @@ the urban scene with its full crowd runs at 8–10 fps in the overview and at
   data by hand.
 - **DTM**
   - Source: the Province of Trento (PAT) LiDAR, the same survey and ESRI
-    ASCII format already read by `civic_twin/ingestion/raster.py` and
+    ASCII format already read by `civic_engagement/ingestion/raster.py` and
     `lidar.py`.
   - Resolution: 1 m natively; probably resampled to 2–5 m for the mesh.
 - **Canopy height** — DSM − DTM (canopy height model). It gives tree
@@ -167,7 +167,7 @@ Proposed targets, to be confirmed:
 
 1. A branch off `main` with the prototype.
    - Frontend changes plus an ingestion script.
-   - No changes to the model or the indicators (`civic_twin/domains/`):
+   - No changes to the model or the indicators (the domain packs, `packs/`):
      the study is about rendering only, and keeping out of the model
      keeps the branch easy to merge.
 2. A short report:

@@ -107,7 +107,7 @@ function piecewiseLinear(points: Array<[month: number, value: number]>, month: n
 }
 
 // The felt-temperature field uses the same curve for how much sun crowns
-// let through (LEAF_DENSITY_BY_MONTH in civic_twin/domains/urban/parameters.py):
+// let through (LEAF_DENSITY_BY_MONTH in packs/bologna-civic-dt/bologna_civic_dt/parameters.py):
 // keep the two equal.
 const LEAF_DENSITY_POINTS: Array<[number, number]> = [
   [1, 0],

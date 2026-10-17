@@ -4,12 +4,12 @@ import geopandas as gpd
 import pytest
 from shapely.geometry import LineString, mapping
 
-from civic_twin import scene
-from civic_twin.config import PROJECTED_CRS, WGS84_CRS
-from civic_twin.domains.urban.layout import build_layout
-from civic_twin.domains.urban.parameters import COST_PER_ELEMENT_EUR
-from civic_twin.geo_utils import to_projected
-from civic_twin.models.schema import Intervention
+from civic_engagement import scene
+from civic_engagement.config import PROJECTED_CRS, WGS84_CRS
+from bologna_civic_dt.layout import build_layout
+from bologna_civic_dt.parameters import COST_PER_ELEMENT_EUR
+from civic_engagement.geo_utils import to_projected
+from civic_engagement.models.schema import Intervention
 
 
 def _line(length_m: float, dx: float = 0.0, dy: float = 0.0) -> dict:

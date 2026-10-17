@@ -25,11 +25,11 @@ from pathlib import Path
 
 from shapely.geometry import LineString, Point, box, mapping
 
-from civic_twin import scene
-from civic_twin.config import SITE
-from civic_twin.geo_utils import to_projected
-from civic_twin.models.schema import Intervention
-from civic_twin.scene import MAX_T, MIN_T, current_scene, indicator_series, load_baseline, thermal_indicators
+from civic_engagement import scene
+from civic_engagement.config import SITE
+from civic_engagement.geo_utils import to_projected
+from civic_engagement.models.schema import Intervention
+from civic_engagement.scene import MAX_T, MIN_T, current_scene, indicator_series, load_baseline, thermal_indicators
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "reference"
 CREATED_AT = "2026-09-30T00:00:00+00:00"
@@ -38,7 +38,7 @@ CREATED_AT = "2026-09-30T00:00:00+00:00"
 def _to_wgs84(geom) -> dict:
     import geopandas as gpd
 
-    from civic_twin.config import PROJECTED_CRS, WGS84_CRS
+    from civic_engagement.config import PROJECTED_CRS, WGS84_CRS
 
     return mapping(gpd.GeoSeries([geom], crs=PROJECTED_CRS).to_crs(WGS84_CRS).iloc[0])
 
