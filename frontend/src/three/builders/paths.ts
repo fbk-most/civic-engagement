@@ -2,7 +2,8 @@ import * as THREE from "three";
 import type { DiscreteElement } from "../../api/types";
 import { toLocal, type GeoAnchor } from "../geo";
 import { isPaintedPath, type MaterialLibrary } from "../materials";
-import { PATH_HEIGHT_M } from "../shapes";
+import { drapeGeometry, PATH_HEIGHT_M } from "../shapes";
+import type { Terrain } from "../terrain";
 
 /** How far a miter join is allowed to stretch before it's cut back to a butt
  * join. Without a limit, a near-doubled-back path (the baseline has a few)
@@ -24,6 +25,11 @@ const MARKING_LIFT_M = 0.02;
 const MIN_MARKING_WIDTH_M = 0.05;
 
 type Point2 = { x: number; z: number };
+
+/** Above the ground: every ribbon of a material at the same height. */
+function ribbonHeight(material: string): number {
+  return isPaintedPath(material) ? PATH_HEIGHT_M + MARKING_LIFT_M : PATH_HEIGHT_M;
+}
 
 function lineStrings(geometry: GeoJSON.Geometry): GeoJSON.Position[][] {
   if (geometry.type === "LineString") return [geometry.coordinates];
@@ -126,11 +132,13 @@ function appendRibbon(
 
 /** Paths arrive as LineStrings with a width, so they need to become ribbon
  * geometry. Everything sharing a surface material is merged into one mesh —
- * the baseline alone has ~200 path segments across 9 materials. */
+ * the baseline alone has ~200 path segments across 9 materials. On terrain,
+ * the ribbons are laid on the ground (see shapes.ts's `drapeGeometry`). */
 export function buildPaths(
   paths: DiscreteElement[],
   anchor: GeoAnchor,
-  materials: MaterialLibrary
+  materials: MaterialLibrary,
+  terrain: Terrain
 ): THREE.Group {
   const group = new THREE.Group();
   group.name = "paths";
@@ -153,7 +161,7 @@ export function buildPaths(
       appendRibbon(
         toLocalPoints(anchor, coords),
         Math.max(width, isMarking ? MIN_MARKING_WIDTH_M : MIN_PATH_WIDTH_M) / 2,
-        isMarking ? PATH_HEIGHT_M + MARKING_LIFT_M : PATH_HEIGHT_M,
+        ribbonHeight(material),
         buffers.positions,
         buffers.normals,
         buffers.uvs,
@@ -164,11 +172,12 @@ export function buildPaths(
 
   for (const [material, buffers] of byMaterial) {
     if (buffers.indices.length === 0) continue;
-    const geometry = new THREE.BufferGeometry();
+    let geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.Float32BufferAttribute(buffers.positions, 3));
     geometry.setAttribute("normal", new THREE.Float32BufferAttribute(buffers.normals, 3));
     geometry.setAttribute("uv", new THREE.Float32BufferAttribute(buffers.uvs, 2));
     geometry.setIndex(buffers.indices);
+    if (!terrain.flat) geometry = drapeGeometry(geometry, terrain, ribbonHeight(material));
 
     const mesh = new THREE.Mesh(geometry, materials.path(material));
     mesh.receiveShadow = true;

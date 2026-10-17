@@ -42,6 +42,9 @@ export interface FrontendPack {
     /** Element types drawn as flat ribbons along their lines, by their
      * `width` and `material` (see three/builders/paths.ts). */
     ribbonTypes: string[];
+    /** The bare ground, on a site with terrain (see three/terrain.ts),
+     * where no cover is; a default grass otherwise. */
+    terrainSurface?: Surface;
     /** Cover types drawn as animated water rather than flat ground. */
     waterCoverTypes: string[];
     /** The pack's own parts of the scene, built after the core's ground,

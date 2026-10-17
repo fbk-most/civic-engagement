@@ -22,7 +22,7 @@ from functools import lru_cache
 
 import numpy as np
 import shapely
-from shapely.geometry import Point, shape
+from shapely.geometry import Point
 from shapely.geometry.base import BaseGeometry
 
 from bologna_civic_dt.sites import SITE
@@ -36,6 +36,7 @@ from bologna_civic_dt.parameters import (
     PERGOLA_SLAB_M,
     SURFACES,
 )
+from civic_engagement.local_frame import Anchor
 from civic_engagement.models.schema import CoverPolygon, DiscreteElement
 
 # Pergolas (frontend builders/furniture.ts: side and roof height by size)
@@ -46,36 +47,6 @@ KIOSK_HEIGHT_M = 2.3
 
 
 # --- the local frame -------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class Anchor:
-    lng0: float
-    lat0: float
-    m_per_lng: float
-    m_per_lat: float
-
-    @classmethod
-    def of(cls, boundary: dict) -> "Anchor":
-        """As the frontend's `anchorFromPolygon`: the mean of the outer
-        ring's vertices (closing vertex included)."""
-        ring = boundary["coordinates"][0]
-        lng0 = sum(p[0] for p in ring) / len(ring)
-        lat0 = sum(p[1] for p in ring) / len(ring)
-        phi = math.radians(lat0)
-        return cls(
-            lng0=lng0,
-            lat0=lat0,
-            m_per_lat=111132.92 - 559.82 * math.cos(2 * phi) + 1.175 * math.cos(4 * phi),
-            m_per_lng=111412.84 * math.cos(phi) - 93.5 * math.cos(3 * phi),
-        )
-
-    def local(self, geojson: dict) -> BaseGeometry:
-        """A GeoJSON geometry in metres east/north of the anchor."""
-        return shapely.transform(
-            shape(geojson),
-            lambda c: np.column_stack(((c[:, 0] - self.lng0) * self.m_per_lng, (c[:, 1] - self.lat0) * self.m_per_lat)),
-        )
 
 
 @dataclass(frozen=True)

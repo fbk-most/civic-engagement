@@ -9,6 +9,7 @@ import * as THREE from "three";
 import * as SkeletonUtils from "three/examples/jsm/utils/SkeletonUtils.js";
 import type { DogAsset } from "./assets";
 import type { DogBreed } from "./walkers";
+import type { Terrain } from "../terrain";
 
 interface BreedSpec {
   /** Standing height (top of the head), metres. */
@@ -67,8 +68,16 @@ export class Dog {
   private placed = false;
   private readonly hand = new THREE.Vector3();
   private readonly neck = new THREE.Vector3();
+  private readonly terrain: Terrain;
 
-  constructor(breed: DogBreed, asset: DogAsset, parent: THREE.Object3D, phase: number) {
+  constructor(
+    breed: DogBreed,
+    asset: DogAsset,
+    parent: THREE.Object3D,
+    phase: number,
+    terrain: Terrain
+  ) {
+    this.terrain = terrain;
     this.spec = BREEDS[breed];
     this.root = SkeletonUtils.clone(asset.scene);
     this.scale = this.spec.height / asset.modelHeight;
@@ -127,7 +136,7 @@ export class Dog {
       const diff = Math.atan2(Math.sin(targetYaw - this.yaw), Math.cos(targetYaw - this.yaw));
       this.yaw += diff * (1 - Math.exp(-delta * 5));
     }
-    this.root.position.set(this.x, 0, this.z);
+    this.root.position.set(this.x, this.terrain.heightAt(this.x, this.z), this.z);
     this.root.rotation.y = this.yaw;
 
     const walking = this.speed > 0.15;

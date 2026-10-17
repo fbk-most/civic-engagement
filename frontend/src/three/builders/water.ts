@@ -18,7 +18,8 @@ import * as THREE from "three";
 import { Water } from "three/examples/jsm/objects/Water.js";
 import type { CoverPolygon } from "../../api/types";
 import type { GeoAnchor } from "../geo";
-import { geometryToShapes } from "../shapes";
+import { geometryToShapes, outlineHeightRange } from "../shapes";
+import type { Terrain } from "../terrain";
 import { daylightFraction, type SunPosition } from "../sun";
 import { waterNormalTexture } from "../water";
 import type { ScenePart } from "../parts";
@@ -39,7 +40,7 @@ const DISTORTION_SCALE = 3.2;
 
 /** The pack's water covers (`FrontendPack.scene3d.waterCoverTypes`) as
  * animated water surfaces, rippling every frame and lit by the sun. */
-export function buildWater(covers: CoverPolygon[], anchor: GeoAnchor): ScenePart {
+export function buildWater(covers: CoverPolygon[], anchor: GeoAnchor, terrain: Terrain): ScenePart {
   const group = new THREE.Group();
   group.name = "water";
   const surfaces: Water[] = [];
@@ -90,7 +91,10 @@ export function buildWater(covers: CoverPolygon[], anchor: GeoAnchor): ScenePart
     // got backwards. Kept shallow — there's no bank/edge geometry here, so a
     // deeper cut would show as a visible cliff at the shoreline instead of a
     // basin.
-    water.position.y = -0.03;
+    // Level, at the highest ground around it on a slope (there are no banks
+    // to hold it lower: it would sink under the ground's surface).
+    const [, shore] = outlineHeightRange(terrain, anchor, cover.geometry);
+    water.position.y = shore - 0.03;
     water.name = cover.id;
     group.add(water);
     surfaces.push(water);

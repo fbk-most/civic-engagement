@@ -11,6 +11,7 @@
 import * as THREE from "three";
 import { PointerLockControls } from "three/examples/jsm/controls/PointerLockControls.js";
 import { EYE_HEIGHT_M } from "./camera";
+import { FLAT_TERRAIN, type Terrain } from "./terrain";
 
 const WALK_SPEED_MS = 1.4;
 const RUN_SPEED_MS = 3.6;
@@ -61,14 +62,18 @@ export class WalkController {
   private pressed = new Set<string>();
   private footprints: Footprint[] = [];
   private bounds: Bounds | null = null;
+  private terrain: Terrain = FLAT_TERRAIN;
 
   constructor(camera: THREE.PerspectiveCamera, domElement: HTMLElement) {
     this.controls = new PointerLockControls(camera, domElement);
   }
 
-  setCollision(footprints: Footprint[], bounds: Bounds): void {
+  /** What the walker can't walk through or past, and the ground it walks
+   * on (at eye height above it). */
+  setCollision(footprints: Footprint[], bounds: Bounds, terrain: Terrain = FLAT_TERRAIN): void {
     this.footprints = footprints;
     this.bounds = bounds;
+    this.terrain = terrain;
   }
 
   get isLocked(): boolean {
@@ -93,8 +98,9 @@ export class WalkController {
     const start = this.blocked(object.position.x, object.position.z)
       ? this.freeSpotNear(fallback.x, fallback.z)
       : object.position;
-    object.position.set(start.x, EYE_HEIGHT_M, start.z);
-    object.lookAt(start.x + heading.x, EYE_HEIGHT_M, start.z + heading.z);
+    const eye = this.terrain.heightAt(start.x, start.z) + EYE_HEIGHT_M;
+    object.position.set(start.x, eye, start.z);
+    object.lookAt(start.x + heading.x, eye, start.z + heading.z);
     this.controls.lock();
   }
 
@@ -207,7 +213,7 @@ export class WalkController {
       after.copy(before);
     }
 
-    after.y = EYE_HEIGHT_M;
+    after.y = this.terrain.heightAt(after.x, after.z) + EYE_HEIGHT_M;
   }
 
   dispose(): void {

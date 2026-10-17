@@ -14,8 +14,9 @@ import { MaterialLibrary } from "./materials";
 import { terminateTreeWorkerPool } from "./workers/treeWorkerPool";
 import type { SeasonState, SunPosition } from "./sun";
 import { DEFAULT_FOV_DEG, LOOK_DISTANCE_M, MIN_CAMERA_HEIGHT_M, OVERVIEW_FOV_DEG, type CameraPose } from "./camera";
-import { anchorFromPolygon, bearingToDirection, directionToBearing, toLocal, toLngLat, type GeoAnchor } from "./geo";
+import { anchorFromPolygon, bearingToDirection, directionToBearing, toLocal, toLngLat } from "./geo";
 import { WalkController, type Footprint } from "./walk";
+import { FLAT_TERRAIN, intersectTerrain, type Terrain } from "./terrain";
 import * as timeline from "../perf/timeline";
 import { Crowd } from "./people/Crowd";
 import { planCrowd, walkerCount, type StopTally } from "./people/plan";
@@ -50,6 +51,10 @@ const WALK_NETWORK_TYPES = new Set<DiscreteElement["type"]>([
 /** Element types the road network is built from (see people/traffic.ts). */
 const ROAD_NETWORK_TYPES = new Set<DiscreteElement["type"]>(["street", "crossing", "traffic_signal"]);
 
+// The camera's far plane: this, or more on a site large enough to need it
+// (see `applyBuilt`).
+const MIN_CAMERA_FAR_M = 3000;
+
 export interface ViewerHandle {
   /** Downloads the current frame as a PNG. */
   captureFrame: () => void;
@@ -73,6 +78,8 @@ export interface ViewerHandle {
 
 interface ViewerProps {
   scene: SceneResponse | null;
+  /** The ground's shape: nothing is built while it's null (not known yet). */
+  terrain: Terrain | null;
   /** "simulated" builds the interventions into the scene; "cards" shows the
    * current situation with a standing placard per intervention instead;
    * "hidden" shows the current situation only. */
@@ -133,6 +140,7 @@ interface ViewerProps {
  */
 export function Viewer({
   scene,
+  terrain,
   mode,
   cards,
   onSelectIntervention,
@@ -324,7 +332,7 @@ export function Viewer({
     const threeScene = new THREE.Scene();
     threeSceneRef.current = threeScene;
 
-    const camera = new THREE.PerspectiveCamera(OVERVIEW_FOV_DEG, 1, 0.1, 3000);
+    const camera = new THREE.PerspectiveCamera(OVERVIEW_FOV_DEG, 1, 0.1, MIN_CAMERA_FAR_M);
     camera.position.set(120, 90, 120);
     cameraRef.current = camera;
 
@@ -398,9 +406,11 @@ export function Viewer({
       // the pavement, and the floor clamp would then jerk the view on the next
       // frame. This way the direction is preserved exactly and you end up
       // orbiting the spot you were just looking at.
+      const terrain = builtRef.current?.terrain ?? FLAT_TERRAIN;
+      const ground = terrain.heightAt(camera.position.x, camera.position.z);
       let distance = LOOK_DISTANCE_M;
       if (forward.y < -1e-3) {
-        distance = Math.min(distance, (camera.position.y - MIN_CAMERA_HEIGHT_M) / -forward.y);
+        distance = Math.min(distance, (camera.position.y - ground - MIN_CAMERA_HEIGHT_M) / -forward.y);
       }
       // Floor matches controls.minDistance. Kept low deliberately: a larger
       // one would overshoot the ground on a steep downward look, and the
@@ -408,7 +418,7 @@ export function Viewer({
       controls.target
         .copy(camera.position)
         .addScaledVector(forward, Math.max(distance, controls.minDistance));
-      if (controls.target.y < 0) controls.target.y = 0;
+      clampToGround(terrain, camera, controls);
       controls.update();
       setWalking(false);
     });
@@ -491,7 +501,17 @@ export function Viewer({
       const rect = renderer.domElement.getBoundingClientRect();
       pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
       raycaster.setFromCamera(pointer, camera);
-      const hit = raycaster.ray.intersectPlane(sheet, onSheet);
+      const terrain = builtRef.current?.terrain ?? FLAT_TERRAIN;
+      let hit: THREE.Vector3 | null;
+      if (terrain.flat) {
+        hit = raycaster.ray.intersectPlane(sheet, onSheet);
+      } else {
+        // The sheet follows the ground: meeting it is meeting the ground
+        // from OVERLAY_HEIGHT_M lower.
+        const { origin, direction } = raycaster.ray;
+        const ground = intersectTerrain(terrain, { x: origin.x, y: origin.y - OVERLAY_HEIGHT_M, z: origin.z }, direction);
+        hit = ground ? onSheet.set(ground.x, ground.y + OVERLAY_HEIGHT_M, ground.z) : null;
+      }
       const celsius = hit ? valueAt(shown.field, shown.layer, onSheet.x, -onSheet.z) : null;
       report(celsius === null ? null : { celsius, where: "pointer" });
     };
@@ -564,7 +584,7 @@ export function Viewer({
       reportedAt.copy(camera.position);
       reportedBearing = bearing;
 
-      notify(cameraView(camera, built.anchor), walk.isLocked ? "walk" : "orbit");
+      notify(cameraView(camera, built), walk.isLocked ? "walk" : "orbit");
     };
 
     // While walking: the felt temperature where the walker stands, checked a
@@ -624,14 +644,14 @@ export function Viewer({
         // zoom, damping overshoot and a target dragged downhill can each still
         // put the camera under the pavement, and there is no combination of
         // OrbitControls settings that rules all of them out.
-        if (controls.target.y < 0) controls.target.y = 0;
-        if (camera.position.y < MIN_CAMERA_HEIGHT_M) camera.position.y = MIN_CAMERA_HEIGHT_M;
+        clampToGround(builtRef.current?.terrain ?? FLAT_TERRAIN, camera, controls);
       }
       lighting.update(clock.elapsedTime);
       updateShadowCasters(performance.now());
       for (const part of builtRef.current?.parts ?? []) part.frame?.(camera, clock.elapsedTime);
       if (placardsRef.current) facePlacards(placardsRef.current, camera);
-      thermalOverlay.setViewHeight(camera.position.y);
+      const ground = builtRef.current?.terrain.heightAt(camera.position.x, camera.position.z) ?? 0;
+      thermalOverlay.setViewHeight(camera.position.y - ground);
       if (walk.isLocked) reportHere(performance.now());
       reportExposure(performance.now());
       // "still" doesn't advance anything; it only settles figures added
@@ -702,7 +722,7 @@ export function Viewer({
   // tab. A change during a build is only recorded; when the build is done,
   // the latest one asked for is built (and a build already out of date is
   // dropped rather than shown).
-  const buildInputsRef = useRef<{ scene: SceneResponse; showInterventions: boolean } | null>(null);
+  const buildInputsRef = useRef<{ scene: SceneResponse; terrain: Terrain; showInterventions: boolean } | null>(null);
   const buildingRef = useRef(false);
 
   function runBuild() {
@@ -712,7 +732,7 @@ export function Viewer({
     const inputs = buildInputsRef.current;
     if (!inputs || !threeScene || !materials || !lighting || buildingRef.current) return;
     buildingRef.current = true;
-    buildScene(inputs.scene, materials, inputs.showInterventions).then((built) => {
+    buildScene(inputs.scene, materials, inputs.showInterventions, inputs.terrain).then((built) => {
       buildingRef.current = false;
       // Unmounted meanwhile (the mount effect's cleanup clears the scene ref).
       if (threeSceneRef.current !== threeScene) {
@@ -751,6 +771,7 @@ export function Viewer({
     threeScene.add(built.group);
     builtRef.current = built;
     built.applySeason(seasonRef.current);
+    thermalOverlayRef.current?.setTerrain(built.terrain);
     thermalOverlayRef.current?.set(thermalRef.current?.field ?? null, thermalRef.current?.layer ?? null, thermalRef.current?.stale);
     const crowdElements = showInterventions ? scene.elements : scene.elements.filter((e) => e.source === "baseline");
     const networkKey = JSON.stringify([
@@ -770,6 +791,9 @@ export function Viewer({
     if (roadsRef.current?.key !== roadsKey) {
       roadsRef.current = { key: roadsKey, roads: buildRoadNetwork(crowdElements, built.anchor, scene.site_boundary) };
     }
+    // Before replanning: the figures, cars and traffic lights are placed on it.
+    if (crowdRef.current) crowdRef.current.terrain = built.terrain;
+    if (trafficRef.current) trafficRef.current.terrain = built.terrain;
     crowdSceneRef.current = {
       elements: crowdElements,
       built,
@@ -780,7 +804,18 @@ export function Viewer({
     replanCrowd();
     // fitTo moves the shadow camera's centre, so the sun has to be re-placed
     // relative to it afterwards.
-    lighting.fitTo(built.bounds);
+    lighting.fitTo(built.bounds, [built.terrain.minHeight, built.terrain.maxHeight]);
+    // Far enough to see the whole site from anywhere around it, however
+    // large: Piazza Dante's is a few hundred metres across, a valley's
+    // kilometres.
+    if (cameraRef.current) {
+      const { minX, maxX, minZ, maxZ } = built.bounds;
+      const far = Math.max(MIN_CAMERA_FAR_M, 2 * Math.hypot(maxX - minX, maxZ - minZ, built.terrain.maxHeight));
+      if (cameraRef.current.far !== far) {
+        cameraRef.current.far = far;
+        cameraRef.current.updateProjectionMatrix();
+      }
+    }
     lighting.setSun(sunRef.current);
     // A rebuild's fresh parts start with no sun (e.g. the water's
     // placeholder sun direction, a streetlight off at night): without
@@ -809,7 +844,7 @@ export function Viewer({
     // where to stand. Re-framing on every edit would yank the view away from
     // wherever the facilitator had put it.
     if (pendingViewRef.current) {
-      showViewAt(built.anchor, cameraRef.current, controlsRef.current, pendingViewRef.current);
+      showViewAt(built, cameraRef.current, controlsRef.current, pendingViewRef.current);
       pendingViewRef.current = null;
       framedRef.current = true;
       appliedPoseRef.current = poseRef.current;
@@ -826,17 +861,17 @@ export function Viewer({
       applyPose(built, cameraRef.current, controlsRef.current, poseRef.current);
       appliedPoseRef.current = poseRef.current;
     }
-    walkRef.current?.setCollision(built.footprints, built.bounds);
+    walkRef.current?.setCollision(built.footprints, built.bounds, built.terrain);
 }
 
   useEffect(() => {
-    if (!scene) return;
-    buildInputsRef.current = { scene, showInterventions };
+    if (!scene || !terrain) return;
+    buildInputsRef.current = { scene, terrain, showInterventions };
     // Pending until a build of the latest inputs is in place (one already
     // under way for older inputs keeps it pending and starts another).
     if (!timeline.isPending("build")) timeline.begin("build");
     runBuild();
-  }, [scene, showInterventions]);
+  }, [scene, terrain, showInterventions]);
 
   // The date only changes how the trees look (see BuiltScene.applySeason):
   // no rebuild.
@@ -898,11 +933,11 @@ export function Viewer({
       disposePlacards(placardsRef.current);
       placardsRef.current = null;
     }
-    if (!scene || mode !== "cards") return;
-    const placards = buildPlacards(scene.interventions, cards, anchorFromPolygon(scene.site_boundary), scene.t);
+    if (!scene || !terrain || mode !== "cards") return;
+    const placards = buildPlacards(scene.interventions, cards, anchorFromPolygon(scene.site_boundary), terrain, scene.t);
     threeScene.add(placards.group);
     placardsRef.current = placards;
-  }, [scene, cards, mode, lang]);
+  }, [scene, terrain, cards, mode, lang]);
 
   useImperativeHandle(handleRef, () => ({
     captureFrame,
@@ -917,7 +952,7 @@ export function Viewer({
       const camera = cameraRef.current;
       const built = builtRef.current;
       if (!built || !camera) return pendingViewRef.current;
-      return cameraView(camera, built.anchor);
+      return cameraView(camera, built);
     },
     showView: (view: CameraPose) => {
       const built = builtRef.current;
@@ -926,7 +961,7 @@ export function Viewer({
         return;
       }
       walkRef.current?.controls.unlock();
-      showViewAt(built.anchor, cameraRef.current, controlsRef.current, view);
+      showViewAt(built, cameraRef.current, controlsRef.current, view);
     },
     showOverview: () => {
       walkRef.current?.controls.unlock();
@@ -1002,6 +1037,18 @@ export function Viewer({
   );
 }
 
+/** Keeps the orbit camera and its target off the ground. Belt and braces
+ * on top of maxPolarAngle and ground-plane panning: zoom, damping overshoot
+ * and a target dragged downhill can each still put the camera under the
+ * ground, and there is no combination of OrbitControls settings that rules
+ * all of them out. */
+function clampToGround(terrain: Terrain, camera: THREE.PerspectiveCamera, controls: OrbitControls): void {
+  const targetGround = terrain.heightAt(controls.target.x, controls.target.z);
+  if (controls.target.y < targetGround) controls.target.y = targetGround;
+  const cameraGround = terrain.heightAt(camera.position.x, camera.position.z) + MIN_CAMERA_HEIGHT_M;
+  if (camera.position.y < cameraGround) camera.position.y = cameraGround;
+}
+
 /** Puts the camera at a placed viewpoint, looking along its bearing. */
 function applyPose(
   built: BuiltScene | null,
@@ -1015,28 +1062,26 @@ function applyPose(
   const [dx, dz] = bearingToDirection(pose.bearingDeg);
   const pitch = (pose.pitchDeg * Math.PI) / 180;
 
-  const eye = Math.max(pose.eyeHeight, MIN_CAMERA_HEIGHT_M);
+  const eye = built.terrain.heightAt(x, z) + Math.max(pose.eyeHeight, MIN_CAMERA_HEIGHT_M);
   camera.fov = pose.fovDeg;
   camera.position.set(x, eye, z);
   camera.updateProjectionMatrix();
   // Orbiting around a point ahead of the viewer, rather than around the whole
   // site, keeps "look around from where I'm standing" the natural gesture.
-  controls.target.set(
-    x + dx * LOOK_DISTANCE_M,
-    Math.max(0, eye + Math.tan(pitch) * LOOK_DISTANCE_M),
-    z + dz * LOOK_DISTANCE_M
-  );
+  const [tx, tz] = [x + dx * LOOK_DISTANCE_M, z + dz * LOOK_DISTANCE_M];
+  controls.target.set(tx, Math.max(built.terrain.heightAt(tx, tz), eye + Math.tan(pitch) * LOOK_DISTANCE_M), tz);
   controls.update();
 }
 
-/** The camera's current position and direction, as a pose. */
-function cameraView(camera: THREE.PerspectiveCamera, anchor: GeoAnchor): CameraPose {
+/** The camera's current position and direction, as a pose: its height is
+ * above the ground under it. */
+function cameraView(camera: THREE.PerspectiveCamera, built: BuiltScene): CameraPose {
   const forward = camera.getWorldDirection(new THREE.Vector3());
-  const [lng, lat] = toLngLat(anchor, camera.position.x, camera.position.z);
+  const [lng, lat] = toLngLat(built.anchor, camera.position.x, camera.position.z);
   return {
     lng,
     lat,
-    eyeHeight: camera.position.y,
+    eyeHeight: camera.position.y - built.terrain.heightAt(camera.position.x, camera.position.z),
     bearingDeg: directionToBearing(forward.x, forward.z),
     pitchDeg: (Math.asin(THREE.MathUtils.clamp(forward.y, -1, 1)) * 180) / Math.PI,
     fovDeg: camera.fov || DEFAULT_FOV_DEG,
@@ -1046,22 +1091,24 @@ function cameraView(camera: THREE.PerspectiveCamera, anchor: GeoAnchor): CameraP
 /** Puts the camera at `view`, orbiting around where its gaze meets the
  * ground (the 2D map's centre, for a view carried over from the map). */
 function showViewAt(
-  anchor: GeoAnchor,
+  built: BuiltScene,
   camera: THREE.PerspectiveCamera | null,
   controls: OrbitControls | null,
   view: CameraPose
 ): void {
   if (!camera || !controls) return;
+  const { anchor, terrain } = built;
   const [x, z] = toLocal(anchor, view.lng, view.lat);
   const [dx, dz] = bearingToDirection(view.bearingDeg);
   const pitch = (view.pitchDeg * Math.PI) / 180;
   const forward = new THREE.Vector3(dx * Math.cos(pitch), Math.sin(pitch), dz * Math.cos(pitch));
   camera.fov = view.fovDeg;
-  camera.position.set(x, Math.max(view.eyeHeight, MIN_CAMERA_HEIGHT_M), z);
+  camera.position.set(x, terrain.heightAt(x, z) + Math.max(view.eyeHeight, MIN_CAMERA_HEIGHT_M), z);
   camera.updateProjectionMatrix();
-  const distance = forward.y < -1e-3 ? camera.position.y / -forward.y : LOOK_DISTANCE_M;
+  const hit = terrain.flat ? null : intersectTerrain(terrain, camera.position, forward);
+  const distance = hit ? hit.distance : forward.y < -1e-3 ? camera.position.y / -forward.y : LOOK_DISTANCE_M;
   controls.target.copy(camera.position).addScaledVector(forward, Math.max(distance, controls.minDistance));
-  if (controls.target.y < 0) controls.target.y = 0;
+  clampToGround(terrain, camera, controls);
   controls.update();
 }
 
@@ -1075,11 +1122,14 @@ function frameSite(
   const centerX = (minX + maxX) / 2;
   const centerZ = (minZ + maxZ) / 2;
   const extent = Math.max(maxX - minX, maxZ - minZ);
+  const { terrain } = built;
 
-  controls.target.set(centerX, 0, centerZ);
-  camera.position.set(centerX + extent * 0.6, extent * 0.55, centerZ + extent * 0.8);
+  const ground = terrain.heightAt(centerX, centerZ);
+  controls.target.set(centerX, ground, centerZ);
+  camera.position.set(centerX + extent * 0.6, ground + extent * 0.55, centerZ + extent * 0.8);
   // A placed viewpoint may have left its own field of view.
   camera.fov = OVERVIEW_FOV_DEG;
   camera.updateProjectionMatrix();
+  clampToGround(terrain, camera, controls);
   controls.update();
 }

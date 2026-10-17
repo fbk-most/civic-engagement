@@ -162,6 +162,7 @@ dependencies = [
     { name = "geopandas" },
     { name = "pillow" },
     { name = "pydantic" },
+    { name = "pyproj" },
     { name = "shapely" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -178,6 +179,7 @@ requires-dist = [
     { name = "geopandas", specifier = ">=1.1.4" },
     { name = "pillow", specifier = ">=12.3.0" },
     { name = "pydantic", specifier = ">=2.13.4" },
+    { name = "pyproj", specifier = ">=3.7.2" },
     { name = "shapely", specifier = ">=2.1.2" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.51.0" },
 ]

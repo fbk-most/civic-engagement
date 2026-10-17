@@ -8,6 +8,9 @@ import type {
   InterventionCreate,
   ScenarioInfo,
   SceneResponse,
+  SiteAsset,
+  SiteAssets,
+  TerrainGrid,
   ThermalFieldResponse,
 } from "./types";
 
@@ -32,6 +35,16 @@ export function fetchScene(t: number = 0): Promise<SceneResponse> {
 /** Changes whenever any window changes the session's interventions. */
 export function fetchSessionRevision(): Promise<{ revision: string }> {
   return getJson("/api/session/revision");
+}
+
+export function fetchSiteAssets(): Promise<SiteAssets> {
+  return getJson("/api/site-assets");
+}
+
+/** The terrain grid listed in the site's assets; asked for by version, so
+ * the browser keeps it. */
+export function fetchTerrainGrid(asset: SiteAsset): Promise<TerrainGrid> {
+  return getJson(`/api/site-assets/${asset.key}?v=${asset.version}`);
 }
 
 export function fetchIndicatorDescriptors(): Promise<IndicatorDescriptors> {

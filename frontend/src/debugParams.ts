@@ -45,6 +45,12 @@ export interface DebugParams {
   /** `?comfort=off`: people ignore the felt temperature (where they stop,
    * which way they walk) — for comparison. */
   comfort: boolean;
+  /** `?terrain=off`: draw the site flat even if it has a terrain grid —
+   * for comparison. */
+  terrain: boolean;
+  /** `?terrainScale=N`: the terrain's heights times N — for testing on
+   * gentle ground. */
+  terrainScale: number | null;
 }
 
 // The interventions switch's buttons, by their URL name.
@@ -92,6 +98,8 @@ export function readDebugParams(search: string = window.location.search): DebugP
     panelsClosed: params.get("panels") === "closed",
     interventionMode: MODE_BY_PARAM[params.get("interventions") ?? ""] ?? null,
     comfort: params.get("comfort") !== "off",
+    terrain: params.get("terrain") !== "off",
+    terrainScale: num(params, "terrainScale"),
   };
 }
 

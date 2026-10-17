@@ -63,6 +63,12 @@ class SiteConfig:
     def ortofoto_sidecar_path(self) -> str:
         return f"{self.data_dir}/ortofoto/site.json"
 
+    # Built from the DTM by ingestion/terrain.py, and committed. A site
+    # without one is flat.
+    @property
+    def terrain_grid_path(self) -> str:
+        return f"{self.data_dir}/terrain/terrain_grid.json"
+
 
 # UTM zone 32N — both current sites (Trento, Bologna) fall inside it, so
 # this stays a single global rather than a per-site field. A future site

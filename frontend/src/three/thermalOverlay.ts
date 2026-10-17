@@ -13,6 +13,7 @@
 
 import * as THREE from "three";
 import { feltColor, STALE_DIMMING, type ThermalField } from "../thermal/field";
+import { FLAT_TERRAIN, type Terrain } from "./terrain";
 
 // Where people feel it (the field is computed at 1.1 m), low enough to read
 // as "on the ground" from the overview.
@@ -96,6 +97,7 @@ export class ThermalOverlay {
   private readonly lut: Uint16Array;
   private dimming = 1;
   private viewHeight = ABOVE_M;
+  private terrain: Terrain = FLAT_TERRAIN;
 
   /** `exposure`: the renderer's toneMappingExposure. */
   constructor(exposure: number) {
@@ -119,6 +121,14 @@ export class ThermalOverlay {
     this.mesh.receiveShadow = false;
     // Out of the way of placard picking and anything else that raycasts.
     this.mesh.raycast = () => {};
+  }
+
+  /** The ground the sheet follows, at OVERLAY_HEIGHT_M above it. */
+  setTerrain(terrain: Terrain): void {
+    if (terrain === this.terrain) return;
+    this.terrain = terrain;
+    // Rebuilt on the next `set`.
+    this.gridKey = "";
   }
 
   /** Shows `layer` (one hour of `field`), or hides the sheet. `stale`:
@@ -145,9 +155,24 @@ export class ThermalOverlay {
       // The plane lies flat, its +Y turned to the north (-Z); the texture's
       // first row is its southern edge, as the field's.
       this.mesh.geometry.dispose();
-      this.mesh.geometry = new THREE.PlaneGeometry(nx * cell_m, ny * cell_m);
-      this.mesh.geometry.rotateX(-Math.PI / 2);
-      this.mesh.position.set(x0 + (nx * cell_m) / 2, OVERLAY_HEIGHT_M, -(y0 + (ny * cell_m) / 2));
+      const [cx, cz] = [x0 + (nx * cell_m) / 2, -(y0 + (ny * cell_m) / 2)];
+      if (this.terrain.flat) {
+        this.mesh.geometry = new THREE.PlaneGeometry(nx * cell_m, ny * cell_m);
+        this.mesh.geometry.rotateX(-Math.PI / 2);
+        this.mesh.position.set(cx, OVERLAY_HEIGHT_M, cz);
+      } else {
+        // On terrain, a vertex every field cell, each at the sheet's height
+        // above the ground under it.
+        this.mesh.geometry = new THREE.PlaneGeometry(nx * cell_m, ny * cell_m, nx, ny);
+        this.mesh.geometry.rotateX(-Math.PI / 2);
+        const position = this.mesh.geometry.getAttribute("position");
+        for (let i = 0; i < position.count; i++) {
+          const x = cx + position.getX(i);
+          const z = cz + position.getZ(i);
+          position.setY(i, this.terrain.heightAt(x, z) + OVERLAY_HEIGHT_M);
+        }
+        this.mesh.position.set(cx, 0, cz);
+      }
       this.gridKey = key;
     }
     const data = this.texture.image.data as Uint16Array;
@@ -170,7 +195,8 @@ export class ThermalOverlay {
     this.mesh.visible = true;
   }
 
-  /** Fades the sheet as the camera comes down to eye level. */
+  /** Fades the sheet as the camera comes down to eye level: `heightM`
+   * above the ground. */
   setViewHeight(heightM: number): void {
     this.viewHeight = heightM;
     const f = Math.min(1, Math.max(0, (heightM - EYE_LEVEL_M) / (ABOVE_M - EYE_LEVEL_M)));

@@ -20,17 +20,21 @@ import { buildGround } from "./builders/ground";
 import { buildPaths } from "./builders/paths";
 import { buildVegetation } from "./builders/vegetation";
 import { buildWater } from "./builders/water";
+import { buildTerrainSurface } from "./builders/terrainSurface";
 import { ACTIVE_PROVIDER } from "./builders/buildings";
 import { anchorFromPolygon, localBounds, polygonRings, toLocal, type GeoAnchor } from "./geo";
 import { MaterialLibrary } from "./materials";
 import type { ScenePart } from "./parts";
 import { activePack } from "../pack";
 import type { SeasonState } from "./sun";
+import { FLAT_TERRAIN, type Terrain } from "./terrain";
 import type { Footprint } from "./walk";
 
 export interface BuiltScene {
   group: THREE.Group;
   anchor: GeoAnchor;
+  /** The ground it was built on. */
+  terrain: Terrain;
   /** Local-frame XZ extent of the site boundary, used to fit the shadow camera
    * and to clamp the walk-mode camera. */
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
@@ -83,7 +87,8 @@ export function disposeScene(built: BuiltScene): void {
 export async function buildScene(
   scene: SceneResponse,
   materials: MaterialLibrary,
-  showInterventions = true
+  showInterventions = true,
+  terrain: Terrain = FLAT_TERRAIN
 ): Promise<BuiltScene> {
   const elements = showInterventions
     ? scene.elements
@@ -102,25 +107,27 @@ export async function buildScene(
   group.name = "civic-scene";
 
   const { scene3d } = activePack();
-  group.add(buildGround(covers, anchor, materials));
+  if (!terrain.flat) group.add(buildTerrainSurface(terrain, materials));
+  group.add(buildGround(covers, anchor, materials, terrain));
   // `buildPaths` is generic on `properties.width`/`properties.material`:
   // whatever the pack draws as ribbons (for the urban one, streets,
   // crossing stripes and lane dividers as well as paths) renders through
   // the exact same ribbon-mesh path, no separate builder needed.
   const ribbonTypes = new Set(scene3d.ribbonTypes);
-  group.add(buildPaths(elements.filter((e) => ribbonTypes.has(e.type)), anchor, materials));
-  group.add(await ACTIVE_PROVIDER.build(buildings, { anchor, materials }));
-  const vegetation = await buildVegetation(elements, anchor, materials);
+  group.add(buildPaths(elements.filter((e) => ribbonTypes.has(e.type)), anchor, materials, terrain));
+  group.add(await ACTIVE_PROVIDER.build(buildings, { anchor, materials, terrain }));
+  const vegetation = await buildVegetation(elements, anchor, materials, terrain);
   group.add(vegetation.group);
 
   const parts: ScenePart[] = [];
-  for (const build of scene3d.parts) parts.push(await build({ elements, covers, anchor, materials }));
-  parts.push(buildWater(covers, anchor));
+  for (const build of scene3d.parts) parts.push(await build({ elements, covers, anchor, materials, terrain }));
+  parts.push(buildWater(covers, anchor, terrain));
   for (const part of parts) group.add(part.object);
 
   return {
     group,
     anchor,
+    terrain,
     bounds: localBounds(anchor, [scene.site_boundary]),
     footprints: buildingFootprints(buildings, anchor),
     parts,

@@ -15,6 +15,7 @@ import { drawCardIcon } from "../../map/cardMarkerIcons";
 import { categoryColor } from "../../ui/categoryColors";
 import { cardLabel, yearLabel } from "../../i18n/labels";
 import { representativePoint, toLocal, type GeoAnchor } from "../geo";
+import { drapeLine, type Terrain } from "../terrain";
 
 const PANEL_WIDTH_M = 0.8;
 const PANEL_HEIGHT_M = 1.0;
@@ -44,6 +45,7 @@ export function buildPlacards(
   interventions: Intervention[],
   cards: CardSpec[],
   anchor: GeoAnchor,
+  terrain: Terrain,
   t: number
 ): Placards {
   const group = new THREE.Group();
@@ -68,7 +70,7 @@ export function buildPlacards(
     const [x, z] = toLocal(anchor, lng, lat);
 
     const pivot = new THREE.Group();
-    pivot.position.set(x, 0, z);
+    pivot.position.set(x, terrain.heightAt(x, z), z);
 
     const stake = new THREE.Mesh(stakeGeometry, stakeMaterial);
     stake.castShadow = true;
@@ -94,7 +96,7 @@ export function buildPlacards(
     pivots.push(pivot);
     panels.push(panel);
 
-    const outline = buildOutline(iv.geometry, anchor, color);
+    const outline = buildOutline(iv.geometry, anchor, terrain, color);
     if (outline) group.add(outline);
   }
 
@@ -176,7 +178,7 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidthPx: numbe
 /** A thin ground outline of what a line or area card covers — the placard
  * alone only says *that* something is proposed here, not how far it
  * reaches. Point cards need none. */
-function buildOutline(geometry: GeoJSON.Geometry, anchor: GeoAnchor, color: string): THREE.Object3D | null {
+function buildOutline(geometry: GeoJSON.Geometry, anchor: GeoAnchor, terrain: Terrain, color: string): THREE.Object3D | null {
   const rings: GeoJSON.Position[][] =
     geometry.type === "LineString"
       ? [geometry.coordinates]
@@ -190,10 +192,8 @@ function buildOutline(geometry: GeoJSON.Geometry, anchor: GeoAnchor, color: stri
   const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.85 });
   const group = new THREE.Group();
   for (const ring of rings) {
-    const points = ring.map(([lng, lat]) => {
-      const [x, z] = toLocal(anchor, lng, lat);
-      return new THREE.Vector3(x, OUTLINE_LIFT_M, z);
-    });
+    const local = ring.map(([lng, lat]) => toLocal(anchor, lng, lat));
+    const points = drapeLine(terrain, local, OUTLINE_LIFT_M).map(([x, y, z]) => new THREE.Vector3(x, y, z));
     group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), material));
   }
   return group;

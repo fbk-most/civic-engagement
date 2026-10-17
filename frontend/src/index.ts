@@ -22,6 +22,7 @@ export type { PartBuilder, PartInputs, ScenePart } from "./three/parts";
 export { MaterialLibrary, type Surface } from "./three/materials";
 export { instanced } from "./three/instancing";
 export { toLocal, type GeoAnchor } from "./three/geo";
+export { FLAT_TERRAIN, type Terrain } from "./three/terrain";
 export { elementYaw } from "./three/hash";
 export { daylightFraction, type SunPosition } from "./three/sun";
 export { setLampIntensity, setLampLayout, setRealLamps } from "./three/lampLighting";

@@ -23,6 +23,7 @@ import { loadVehicles, VEHICLE_FILES, type VehicleAsset } from "./assets";
 import { crossingAxis } from "./network";
 import { Track } from "./track";
 import { addLampLighting } from "../lampLighting";
+import { FLAT_TERRAIN, type Terrain } from "../terrain";
 
 type Point = [number, number];
 
@@ -436,6 +437,9 @@ function makeRoute(network: RoadNetwork, random: () => number): number[] | null 
 
 export class Traffic {
   readonly group = new THREE.Group();
+  /** The ground the cars drive on (see three/terrain.ts). Set before the
+   * road network: the traffic lights' lenses are placed with it. */
+  terrain: Terrain = FLAT_TERRAIN;
   private network: RoadNetwork | null = null;
   private assets: VehicleAsset[] | null = null;
   private meshes: THREE.InstancedMesh[] = [];
@@ -577,7 +581,7 @@ export class Traffic {
         LENS_ORDER.forEach((_, k) => {
           this.position.set(
             signal.point[0] + dx * reach,
-            SIGNAL_HOUSING_Y + (1 - k) * SIGNAL_LENS_SPACING,
+            this.terrain.heightAt(signal.point[0], signal.point[1]) + SIGNAL_HOUSING_Y + (1 - k) * SIGNAL_LENS_SPACING,
             signal.point[1] + dz * reach
           );
           this.matrix.compose(this.position, this.rotation, this.scale);
@@ -706,7 +710,8 @@ export class Traffic {
       const mesh = this.meshes[car.model];
       if (!mesh) continue;
       this.rotation.setFromAxisAngle(this.up, car.yaw + (MODEL_FORWARD > 0 ? 0 : Math.PI));
-      this.matrix.compose(this.position.set(car.x, 0, car.z), this.rotation, this.scale);
+      const ground = this.terrain.heightAt(car.x, car.z);
+      this.matrix.compose(this.position.set(car.x, ground, car.z), this.rotation, this.scale);
       mesh.setColorAt(counts[car.model], car.colour);
       mesh.setMatrixAt(counts[car.model]++, this.matrix);
 
@@ -717,9 +722,9 @@ export class Traffic {
         for (const side of [-1, 1]) {
           const sx = fz * side * size.x * 0.33;
           const sz = -fx * side * size.x * 0.33;
-          this.matrix.compose(this.position.set(car.x + sx + fx * size.z * 0.5, size.y * 0.45, car.z + sz + fz * size.z * 0.5), this.rotation, this.scale);
+          this.matrix.compose(this.position.set(car.x + sx + fx * size.z * 0.5, ground + size.y * 0.45, car.z + sz + fz * size.z * 0.5), this.rotation, this.scale);
           this.headlights.setMatrixAt(lights, this.matrix);
-          this.matrix.compose(this.position.set(car.x + sx - fx * size.z * 0.5, size.y * 0.5, car.z + sz - fz * size.z * 0.5), this.rotation, this.scale);
+          this.matrix.compose(this.position.set(car.x + sx - fx * size.z * 0.5, ground + size.y * 0.5, car.z + sz - fz * size.z * 0.5), this.rotation, this.scale);
           this.taillights.setMatrixAt(lights, this.matrix);
           lights++;
         }

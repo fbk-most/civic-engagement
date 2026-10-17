@@ -192,6 +192,38 @@ export interface TreeProperties {
   status: TreeStatus;
 }
 
+/** The ground's height on a grid of points (see the backend's
+ * `TerrainGrid` and three/terrain.ts): point (col, row) is x0 + col*cell_m
+ * east and z0 + row*cell_m *south* of the anchor; `heights` is base64 of
+ * little-endian uint16 levels of `height_scale_m`, row-major. */
+export interface TerrainGrid {
+  anchor_lng: number;
+  anchor_lat: number;
+  x0: number;
+  z0: number;
+  cols: number;
+  rows: number;
+  cell_m: number;
+  base_elevation_m: number;
+  height_scale_m: number;
+  heights: string;
+}
+
+/** A file the frontend loads apart from the scene (see the backend's
+ * site_assets.py). */
+export interface SiteAsset {
+  key: string;
+  format: string;
+  bytes: number;
+  version: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface SiteAssets {
+  site_id: string;
+  assets: SiteAsset[];
+}
+
 /** Where a field's cells are, in the 3D view's local frame (see three/geo.ts):
  * cell (i, j) spans x0 + i*cell_m .. +cell_m east, y0 + j*cell_m .. +cell_m
  * north of the anchor. */

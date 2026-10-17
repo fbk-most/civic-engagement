@@ -63,6 +63,21 @@ CIVIC_TWIN_SCENARIO=demo uv run uvicorn bologna_civic_dt.main:app
 uv run pytest
 ```
 
+A site can have **terrain**: a height grid built from its LiDAR DTM
+(`civic_engagement/ingestion/terrain.py`), in `data/<site>/terrain/terrain_grid.json`.
+The 3D view then lays the ground covers, paths, buildings, trees, furniture,
+people, cars and the felt-temperature sheet on it, and the camera and walk
+mode follow it; a site without the file is flat (Piazza XX Settembre, for
+now). `?terrain=off` shows a site flat, for comparison. Piazza Dante's comes
+from the 2014 LiDAR DTM:
+
+```bash
+uv run python -m bologna_civic_dt.ingestion.build_terrain --dtm data/piazza_dante/lidar/dtm_2014.asc
+```
+
+The models behind the indicators and the felt temperature still take the
+ground as flat: the terrain only changes what the 3D view shows.
+
 The workshop's cards (the session) live in the backend, shared by every open
 window, and are mirrored to `data/<site>/session.json`. A set of cards can be
 saved under a name as a *scenario*, in `data/<site>/scenarios/<id>.json`, and
@@ -178,6 +193,8 @@ The frontend reads a few optional parameters from its URL (see
 | `panels` | `closed` | Open with the side boxes (cards, interventions, key indicators) collapsed. |
 | `interventions` | `attuale`, `carte`, `simulazione` | Open on "Situazione attuale", "Carte proposte" or "Simulazione" (default). |
 | `comfort` | `off` | Comparison only: people ignore the felt temperature (by default they stop less, and walk less, where it's very hot or cold). |
+| `terrain` | `off` | Comparison only: draw the site flat, even if it has a terrain grid. |
+| `terrainScale` | e.g. `3` | Testing only: the terrain's heights multiplied by this, to see it on gentle ground. |
 
 The active site is not a URL parameter: it's chosen when starting the backend
 (`CIVIC_TWIN_SITE`, see above).
@@ -193,7 +210,7 @@ data:
 - **OpenStreetMap**: buildings, streets, paths, trees, street furniture and
   ground covers for both sites. © OpenStreetMap contributors, available
   under the [Open Database License](https://www.openstreetmap.org/copyright).
-- **Provincia autonoma di Trento**: building heights and roof shapes for
-  Piazza Dante from the 2014 LiDAR survey, and roof colours from the 2015
+- **Provincia autonoma di Trento**: the terrain, building heights and roof
+  shapes for Piazza Dante from the 2014 LiDAR survey, and roof colours from the 2015
   orthophoto. The source rasters are not in the repository (see
   `civic_engagement/ingestion/lidar.py` and `ortofoto.py`).

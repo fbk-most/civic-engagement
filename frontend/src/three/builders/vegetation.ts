@@ -18,6 +18,7 @@ import { instanced } from "../instancing";
 import { setAutumnMix, type MaterialLibrary } from "../materials";
 import { loadFoliageAtlas } from "../assets";
 import type { SeasonState } from "../sun";
+import type { Terrain } from "../terrain";
 import type { CrownForm } from "./treeStructure";
 import type { BarkAttributes, FoliageAttributes, TreeJob } from "../workers/treeJobs";
 import { buildTreesInWorkers, treeJobKey } from "../workers/treeWorkerPool";
@@ -257,7 +258,8 @@ export interface Vegetation {
 export async function buildVegetation(
   elements: DiscreteElement[],
   anchor: GeoAnchor,
-  materials: MaterialLibrary
+  materials: MaterialLibrary,
+  terrain: Terrain
 ): Promise<Vegetation> {
   const broadleafAtlas = await loadFoliageAtlas();
 
@@ -287,6 +289,7 @@ export async function buildVegetation(
     const [x, z] = position;
 
     if (element.type !== "tree") continue;
+    const y = terrain.heightAt(x, z);
 
     const height = Number(element.properties.height ?? 6);
     const canopyDiameter = Number(element.properties.canopy_diameter ?? 4);
@@ -295,7 +298,7 @@ export async function buildVegetation(
       stumps.push(
         new THREE.Matrix4()
           .makeScale(1, Math.max(height, 0.2), 1)
-          .setPosition(x, 0, z)
+          .setPosition(x, y, z)
       );
       continue;
     }
@@ -311,13 +314,14 @@ export async function buildVegetation(
     trunks.push(
       new THREE.Matrix4()
         .makeScale(trunkRadius, trunkTop, trunkRadius)
-        .setPosition(x, 0, z)
+        .setPosition(x, y, z)
     );
 
     if (isGrowing(element)) growingTrees.add(element.id);
     treeJobs.push({
       id: element.id,
       x,
+      y,
       z,
       trunkTop,
       height,

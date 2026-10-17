@@ -22,7 +22,7 @@ import {
 /** Street furniture, one instanced mesh per kind. Streetlights are a part
  * of their own (streetlights.ts): each needs an individual light, not just
  * instanced geometry. */
-export const buildFurniture: PartBuilder = ({ elements, anchor, materials }) => {
+export const buildFurniture: PartBuilder = ({ elements, anchor, materials, terrain }) => {
   const group = new THREE.Group();
   group.name = "furniture";
 
@@ -40,21 +40,22 @@ export const buildFurniture: PartBuilder = ({ elements, anchor, materials }) => 
     if (element.geometry.type !== "Point") continue;
     const [lng, lat] = element.geometry.coordinates;
     const [x, z] = toLocal(anchor, lng, lat);
+    const y = terrain.heightAt(x, z);
 
     if (element.type === "bench") {
       const yaw = elementYaw(element.id);
-      benches.push(new THREE.Matrix4().makeRotationY(yaw).setPosition(x, 0, z));
+      benches.push(new THREE.Matrix4().makeRotationY(yaw).setPosition(x, y, z));
     } else if (element.type === "water_feature") {
-      fountains.push(new THREE.Matrix4().setPosition(x, 0, z));
+      fountains.push(new THREE.Matrix4().setPosition(x, y, z));
     } else if (element.type === "kiosk") {
       const yaw = elementYaw(element.id);
-      kiosks.push(new THREE.Matrix4().makeRotationY(yaw).setPosition(x, 0, z));
+      kiosks.push(new THREE.Matrix4().makeRotationY(yaw).setPosition(x, y, z));
     } else if (element.type === "playground") {
       const yaw = elementYaw(element.id);
-      playgrounds.push(new THREE.Matrix4().makeRotationY(yaw).setPosition(x, 0, z));
+      playgrounds.push(new THREE.Matrix4().makeRotationY(yaw).setPosition(x, y, z));
     } else if (element.type === "fitness_area") {
       const yaw = elementYaw(element.id);
-      fitnessAreas.push(new THREE.Matrix4().makeRotationY(yaw).setPosition(x, 0, z));
+      fitnessAreas.push(new THREE.Matrix4().makeRotationY(yaw).setPosition(x, y, z));
     } else if (element.type === "pergola") {
       const size = String(element.properties.size ?? "medium");
       const yaw = elementYaw(element.id);
@@ -63,9 +64,9 @@ export const buildFurniture: PartBuilder = ({ elements, anchor, materials }) => 
         batch = [];
         pergolasBySize.set(size, batch);
       }
-      batch.push(new THREE.Matrix4().makeRotationY(yaw).setPosition(x, 0, z));
+      batch.push(new THREE.Matrix4().makeRotationY(yaw).setPosition(x, y, z));
     } else if (element.type === "traffic_signal") {
-      trafficSignals.push(new THREE.Matrix4().setPosition(x, 0, z));
+      trafficSignals.push(new THREE.Matrix4().setPosition(x, y, z));
     }
   }
 

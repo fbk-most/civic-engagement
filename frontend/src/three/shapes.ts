@@ -10,10 +10,11 @@
 
 import * as THREE from "three";
 import { polygonRings, toLocal, type GeoAnchor } from "./geo";
+import { drapeTriangles, heightRange, type Terrain } from "./terrain";
 
 /** Height offsets that break ties between coplanar, overlapping cover
- * polygons. The scene is flat (no terrain), so every ground-level surface
- * would otherwise land on y=0 and z-fight wherever two of them overlap.
+ * polygons. Every ground-level surface would otherwise land on the ground
+ * itself (y = 0 on a flat site) and z-fight wherever two of them overlap.
  *
  * Overlap is not an edge case here: OSM tags the same ground twice all the
  * time (a park polygon and a garden polygon over each other, a pond inside a
@@ -139,4 +140,45 @@ export function flatGeometry(
   geom.rotateX(-Math.PI / 2);
   geom.translate(0, y, 0);
   return geom;
+}
+
+/** Flat geometry in the XZ plane (positions, and uvs if it has them) laid
+ * on the ground, `lift` above it: cut along the ground's grid so that it
+ * lies exactly on it (see terrain.ts's `drapeTriangles`), shaded by the
+ * ground's own normals. Disposes `flat`. */
+export function drapeGeometry(flat: THREE.BufferGeometry, terrain: Terrain, lift: number): THREE.BufferGeometry {
+  const position = flat.getAttribute("position");
+  const uv = flat.getAttribute("uv") as THREE.BufferAttribute | undefined;
+  const stride = uv ? 4 : 2;
+  const triangles: number[] = [];
+  const count = flat.index ? flat.index.count : position.count;
+  for (let k = 0; k < count; k++) {
+    const i = flat.index ? flat.index.getX(k) : k;
+    triangles.push(position.getX(i), position.getZ(i));
+    if (uv) triangles.push(uv.getX(i), uv.getY(i));
+  }
+  flat.dispose();
+
+  const draped = drapeTriangles(terrain, triangles, stride, lift);
+  const vertices = draped.length / (stride + 1);
+  const positions = new Float32Array(vertices * 3);
+  const normals = new Float32Array(vertices * 3);
+  const uvs = uv ? new Float32Array(vertices * 2) : null;
+  for (let v = 0; v < vertices; v++) {
+    const at = v * (stride + 1);
+    positions.set([draped[at], draped[at + 1], draped[at + 2]], v * 3);
+    normals.set(terrain.normalAt(draped[at], draped[at + 2]), v * 3);
+    if (uvs) uvs.set([draped[at + 3], draped[at + 4]], v * 2);
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
+  if (uvs) geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
+  return geometry;
+}
+
+/** The lowest and highest ground along a polygon's outline. */
+export function outlineHeightRange(terrain: Terrain, anchor: GeoAnchor, geometry: GeoJSON.Geometry): [number, number] {
+  if (terrain.flat) return [0, 0];
+  return heightRange(terrain, outerRingsXZ(anchor, geometry).flatMap((ring) => ring.map((p) => [p.x, p.y] as [number, number])));
 }

@@ -37,6 +37,7 @@ export function isPaintedPath(material: string): boolean {
 }
 
 const DEFAULT_COVER: Surface = { color: 0xd8d5cd, roughness: 0.9, texture: "paving" };
+const DEFAULT_TERRAIN: Surface = { color: 0x7d8a5c, roughness: 1 };
 const DEFAULT_PATH: Surface = { color: 0xcac5be, roughness: 0.85, texture: "paving" };
 
 // Facade tints by OSM `building` value. Trento's centre is rendered plaster,
@@ -172,6 +173,19 @@ export class MaterialLibrary {
       material.polygonOffset = true;
       material.polygonOffsetFactor = 1;
       material.polygonOffsetUnits = 1;
+      return material;
+    });
+  }
+
+  /** The bare ground of a site with terrain, where no cover is (see
+   * builders/terrainSurface.ts): the pack's `terrainSurface`. Pushed back in
+   * depth further than the covers, which lie on it. */
+  terrain(): THREE.MeshStandardMaterial {
+    return this.get("terrain", () => {
+      const material = this.surfaceMaterial(activePack().scene3d.terrainSurface ?? DEFAULT_TERRAIN);
+      material.polygonOffset = true;
+      material.polygonOffsetFactor = 3;
+      material.polygonOffsetUnits = 3;
       return material;
     });
   }

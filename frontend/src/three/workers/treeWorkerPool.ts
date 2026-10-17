@@ -63,6 +63,7 @@ export function treeJobKey(job: TreeJob): string {
   return [
     job.id,
     job.x,
+    job.y,
     job.z,
     job.trunkTop,
     job.height,

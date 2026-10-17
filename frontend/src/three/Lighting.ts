@@ -52,6 +52,7 @@ export class Lighting {
   private envTarget: THREE.WebGLRenderTarget | null = null;
   private envScene = new THREE.Scene();
   private center = new THREE.Vector3();
+  private sunDistance = SUN_DISTANCE_M;
   /** How much of the sun disc should show in the *main* scene, as opposed to
    * the temporary 0 forced during environment-map capture (see
    * `refreshEnvironment`). Kept as state because the shader's disc term is
@@ -163,12 +164,15 @@ export class Lighting {
   }
 
   /** Fits the shadow camera to the site so shadow texels aren't spent on empty
-   * space. Call once per scene rebuild. */
-  fitTo(bounds: SiteBounds): void {
-    this.center.set((bounds.minX + bounds.maxX) / 2, 0, (bounds.minZ + bounds.maxZ) / 2);
+   * space. Call once per scene rebuild. `heights`: the ground's lowest and
+   * highest point over it (both 0 on a flat site). */
+  fitTo(bounds: SiteBounds, heights: [number, number] = [0, 0]): void {
+    this.center.set((bounds.minX + bounds.maxX) / 2, (heights[0] + heights[1]) / 2, (bounds.minZ + bounds.maxZ) / 2);
     // Padded so buildings just outside the boundary still cast into the square,
     // which around Piazza Dante is most of what shades it in the afternoon.
-    const radius = Math.max(bounds.maxX - bounds.minX, bounds.maxZ - bounds.minZ) / 2 + 80;
+    const radius = Math.hypot(Math.max(bounds.maxX - bounds.minX, bounds.maxZ - bounds.minZ) / 2 + 80, (heights[1] - heights[0]) / 2);
+    // The sun stands outside everything it lights, however large the site.
+    this.sunDistance = Math.max(SUN_DISTANCE_M, radius + 100);
 
     const camera = this.sun.shadow.camera;
     camera.left = -radius;
@@ -196,8 +200,8 @@ export class Lighting {
     // which is invalid for a camera. Piazza Dante's radius (~218m) is nowhere
     // close, but nothing here should silently break if this tool is ever
     // pointed at a much bigger site.
-    camera.near = Math.max(1, SUN_DISTANCE_M - radius - 30);
-    camera.far = SUN_DISTANCE_M + radius + 30;
+    camera.near = Math.max(1, this.sunDistance - radius - 30);
+    camera.far = this.sunDistance + radius + 30;
     camera.updateProjectionMatrix();
 
     this.sky.position.copy(this.center);
@@ -210,7 +214,7 @@ export class Lighting {
 
     this.sun.position
       .copy(direction)
-      .multiplyScalar(SUN_DISTANCE_M)
+      .multiplyScalar(this.sunDistance)
       .add(this.center);
 
     // Below the horizon a directional light would light the scene from

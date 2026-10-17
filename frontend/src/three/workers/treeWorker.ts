@@ -39,7 +39,7 @@ function buildOne(job: TreeJob): TreeBuildResult {
   const structure = buildTreeStructure(hashString(job.id), job.trunkTop, job.height, job.canopyDiameter, job.crownForm);
 
   const barkGeometry = buildBarkGeometry(structure, BARK_RENDER_MAX_LEVEL);
-  barkGeometry.translate(job.x, 0, job.z);
+  barkGeometry.translate(job.x, job.y, job.z);
   const bark = {
     position: barkGeometry.attributes.position.array as Float32Array,
     normal: barkGeometry.attributes.normal.array as Float32Array,
@@ -52,7 +52,7 @@ function buildOne(job: TreeJob): TreeBuildResult {
   if (job.isEvergreen) {
     const needleGeometry = buildNeedleGeometry(structure, hashString(`${job.id}:needles`), 1);
     if (needleGeometry) {
-      needleGeometry.translate(job.x, 0, job.z);
+      needleGeometry.translate(job.x, job.y, job.z);
       foliage = {
         kind: "needle",
         position: needleGeometry.attributes.position.array as Float32Array,
@@ -63,7 +63,7 @@ function buildOne(job: TreeJob): TreeBuildResult {
   } else {
     const leafGeometry = buildLeafGeometry(structure, hashString(`${job.id}:leaves`), job.canopyDiameter, SUMMER_PALETTE);
     if (leafGeometry) {
-      leafGeometry.translate(job.x, 0, job.z);
+      leafGeometry.translate(job.x, job.y, job.z);
       foliage = {
         kind: "leaf",
         position: leafGeometry.attributes.position.array as Float32Array,

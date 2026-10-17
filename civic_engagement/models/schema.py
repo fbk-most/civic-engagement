@@ -183,6 +183,42 @@ class FieldGrid(BaseModel):
     cell_m: float
 
 
+class TerrainGrid(BaseModel):
+    """The ground's height on a regular grid of points, in the 3D view's
+    local frame (see local_frame.py): point (col, row) is at x = x0 +
+    col * cell_m metres east of the anchor and z = z0 + row * cell_m metres
+    *south* of it, as the frontend's frame has it. Heights are relative to
+    the lowest point (`base_elevation_m` above sea level), quantized to
+    `height_scale_m`: little-endian uint16, row-major, base64."""
+
+    anchor_lng: float
+    anchor_lat: float
+    x0: float
+    z0: float
+    cols: int = Field(gt=1)
+    rows: int = Field(gt=1)
+    cell_m: float = Field(gt=0)
+    base_elevation_m: float
+    height_scale_m: float = Field(gt=0)
+    heights: str
+
+
+class SiteAsset(BaseModel):
+    """A file the frontend loads apart from the scene (the terrain grid,
+    say): heavier than the scene, and unchanged by the interventions."""
+
+    key: str = Field(description="What it is, e.g. \"terrain_grid\"; also its endpoint, /api/site-assets/<key>.")
+    format: str = Field(description="e.g. json, geojson, png.")
+    bytes: int = Field(description="Its size on disk.")
+    version: str = Field(description="Changes when the file does, for caching.")
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class SiteAssets(BaseModel):
+    site_id: str
+    assets: list[SiteAsset]
+
+
 class SceneResponse(BaseModel):
     site_id: str = Field(description="Which site this is (its key in the pack's sites), e.g. for naming exports.")
     site_name: str = Field(default="", description="The site's display name, e.g. \"Piazza Dante, Utopia\".")

@@ -10,7 +10,13 @@ def create_app(pack: DomainPack, title: str = "Civic Digital Twin PoC") -> FastA
     register(pack)
     # Imported only now: they read the pack and the active site when
     # imported (see domain.py).
-    from civic_engagement.api import routes_cards, routes_interventions, routes_scenarios, routes_scene
+    from civic_engagement.api import (
+        routes_cards,
+        routes_interventions,
+        routes_scenarios,
+        routes_scene,
+        routes_site_assets,
+    )
 
     app = FastAPI(title=title)
 
@@ -22,7 +28,13 @@ def create_app(pack: DomainPack, title: str = "Civic Digital Twin PoC") -> FastA
         allow_headers=["*"],
     )
 
-    for router in (routes_scene.router, routes_cards.router, routes_interventions.router, routes_scenarios.router):
+    for router in (
+        routes_scene.router,
+        routes_site_assets.router,
+        routes_cards.router,
+        routes_interventions.router,
+        routes_scenarios.router,
+    ):
         app.include_router(router, prefix="/api")
     for router in pack.routers():
         app.include_router(router, prefix="/api")

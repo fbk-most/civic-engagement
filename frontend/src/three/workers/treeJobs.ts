@@ -14,6 +14,8 @@ import type { CrownForm } from "../builders/treeStructure";
 export interface TreeJob {
   id: string;
   x: number;
+  /** The ground's height there (see three/terrain.ts). */
+  y: number;
   z: number;
   trunkTop: number;
   height: number;

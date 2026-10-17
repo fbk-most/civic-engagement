@@ -18,6 +18,7 @@ import type { PersonPlacement } from "./plan";
 import { PoseLayer } from "./poseLayer";
 import { applySeatedPose, hipCentre } from "./seatedPose";
 import { WalkerMotion, type DogBreed, type WalkerSpec } from "./walkers";
+import { FLAT_TERRAIN, type Terrain } from "../terrain";
 
 // Where the hip joints sit above the ground on a bench (seat top ~0.48 m,
 // see buildBenchGeometry, plus the thigh's thickness).
@@ -51,6 +52,8 @@ interface Actor {
 
 export class Crowd {
   readonly group = new THREE.Group();
+  /** The ground everyone stands on (see three/terrain.ts). */
+  terrain: Terrain = FLAT_TERRAIN;
   private readonly actors = new Map<string, Actor>();
   private plan: PersonPlacement[] = [];
   private walkerSpecs: WalkerSpec[] = [];
@@ -168,7 +171,7 @@ export class Crowd {
     actor.x = walker.motion.x;
     actor.z = walker.motion.z;
     actor.yaw = walker.motion.yaw;
-    actor.root.position.set(actor.x, 0, actor.z);
+    actor.root.position.set(actor.x, this.terrain.heightAt(actor.x, actor.z), actor.z);
     actor.root.rotation.y = actor.yaw;
   }
 
@@ -237,7 +240,7 @@ export class Crowd {
     const scale = height / asset.modelHeight;
     root.scale.setScalar(scale);
     root.rotation.y = yaw;
-    root.position.set(x, 0, z);
+    root.position.set(x, this.terrain.heightAt(x, z), z);
     root.name = id;
     this.group.add(root);
     return { root, mixer: new THREE.AnimationMixer(root), layer: new PoseLayer(root), asset, scale };
@@ -273,14 +276,15 @@ export class Crowd {
     };
     this.animate(actor, 0);
     if (placement.pose === "sitting") {
-      // Move the whole figure so its hips land on the seat.
+      // Move the whole figure so its hips land on the seat (`hips` is in
+      // the world, so the seat's height is above the ground there).
       const hips = hipCentre(layer, this.scratch);
       root.position.x += placement.x - hips.x;
-      root.position.y += SEAT_HIP_HEIGHT_M - hips.y;
+      root.position.y += this.terrain.heightAt(placement.x, placement.z) + SEAT_HIP_HEIGHT_M - hips.y;
       root.position.z += placement.z - hips.z;
     }
     fitBounds(root, `${placement.character}:${placement.pose}`);
-    if (placement.dog) actor.dog = new Dog(placement.dog, this.dogs![placement.dog], this.group, placement.phase);
+    if (placement.dog) actor.dog = new Dog(placement.dog, this.dogs![placement.dog], this.group, placement.phase, this.terrain);
     return actor;
   }
 
@@ -317,7 +321,7 @@ export class Crowd {
     };
     this.animate(actor, 0);
     fitBounds(root, `${spec.character}:walking`);
-    if (spec.dog) actor.dog = new Dog(spec.dog, this.dogs![spec.dog], this.group, seededPhase(`${spec.id}:dog`));
+    if (spec.dog) actor.dog = new Dog(spec.dog, this.dogs![spec.dog], this.group, seededPhase(`${spec.id}:dog`), this.terrain);
     return actor;
   }
 
@@ -329,7 +333,7 @@ export class Crowd {
     actor.x = walker.motion.x;
     actor.z = walker.motion.z;
     actor.yaw = walker.motion.yaw;
-    actor.root.position.set(actor.x, 0, actor.z);
+    actor.root.position.set(actor.x, this.terrain.heightAt(actor.x, actor.z), actor.z);
     actor.root.rotation.y = actor.yaw;
     actor.gaze = new Gaze(actor.id, actor.x, actor.z, actor.yaw);
     // The bounds (see fitBounds) are the figure's own: moving it keeps them.

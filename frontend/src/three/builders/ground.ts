@@ -2,10 +2,12 @@ import * as THREE from "three";
 import type { CoverPolygon } from "../../api/types";
 import type { GeoAnchor } from "../geo";
 import type { MaterialLibrary } from "../materials";
-import { coverHeight, flatGeometry } from "../shapes";
+import { coverHeight, drapeGeometry, flatGeometry } from "../shapes";
+import type { Terrain } from "../terrain";
 import { activePack } from "../../pack";
 
-/** Ground cover as flat horizontal meshes, one per cover polygon.
+/** Ground cover as meshes on the ground, one per cover polygon: flat on a
+ * flat site, laid on the terrain otherwise (see shapes.ts's `drapeGeometry`).
  *
  * Cover polygons overlap freely — OSM double-tags ground constantly, and
  * `bologna_civic_dt/layout.py` deliberately layers intervention covers on top of the
@@ -18,7 +20,8 @@ import { activePack } from "../../pack";
 export function buildGround(
   covers: CoverPolygon[],
   anchor: GeoAnchor,
-  materials: MaterialLibrary
+  materials: MaterialLibrary,
+  terrain: Terrain
 ): THREE.Group {
   const group = new THREE.Group();
   group.name = "ground";
@@ -29,8 +32,10 @@ export function buildGround(
     // wired in by SceneBuilder alongside this group.
     if (waterTypes.has(cover.cover_type)) continue;
 
-    const geometry = flatGeometry(anchor, cover.geometry, coverHeight(index, covers.length));
-    if (!geometry) continue;
+    const lift = coverHeight(index, covers.length);
+    const flat = flatGeometry(anchor, cover.geometry, terrain.flat ? lift : 0);
+    if (!flat) continue;
+    const geometry = terrain.flat ? flat : drapeGeometry(flat, terrain, lift);
 
     const mesh = new THREE.Mesh(geometry, materials.cover(cover.cover_type));
     // The ground never casts (it is the bottom of the world) but must receive,

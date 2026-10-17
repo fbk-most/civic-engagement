@@ -2,6 +2,7 @@ import { useImperativeHandle, useMemo, useRef, useState, type Ref } from "react"
 import type { CardSpec, InterventionDisplayMode, SceneResponse } from "../api/types";
 import { Viewer, type ViewerHandle } from "../three/Viewer";
 import { anchorFromPolygon } from "../three/geo";
+import type { Terrain } from "../three/terrain";
 import type { ThermalField, ThermalReading } from "../thermal/field";
 import type { CrowdExposure } from "../three/people/comfort";
 import { CURRENT_YEAR, seasonState, sunPosition, type SunSetting } from "../three/sun";
@@ -16,6 +17,8 @@ import { tr } from "../i18n/lang";
 
 interface View3DProps {
   scene: SceneResponse | null;
+  /** The ground's shape; null while not known yet (see App.tsx). */
+  terrain: Terrain | null;
   mode: InterventionDisplayMode;
   cards: CardSpec[];
   /** False while another tab is showing: the view stays mounted (rebuilding
@@ -78,6 +81,7 @@ const LIFE_LABELS: Record<LifeMode, { label: () => string; title: () => string }
  * for placing the viewpoint and one panel for year, day and hour. */
 export function View3D({
   scene,
+  terrain,
   mode,
   cards,
   active,
@@ -180,6 +184,7 @@ export function View3D({
     <div className="view-3d" hidden={!active}>
       <Viewer
         scene={scene}
+        terrain={terrain}
         mode={mode}
         cards={cards}
         onSelectIntervention={onSelectIntervention}

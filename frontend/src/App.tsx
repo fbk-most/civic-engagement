@@ -8,6 +8,7 @@ import { renderScene, setCameraView, setHighlight } from "./map/layers";
 import { mapToView, readMapFraming, sameFraming, sameView, viewToMap, type MapFraming } from "./map/viewSync";
 import { frustumWedge, type CameraPose } from "./three/camera";
 import { anchorFromPolygon, toLocal } from "./three/geo";
+import { FLAT_TERRAIN, terrainFromGrid, type Terrain } from "./three/terrain";
 import { readDebugParams } from "./debugParams";
 import { createDraw } from "./map/terraDrawSetup";
 import {
@@ -18,6 +19,8 @@ import {
   fetchIndicatorDescriptors,
   fetchScene,
   fetchSessionRevision,
+  fetchSiteAssets,
+  fetchTerrainGrid,
   fetchThermalField,
   updateIntervention,
 } from "./api/client";
@@ -28,6 +31,7 @@ import type {
   InterventionDisplayMode,
   PlacementType,
   SceneResponse,
+  TerrainGrid,
 } from "./api/types";
 import { CardPalette } from "./ui/CardPalette";
 import { ParamForm } from "./ui/ParamForm";
@@ -133,6 +137,10 @@ function App() {
   const [pendingGeometry, setPendingGeometry] = useState<GeoJSON.Geometry | null>(null);
   const [t, setT] = useState(initialDebugParams.t ?? 0);
   const [scene, setScene] = useState<SceneResponse | null>(null);
+  // Null until known (flat if the site has no terrain grid). The ref is for
+  // the tab switches' camera carry-over, which read it outside React.
+  const [terrain, setTerrain] = useState<Terrain | null>(null);
+  const terrainRef = useRef<Terrain>(FLAT_TERRAIN);
   // Scene requests applied but not yet rendered (see applyScene).
   const scenesToEndRef = useRef(0);
   useEffect(() => {
@@ -198,6 +206,14 @@ function App() {
     map.on("error", (e) => console.error("MapLibre error:", e.error));
 
     map.on("load", () => {
+      // The terrain grid, if the site has one, comes alongside the scene;
+      // the 3D view waits for both.
+      const terrainGrid: Promise<TerrainGrid | null> = initialDebugParams.terrain
+        ? fetchSiteAssets().then(({ assets }) => {
+            const asset = assets.find((a) => a.key === "terrain_grid");
+            return asset ? fetchTerrainGrid(asset) : null;
+          })
+        : Promise.resolve(null);
       // Matches `t`'s own initial state (see initialDebugParams above) rather
       // than a bare 0, or a `?t=5` debug URL would show the slider at 5 while
       // actually rendering the t=0 scenario until the slider was touched.
@@ -205,6 +221,20 @@ function App() {
         .then((scene) => {
           applyScene(scene);
           setStatus("ready");
+          terrainGrid
+            .then((grid) =>
+              grid
+                ? terrainFromGrid(grid, anchorFromPolygon(scene.site_boundary), initialDebugParams.terrainScale ?? 1)
+                : FLAT_TERRAIN
+            )
+            .catch((err) => {
+              console.error(err);
+              return FLAT_TERRAIN;
+            })
+            .then((loaded) => {
+              terrainRef.current = loaded;
+              setTerrain(loaded);
+            });
         })
         .catch((err) => {
           console.error(err);
@@ -356,7 +386,7 @@ function App() {
     if (view === "2d") {
       const shown = view3dRef.current?.readView();
       if (!shown || (aligned && sameView(shown, aligned.view, anchor))) return;
-      const { framing, eyeLevel } = viewToMap(map, anchor, shown);
+      const { framing, eyeLevel } = viewToMap(map, anchor, shown, terrainRef.current);
       map.jumpTo(framing);
       mapWedgeRef.current = eyeLevel ? { wedge: frustumWedge(anchor, shown), position: [shown.lng, shown.lat] } : null;
       setCameraView(map, mapWedgeRef.current);
@@ -364,7 +394,7 @@ function App() {
     } else if (view === "3d") {
       const framing = readMapFraming(map);
       if (aligned && sameFraming(framing, aligned.map)) return;
-      const next = mapToView(map, anchor);
+      const next = mapToView(map, anchor, terrainRef.current);
       // The first time, the 3D view isn't there yet: it opens on this instead.
       if (view3dRef.current) view3dRef.current.showView(next);
       else setInitial3dView(next);
@@ -859,6 +889,7 @@ function App() {
           {view3dMounted && (
             <View3D
               scene={scene}
+              terrain={terrain}
               mode={interventionMode}
               cards={cards}
               active={view === "3d"}

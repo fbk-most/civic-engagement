@@ -2,6 +2,7 @@ import type * as THREE from "three";
 import type { CoverPolygon, DiscreteElement } from "../api/types";
 import type { GeoAnchor } from "./geo";
 import type { MaterialLibrary } from "./materials";
+import type { Terrain } from "./terrain";
 import type { SunPosition } from "./sun";
 
 /** One part of the 3D scene (the water, the pack's furniture or
@@ -26,6 +27,8 @@ export interface PartInputs {
   covers: CoverPolygon[];
   anchor: GeoAnchor;
   materials: MaterialLibrary;
+  /** The ground things stand on (flat on a flat site). */
+  terrain: Terrain;
 }
 
 /** Builds a part of the scene: the pack's own (`FrontendPack.scene3d`). */

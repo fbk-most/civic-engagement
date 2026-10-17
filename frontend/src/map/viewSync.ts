@@ -8,11 +8,15 @@
  * eye-level view has no map equivalent — a map seen from 1.65 m shows
  * nothing — so from there the map looks at the same place from above and
  * behind, with the field of view drawn as a wedge.
+ *
+ * On terrain, the map is still flat: its plane is taken to be the ground at
+ * its centre, and a 3D view's height is above the ground under it.
  */
 
 import type { MapLibreMap } from "maplibre-gl";
 import type { CameraPose } from "../three/camera";
 import { bearingToDirection, toLngLat, toLocal, type GeoAnchor } from "../three/geo";
+import { FLAT_TERRAIN, intersectTerrain, type Terrain } from "../three/terrain";
 
 export interface MapFraming {
   center: [number, number];
@@ -73,18 +77,22 @@ export function sameView(a: CameraPose, b: CameraPose, anchor: GeoAnchor): boole
 
 /** Where the map's camera is, as a 3D view: same position, direction and
  * field of view. */
-export function mapToView(map: MapLibreMap, anchor: GeoAnchor): CameraPose {
+export function mapToView(map: MapLibreMap, anchor: GeoAnchor, terrain: Terrain = FLAT_TERRAIN): CameraPose {
   const { center, zoom, bearing, pitch } = readMapFraming(map);
   const distance = cameraToCenterPx(map) * metersPerPixel(zoom, center[1]);
   const tilt = (pitch * Math.PI) / 180;
   const [tx, tz] = toLocal(anchor, center[0], center[1]);
   const [dx, dz] = bearingToDirection(bearing);
   const back = distance * Math.sin(tilt);
-  const [lng, lat] = toLngLat(anchor, tx - dx * back, tz - dz * back);
+  const [x, z] = [tx - dx * back, tz - dz * back];
+  const [lng, lat] = toLngLat(anchor, x, z);
+  const above = terrain.heightAt(tx, tz) + distance * Math.cos(tilt) - terrain.heightAt(x, z);
   return {
     lng,
     lat,
-    eyeHeight: distance * Math.cos(tilt),
+    // Downhill of a steep slope, the ground under the camera can be above
+    // the map's plane.
+    eyeHeight: terrain.flat ? above : Math.max(above, 0.5),
     bearingDeg: (bearing + 360) % 360,
     pitchDeg: pitch - 90,
     fovDeg: map.getVerticalFieldOfView(),
@@ -93,7 +101,12 @@ export function mapToView(map: MapLibreMap, anchor: GeoAnchor): CameraPose {
 
 /** The map framing for a 3D view, and whether it was an eye-level one (then
  * the caller draws its wedge). */
-export function viewToMap(map: MapLibreMap, anchor: GeoAnchor, view: CameraPose): { framing: MapFraming; eyeLevel: boolean } {
+export function viewToMap(
+  map: MapLibreMap,
+  anchor: GeoAnchor,
+  view: CameraPose,
+  terrain: Terrain = FLAT_TERRAIN
+): { framing: MapFraming; eyeLevel: boolean } {
   const [x, z] = toLocal(anchor, view.lng, view.lat);
   const [dx, dz] = bearingToDirection(view.bearingDeg);
   const lookDown = -view.pitchDeg;
@@ -105,8 +118,16 @@ export function viewToMap(map: MapLibreMap, anchor: GeoAnchor, view: CameraPose)
 
   // The point at the centre of the view, on the ground, is the map's centre.
   const down = (lookDown * Math.PI) / 180;
-  const distance = view.eyeHeight / Math.sin(down);
-  const ahead = view.eyeHeight / Math.tan(down);
+  let distance = view.eyeHeight / Math.sin(down);
+  let ahead = view.eyeHeight / Math.tan(down);
+  if (!terrain.flat) {
+    const direction = { x: dx * Math.cos(down), y: -Math.sin(down), z: dz * Math.cos(down) };
+    const hit = intersectTerrain(terrain, { x, y: terrain.heightAt(x, z) + view.eyeHeight, z }, direction);
+    if (hit) {
+      distance = hit.distance;
+      ahead = hit.distance * Math.cos(down);
+    }
+  }
   const center = toLngLat(anchor, x + dx * ahead, z + dz * ahead);
   const zoom = Math.log2((cameraToCenterPx(map) * metersPerPixel(0, center[1])) / distance);
   return { framing: { center, zoom, bearing: view.bearingDeg, pitch: 90 - lookDown }, eyeLevel: false };

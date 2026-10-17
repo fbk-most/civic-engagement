@@ -31,6 +31,7 @@ import {
   type GeoAnchor,
   type MaterialLibrary,
   type PartBuilder,
+  type Terrain,
 } from "civic-engagement";
 import { buildStreetlightGlobeGeometry, buildStreetlightPoleGeometry, STREETLIGHT_GLOBE_Y_M } from "./furniture";
 import { streetlightGlobe, streetlightMetal } from "./materials";
@@ -88,7 +89,8 @@ export interface StreetlightBuild {
 export function buildStreetlights(
   elements: DiscreteElement[],
   anchor: GeoAnchor,
-  materials: MaterialLibrary
+  materials: MaterialLibrary,
+  terrain: Terrain
 ): StreetlightBuild {
   const transforms: THREE.Matrix4[] = [];
   const lights: THREE.PointLight[] = [];
@@ -98,8 +100,9 @@ export function buildStreetlights(
     if (element.type !== "streetlight" || element.geometry.type !== "Point") continue;
     const [lng, lat] = element.geometry.coordinates;
     const [x, z] = toLocal(anchor, lng, lat);
-    transforms.push(new THREE.Matrix4().setPosition(x, 0, z));
-    lamps.push(new THREE.Vector3(x, LIGHT_HEIGHT_M, z));
+    const y = terrain.heightAt(x, z);
+    transforms.push(new THREE.Matrix4().setPosition(x, y, z));
+    lamps.push(new THREE.Vector3(x, y + LIGHT_HEIGHT_M, z));
   }
 
   const lightCount = CHEAP ? Math.min(REAL_LIGHTS, lamps.length) : lamps.length;
@@ -307,8 +310,8 @@ export function applyNightLights(build: StreetlightBuild, materials: MaterialLib
 
 /** The streetlights as a scene part: lit after dark (`applyNightLights`),
  * their real lights following the camera (`updateStreetlightShadows`). */
-export const buildStreetlightPart: PartBuilder = ({ elements, anchor, materials }) => {
-  const build = buildStreetlights(elements, anchor, materials);
+export const buildStreetlightPart: PartBuilder = ({ elements, anchor, materials, terrain }) => {
+  const build = buildStreetlights(elements, anchor, materials, terrain);
   const group = new THREE.Group();
   group.name = "streetlights";
   if (build.poleMesh) group.add(build.poleMesh);
