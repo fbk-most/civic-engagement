@@ -147,11 +147,6 @@ GROVE_PLANTING_DIAMETER = 1.0
 
 CO2_SEQUESTRATION_KG_PER_M2_CANOPY_PER_YEAR = 3.0
 
-COOLING_C_PER_M2_CANOPY = -0.0010
-WARMING_C_PER_M2_HARDSCAPE = 0.0001
-REFERENCE_SUMMER_TEMPERATURE_C = 32.0
-HARDSCAPE_COVER_TYPES = {"paving", "gravel"}
-
 COST_PER_TREE_EUR = {"oak": 250, "birch": 150, "linden": 220, "unknown": 180}
 COST_PER_PATH_M2_EUR = {"gravel": 40, "permeable_paving": 90, "wood": 120}
 COST_PER_COVER_M2_EUR = {
@@ -201,5 +196,181 @@ FRAGILE_PATH_MATERIALS = {
 COST_PER_ELEMENT_EUR = {"streetlight": 900, "bench": 700, "kiosk": 15000}
 COST_PER_PERGOLA_EUR = {"small": 4000, "medium": 7000, "large": 12000}
 
+# What each intervention adds to the yearly upkeep, per unit of what its
+# build cost counts (a tree, a m² of path or cover, a lamp, a pergola) —
+# rough municipal figures, same "indicative" stance as the prices above:
+# a young street tree's watering and pruning; a lawn's mowing; an LED
+# streetlight's energy (~200 kWh a year) and servicing; a playground's
+# inspections and surface. The keys mirror the prices', `:other` included.
+MAINTENANCE_PER_YEAR_EUR = {
+    **{f"tree:{k}": v for k, v in {"oak": 60, "birch": 50, "linden": 60, "unknown": 50}.items()},
+    **{f"path:{k}": v for k, v in {"gravel": 3.0, "permeable_paving": 1.5, "wood": 6.0}.items()},
+    "path:other": 2.0,
+    **{
+        f"cover:{k}": v
+        for k, v in {
+            "lawn": 2.0,
+            "meadow": 0.5,
+            "wood": 4.0,
+            "permeable_paving": 1.5,
+            "paving": 1.0,
+            "gravel": 1.5,
+            "water": 15.0,
+            "playground_surface": 8.0,
+            "sport_surface": 5.0,
+        }.items()
+    },
+    "cover:other": 1.0,
+    "element:streetlight": 80,
+    "element:bench": 40,
+    "element:kiosk": 500,
+    "pergola:small": 150,
+    "pergola:medium": 250,
+    "pergola:large": 400,
+}
+
 STREETLIGHT_ILLUMINATION_RADIUS_M = 12.0
 SHELTER_RADIUS_M = {"pergola_small": 4.0, "pergola_medium": 6.0, "pergola_large": 9.0, "kiosk": 10.0}
+
+# ---------------------------------------------------------------------------
+# Felt temperature (thermal_field.py, solar.py)
+# ---------------------------------------------------------------------------
+#
+# A cheap proxy for felt temperature (in the spirit of UTCI) at 1.1 m above
+# the ground, per 1 m cell and hour of a typical fair day: the air
+# temperature, plus the sun on a person, plus the heat the ground has
+# stored, plus what vegetation and water take away. No wind, no walls
+# re-radiating at night. Placeholder values to be checked by a domain
+# expert, like the rest of this file.
+
+SITE_TIMEZONE = "Europe/Rome"
+
+# Typical daily (min, max) air temperature by month, °C — rough values for
+# Trento (valley floor, Trento Laste station) to be replaced by the
+# station's normals; read on the 15th, interpolated in between.
+TYPICAL_DAILY_TEMPERATURE_C: dict[int, tuple[float, float]] = {
+    1: (-1.5, 6.5),
+    2: (-0.5, 9.5),
+    3: (3.0, 15.0),
+    4: (7.0, 19.0),
+    5: (11.5, 23.5),
+    6: (15.0, 28.0),
+    7: (17.0, 30.5),
+    8: (16.5, 29.5),
+    9: (12.5, 24.5),
+    10: (8.0, 18.0),
+    11: (3.0, 11.0),
+    12: (-1.0, 6.0),
+}
+# Local hour of the day's warmest air (the coolest is at sunrise).
+WARMEST_HOUR = 15
+
+# Climate assumption: how much warmer the air gets, the year round, `t`
+# years from now. A shift of the whole day (min and max alike) by month,
+# reached in CLIMATE_RAMP_YEARS and growing by CLIMATE_TREND_C_PER_YEAR
+# after that.
+#
+# The summer stands for "a summer like 2022 becomes the usual one in ten
+# years": at Trento Laste, summer 2022 averaged 24.8 °C, the second warmest
+# in a century after 2003 (24.9), against a long-term mean of 22.1, and had
+# the most days above 30 °C on record (65; Meteotrentino, "Analisi
+# stagionale estate 2022"). The typical summer above averages about 22.8,
+# so +2 °C. The other months get the long-term trend only (about +0.5 °C a
+# decade); May and September are in between. A deliberately warm, but not
+# extreme, assumption — chosen for the demo storyline, to be checked with a
+# climatologist.
+CLIMATE_WARMING_C: dict[int, float] = {
+    1: 0.5, 2: 0.5, 3: 0.5, 4: 0.5, 5: 1.0, 6: 2.0,
+    7: 2.0, 8: 2.0, 9: 1.0, 10: 0.5, 11: 0.5, 12: 0.5,
+}
+CLIMATE_RAMP_YEARS = 10
+CLIMATE_TREND_C_PER_YEAR = 0.05
+
+# Deciduous leaf cover by month (month, 0-1) — the 3D view's
+# LEAF_DENSITY_POINTS (frontend/src/three/sun.ts); keep the two equal.
+LEAF_DENSITY_BY_MONTH: list[tuple[int, float]] = [
+    (1, 0.0), (3, 0.0), (4, 0.5), (5, 1.0), (9, 1.0), (10, 0.55), (11, 0.1), (12, 0.0),
+]
+
+FIELD_CELL_M = 1.0
+# Where felt temperature is taken: about chest height.
+PERSON_HEIGHT_M = 1.1
+
+# Felt temperature added by direct sun on a person, °C per kW/m² of beam
+# (sun vs shade on a clear summer afternoon: about +10 °C).
+SUN_GAIN_C_PER_KW = 11.0
+
+# Light passing through tree crowns, as extinction per metre of crown
+# crossed: a 6 m crown in full leaf lets ~12% through, bare ~60%.
+CROWN_EXTINCTION_LEAFY_PER_M = 0.35
+CROWN_EXTINCTION_BARE_PER_M = 0.08
+# A pergola's lattice roof: a thin slab letting through about half the sun.
+PERGOLA_EXTINCTION_PER_M = 3.0
+PERGOLA_SLAB_M = 0.25
+# The 3D view's crown base, as a fraction of tree height
+# (frontend/src/three/builders/vegetation.ts).
+CROWN_BASE_FRACTION = 0.3
+CROWN_BASE_FRACTION_EVERGREEN = 0.08
+
+# Ground surfaces, by how they behave in the sun. Paths and streets map
+# their OSM `surface` (MATERIAL_SURFACE), covers their type
+# (COVER_SURFACE); ground nothing describes is DEFAULT_SURFACE.
+SURFACES = ["asphalt", "stone", "concrete", "gravel", "permeable", "wood", "rubber", "lawn", "meadow", "water"]
+DEFAULT_SURFACE = "stone"
+MATERIAL_SURFACE = {
+    "asphalt": "asphalt",
+    "concrete": "concrete",
+    "gravel": "gravel",
+    "fine_gravel": "gravel",
+    "compacted": "gravel",
+    "ground": "meadow",
+    "dirt": "meadow",
+    "grass": "lawn",
+    "wood": "wood",
+    "permeable_paving": "permeable",
+}  # everything else (sett, paving_stones, paving, ...) is stone
+COVER_SURFACE = {
+    "paving": "stone",
+    "lawn": "lawn",
+    "meadow": "meadow",
+    "wood": "meadow",
+    "water": "water",
+    "gravel": "gravel",
+    "permeable_paving": "permeable",
+    "playground_surface": "rubber",
+    "sport_surface": "rubber",
+}
+# Felt temperature the ground adds once fully heated, °C: how much sun it
+# stores and gives back (night included). "Fully heated" is a few hours of
+# high summer sun; the store fades by GROUND_HEAT_RETENTION each hour.
+GROUND_HEAT_C: dict[str, float] = {
+    "asphalt": 4.0, "stone": 3.0, "concrete": 3.0, "gravel": 2.0, "permeable": 2.0,
+    "wood": 1.5, "rubber": 3.5, "lawn": 0.5, "meadow": 0.5, "water": 0.0,
+}
+GROUND_HEAT_RETENTION = 0.75
+# Constant cooling of evaporating surfaces, °C.
+SURFACE_COOLING_C: dict[str, float] = {"lawn": -0.5, "meadow": -0.7}
+# Under a crown in full leaf, beyond its shade (evapotranspiration), °C.
+CANOPY_COOLING_C = -1.0
+# Water cools the air around it on warm days: a pond (any water cover) by
+# WATER_COOLING_C on it and at its edge, fading with distance (halving
+# every WATER_HALF_DISTANCE_M); a fountain likewise, over a few metres.
+# Both scale with the air temperature, from nothing at
+# WATER_COOLING_FROM_C to full at WATER_COOLING_FULL_C.
+WATER_COOLING_C = -2.5
+WATER_HALF_DISTANCE_M = 10.0
+FOUNTAIN_COOLING_C = -2.0
+FOUNTAIN_HALF_DISTANCE_M = 3.0
+WATER_COOLING_FROM_C = 10.0
+WATER_COOLING_FULL_C = 25.0
+
+# Felt temperature from which the summary counts "strong heat stress"
+# (UTCI's threshold).
+HEAT_STRESS_C = 32.0
+# The moment the thermal indicators describe, whatever the sun control
+# shows: a midsummer late morning (month, day, hour). Not the afternoon:
+# then the open space is in heat stress today as in the future, with or
+# without shade, and the indicators can't tell scenarios apart. At 11:00 the
+# square is still pleasant today and the climate assumption
+# (CLIMATE_WARMING_C) takes it past strong heat stress — the demo storyline.
+THERMAL_REFERENCE = (6, 21, 11)

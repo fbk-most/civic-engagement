@@ -28,14 +28,6 @@ Items marked *waiting* depend on something outside the code (feedback, data).
 - **Crossings in the walkability indicator**: zebra crossings don't count
   towards accessibility yet.
 
-## Cards
-
-- **Streetlights one at a time**: "add_streetlight" places a single lamp, so
-  lighting a path takes many cards and the scenario fills up with individual
-  streetlights. Either group them (one card for several lamps), or let a
-  card place streetlights along a drawn path at a given spacing (cost and
-  the safety indicator then count every lamp it creates).
-
 ## 3D life: people and dogs
 
 - **Cheaper figures**: the crowd now peaks at 500 people (half standing or
@@ -80,7 +72,7 @@ Items marked *waiting* depend on something outside the code (feedback, data).
 - **Trees by day**: the scene is GPU-bound mainly on vegetation (~23 M
   triangles per frame, sun shadow pass included). Simpler distant trees and
   fewer trees in the sun's shadow would help.
-- *Waiting for a measurement* — **"Misura" on the Nvidia machine**, to know
+- *Waiting for a measurement* — **"Measure" on the Nvidia machine**, to know
   whether performance matters only on laptops.
 - **`?lights=all` switch**: remove once the simplified lamp lighting has been
   confirmed in workshops.

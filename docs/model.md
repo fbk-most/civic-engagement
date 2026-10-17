@@ -8,9 +8,9 @@ layer is responsible for, how the layers connect, and which design choices matte
 is used in a workshop with citizens.
 
 The guide is grounded in a working reference implementation, this repository, built for
-workshops on nature-based solutions in two Italian squares: Piazza Dante in Trento and Piazza
-XX Settembre in Bologna. Each section first states the general idea and then shows how the
-reference implementation realizes it (*In the reference implementation*). These parts point to
+workshops on nature-based solutions in two squares: Piazza Dante in Utopia, an imaginary city
+built on the data of Piazza Dante in Trento, and Piazza XX Settembre in Bologna. Each section
+first states the general idea and then shows how the reference implementation realizes it (*In the reference implementation*). These parts point to
 code; they are examples, not prescriptions.
 
 The guide is about architecture. The detailed models (growth curves, thermal coefficients,
@@ -137,7 +137,7 @@ These gaps matter later: a tree-disease scenario is meaningless if the species a
 *In the reference implementation:* the site registry is `civic_twin/config.py`, with one active
 site per process. Ingestion lives in `civic_twin/ingestion/`. It combines OSM (buildings, streets,
 paths, trees, furniture, covers), LiDAR building heights and roof shapes and orthophoto roof
-colours (Trento only), and road markings inferred from OSM. The result is `data/<site>/baseline.json`
+colours (Piazza Dante only), and road markings inferred from OSM. The result is `data/<site>/baseline.json`
 with 14 element types and 9 cover types (`civic_twin/models/schema.py`). Baseline trees get a
 seeded species, age class and cut year (`domains/urban/trees.py`).
 
@@ -240,7 +240,7 @@ rasters, and `solar.py` provides the real sun position, a typical daily air-temp
 leaf density. A ray-casting functor computes sun exposure through buildings, crowns and pergolas.
 `GET /api/thermal-field` serves the field quantized to one byte per cell, and the backend keeps
 recent fields in a cache. The thermal indicators read the field at a reference moment (21 June,
-15:00). The views share a colour scale anchored on the UTCI stress bands
+11:00). The views share a colour scale anchored on the UTCI stress bands
 (`frontend/src/thermal/field.ts`).
 
 ## 8. Layer 5: the social model

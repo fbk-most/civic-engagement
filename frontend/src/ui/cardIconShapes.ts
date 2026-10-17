@@ -69,4 +69,22 @@ export const CARD_ICON_SHAPES: Record<CardType, IconShape[]> = {
     { kind: "rect", x: 1.5, y: 9, w: 3, h: 6, rx: 1 },
     { kind: "rect", x: 19.5, y: 9, w: 3, h: 6, rx: 1 },
   ],
+  // Three trees along a dashed line.
+  plant_tree_row: [
+    { kind: "line", x1: 4.5, y1: 19, x2: 4.5, y2: 13 },
+    { kind: "circle", cx: 4.5, cy: 9.5, r: 3.2 },
+    { kind: "line", x1: 12, y1: 19, x2: 12, y2: 13 },
+    { kind: "circle", cx: 12, cy: 9.5, r: 3.2 },
+    { kind: "line", x1: 19.5, y1: 19, x2: 19.5, y2: 13 },
+    { kind: "circle", cx: 19.5, cy: 9.5, r: 3.2 },
+    { kind: "line", x1: 2, y1: 22, x2: 22, y2: 22, dash: [2.2, 2.2] },
+  ],
+  // Two lamps along a dashed path.
+  add_streetlight_path: [
+    { kind: "line", x1: 6, y1: 19, x2: 6, y2: 8 },
+    { kind: "circle", cx: 6, cy: 5.5, r: 2.3 },
+    { kind: "line", x1: 18, y1: 19, x2: 18, y2: 8 },
+    { kind: "circle", cx: 18, cy: 5.5, r: 2.3 },
+    { kind: "line", x1: 2, y1: 22, x2: 22, y2: 22, dash: [2.2, 2.2] },
+  ],
 };

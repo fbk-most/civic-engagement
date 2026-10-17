@@ -1,96 +1,132 @@
-import type { CardSpec } from "../api/types";
+import type { CardSpec, ParamSpec } from "../api/types";
+import { tr } from "./lang";
 
-// Display-only Italian labels for internal codes. The codes themselves
-// (species/material/cover_type values) stay in English since the backend
-// uses them as lookup keys (growth tables, cost tables, etc.) — only what's
-// shown to the facilitator is translated here.
+// Display labels, Italian and English, for internal codes. The codes
+// themselves (species/material/cover_type values) stay in English since the
+// backend uses them as lookup keys (growth tables, cost tables, etc.) — only
+// what's shown to the facilitator is translated here.
 
-export const SPECIES_LABELS_IT: Record<string, string> = {
-  oak: "Quercia",
-  birch: "Betulla",
-  linden: "Tiglio",
-  plane: "Platano",
-  elm: "Olmo",
-  ginkgo: "Ginkgo",
-  horse_chestnut: "Ippocastano",
-  cypress: "Cipresso",
-  pine: "Pino",
-  unknown: "Sconosciuta",
+type Pair = [it: string, en: string];
+
+function pick(labels: Record<string, Pair>, code: string): string {
+  const pair = labels[code];
+  return pair ? tr(...pair) : code;
+}
+
+const SPECIES: Record<string, Pair> = {
+  oak: ["Quercia", "Oak"],
+  birch: ["Betulla", "Birch"],
+  linden: ["Tiglio", "Linden"],
+  plane: ["Platano", "Plane"],
+  elm: ["Olmo", "Elm"],
+  ginkgo: ["Ginkgo", "Ginkgo"],
+  horse_chestnut: ["Ippocastano", "Horse chestnut"],
+  cypress: ["Cipresso", "Cypress"],
+  pine: ["Pino", "Pine"],
+  unknown: ["Sconosciuta", "Unknown"],
 };
 
-export const MATERIAL_LABELS_IT: Record<string, string> = {
-  paving: "Pavimentazione",
-  gravel: "Ghiaia",
-  permeable_paving: "Pavimentazione permeabile",
-  wood: "Legno",
+const MATERIALS: Record<string, Pair> = {
+  paving: ["Pavimentazione", "Paving"],
+  gravel: ["Ghiaia", "Gravel"],
+  permeable_paving: ["Pavimentazione permeabile", "Permeable paving"],
+  wood: ["Legno", "Wood"],
 };
 
-export const COVER_TYPE_LABELS_IT: Record<string, string> = {
-  paving: "Pavimentazione",
-  gravel: "Ghiaia",
-  permeable_paving: "Pavimentazione permeabile",
-  lawn: "Prato",
-  meadow: "Prato fiorito",
-  wood: "Bosco",
-  water: "Acqua",
-  playground_surface: "Pavimentazione area giochi",
-  sport_surface: "Pavimentazione sportiva",
+const COVER_TYPES: Record<string, Pair> = {
+  paving: ["Pavimentazione", "Paving"],
+  gravel: ["Ghiaia", "Gravel"],
+  permeable_paving: ["Pavimentazione permeabile", "Permeable paving"],
+  lawn: ["Prato", "Lawn"],
+  meadow: ["Prato fiorito", "Wildflower meadow"],
+  wood: ["Bosco", "Woodland"],
+  water: ["Acqua", "Water"],
+  playground_surface: ["Pavimentazione area giochi", "Playground surface"],
+  sport_surface: ["Pavimentazione sportiva", "Sports surface"],
 };
 
-export const CARD_CATEGORY_LABELS_IT: Record<string, string> = {
-  vegetazione: "Vegetazione",
-  copertura_suolo: "Copertura del suolo",
-  elementi_architettonici: "Elementi architettonici",
-  sociale: "Sociale",
+const CARD_CATEGORIES: Record<string, Pair> = {
+  vegetazione: ["Vegetazione", "Vegetation"],
+  copertura_suolo: ["Copertura del suolo", "Ground cover"],
+  elementi_architettonici: ["Elementi architettonici", "Built elements"],
+  sociale: ["Sociale", "Social"],
 };
 
-export const PERGOLA_SIZE_LABELS_IT: Record<string, string> = {
-  small: "Piccola",
-  medium: "Media",
-  large: "Grande",
+const PERGOLA_SIZES: Record<string, Pair> = {
+  small: ["Piccola", "Small"],
+  medium: ["Media", "Medium"],
+  large: ["Grande", "Large"],
 };
 
-export const AGE_RANGE_LABELS_IT: Record<string, string> = {
-  junior: "Bambini",
-  mixed: "Tutte le età",
+const AGE_RANGES: Record<string, Pair> = {
+  junior: ["Bambini", "Children"],
+  mixed: ["Tutte le età", "All ages"],
 };
 
-export const TARGET_AGE_LABELS_IT: Record<string, string> = {
-  teens: "Ragazzi",
-  mixed: "Tutte le età",
+const TARGET_AGES: Record<string, Pair> = {
+  teens: ["Ragazzi", "Teenagers"],
+  mixed: ["Tutte le età", "All ages"],
 };
 
-const OPTION_LABEL_MAPS: Record<string, Record<string, string>> = {
-  species: SPECIES_LABELS_IT,
-  material: MATERIAL_LABELS_IT,
-  cover_type: COVER_TYPE_LABELS_IT,
-  size: PERGOLA_SIZE_LABELS_IT,
-  age_range: AGE_RANGE_LABELS_IT,
-  target_age: TARGET_AGE_LABELS_IT,
+const AGE_CLASSES: Record<string, Pair> = {
+  sapling: ["Plantina", "Sapling"],
+  young: ["Giovane", "Young"],
+  mature: ["Maturo", "Mature"],
+  veteran: ["Veterano", "Veteran"],
 };
+
+const OPTION_LABEL_MAPS: Record<string, Record<string, Pair>> = {
+  species: SPECIES,
+  material: MATERIALS,
+  cover_type: COVER_TYPES,
+  size: PERGOLA_SIZES,
+  age_range: AGE_RANGES,
+  target_age: TARGET_AGES,
+};
+
+export function speciesLabel(code: string): string {
+  return pick(SPECIES, code);
+}
+
+export function coverTypeLabel(code: string): string {
+  return pick(COVER_TYPES, code);
+}
+
+export function cardCategoryLabel(code: string): string {
+  return pick(CARD_CATEGORIES, code);
+}
+
+export function ageClassLabel(code: string): string {
+  return pick(AGE_CLASSES, code);
+}
 
 export function optionLabel(paramKey: string, value: string): string {
-  return OPTION_LABEL_MAPS[paramKey]?.[value] ?? value;
+  const labels = OPTION_LABEL_MAPS[paramKey];
+  return labels ? pick(labels, value) : value;
 }
 
-/** "Ora" / "+Na" — shared by the time slider and anywhere an intervention's
- * `planted_year` needs to be shown, so the two stay in the same vocabulary. */
+/** A card's name, from the backend's catalog (GET /api/cards). */
+export function cardLabel(card: CardSpec): string {
+  return tr(card.label, card.label_en);
+}
+
+/** A card parameter's name, from the backend's catalog. */
+export function paramLabel(param: ParamSpec): string {
+  return tr(param.label, param.label_en);
+}
+
+/** "Ora" / "+Na" ("Now" / "+Ny") — shared by the time slider and anywhere
+ * an intervention's `planted_year` needs to be shown, so the two stay in the
+ * same vocabulary. */
 export function yearLabel(t: number): string {
-  return t === 0 ? "Ora" : `+${t}a`;
+  return t === 0 ? tr("Ora", "Now") : tr(`+${t}a`, `+${t}y`);
 }
-
-export const AGE_CLASS_LABELS_IT: Record<string, string> = {
-  sapling: "Plantina",
-  young: "Giovane",
-  mature: "Maturo",
-  veteran: "Veterano",
-};
 
 /** One-line "Label: value · Label: value" summary of an intervention's
  * parameters, for the intervention list and the 3D info card. */
 export function summarizeParams(card: CardSpec | undefined, params: Record<string, unknown>): string {
   if (!card) return "";
   return card.params
-    .map((p) => `${p.label}: ${optionLabel(p.key, String(params[p.key] ?? p.default))}`)
+    .map((p) => `${paramLabel(p)}: ${optionLabel(p.key, String(params[p.key] ?? p.default))}`)
     .join(" · ");
 }

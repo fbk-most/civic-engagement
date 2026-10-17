@@ -4,24 +4,29 @@
  * destination — straight across to another exit, or to a kiosk, playground
  * or fountain where they stop for a while — and leaves; then someone else
  * comes in elsewhere under the same id. Routes are shortest paths on the
- * repaired footpath network (see network.ts); at night, unlit stretches
- * count as longer, so people prefer lit paths.
+ * repaired footpath network (see network.ts), as they feel: at night,
+ * unlit stretches count as longer, so people prefer lit paths; and so do
+ * stretches in strong heat or cold (comfort.ts), so people take the shade
+ * in summer and the sun in winter. Where they stop feels the temperature
+ * too: fewer go to a hot playground, more to a fountain on a hot day.
  *
  * Who walks (character, speed, whether they have a dog) is fixed per walker
  * id, like the rest of the crowd. Where along their route each one is
  * depends on how long the view has been open.
  */
 
-import { hashString } from "../hash";
+import { hashString, hashUnit } from "../hash";
 import { CHARACTERS, standingHeight } from "./characters";
-import { findRoute, type NetworkComponent, type WalkNetwork } from "./network";
+import { stayFactor, visitFactor } from "./comfort";
+import { findRoute, type NetworkComponent, type RouteConditions, type WalkNetwork } from "./network";
 import { Track } from "./track";
 
-// Unlit path length counts this many times over at night.
-const DARK_PENALTY = 3;
 const DOG_SHARE = 0.15;
 // Destination mix: the rest walk straight through to another exit.
 const TO_DESTINATION = 0.3;
+// However strong the pull (fountains on a hot day), most people still just
+// cross.
+const TO_DESTINATION_MAX = 0.5;
 const STROLL = 0.15;
 const PAUSE_S: [number, number] = [5, 15];
 // How quickly a walker's heading follows a bend in the path (1/s).
@@ -42,10 +47,10 @@ export interface WalkerSpec {
 }
 
 function draw(key: string): number {
-  return hashString(key) / 2 ** 32;
+  return hashUnit(key);
 }
 
-/** `count` walkers (see `crowdSize` in plan.ts). They're numbered, so a
+/** `count` walkers (see `walkerCount` in plan.ts). They're numbered, so a
  * busier hour adds walkers and a quieter one removes the highest-numbered —
  * the others carry on undisturbed. */
 export function planWalkers(count: number, network: WalkNetwork | null): WalkerSpec[] {
@@ -63,6 +68,18 @@ export function planWalkers(count: number, network: WalkNetwork | null): WalkerS
       dog: dogDraw < DOG_SHARE ? "husky" : null,
     };
   });
+}
+
+/** Index into `weights`, with probability proportional to its weight, for a
+ * 0-1 draw `u`. */
+function pickWeighted(weights: number[], u: number): number {
+  const total = weights.reduce((sum, weight) => sum + weight, 0);
+  let left = u * total;
+  for (let i = 0; i < weights.length; i++) {
+    left -= weights[i];
+    if (left < 0) return i;
+  }
+  return weights.length - 1;
 }
 
 /** Small seeded PRNG (mulberry32). */
@@ -92,7 +109,7 @@ export class WalkerMotion {
   private readonly network: WalkNetwork;
   private readonly component: NetworkComponent;
   private readonly random: () => number;
-  private dark: boolean;
+  private conditions: RouteConditions;
   private track: Track | null = null;
   private travelled = 0;
   private pauseLeft = 0;
@@ -101,10 +118,10 @@ export class WalkerMotion {
   private goal: { node: number; lookAt: Point | null; leave: boolean } | null = null;
   private readonly sample = { x: 0, z: 0, heading: 0 };
 
-  constructor(spec: WalkerSpec, network: WalkNetwork, dark: boolean) {
+  constructor(spec: WalkerSpec, network: WalkNetwork, conditions: RouteConditions) {
     this.spec = spec;
     this.network = network;
-    this.dark = dark;
+    this.conditions = conditions;
     this.random = seeded(hashString(`${spec.id}:trips`));
     // Bigger pieces of the network get proportionally more walkers.
     const total = network.components.reduce((sum, c) => sum + c.length, 0);
@@ -117,8 +134,9 @@ export class WalkerMotion {
     this.place(0, true);
   }
 
-  setDark(dark: boolean): void {
-    this.dark = dark;
+  /** For the next trip: the one under way keeps its route. */
+  setConditions(conditions: RouteConditions): void {
+    this.conditions = conditions;
   }
 
   update(delta: number): void {
@@ -182,18 +200,37 @@ export class WalkerMotion {
     for (let attempt = 0; attempt < 5; attempt++) {
       const roll = this.random();
       const destinations = this.component.destinations;
+      const felt = this.conditions.felt;
+      // Each destination draws its share of TO_DESTINATION, times how much
+      // its felt temperature puts people off (or, a fountain on a hot day,
+      // draws them): a hot playground loses visitors to the way out. Read
+      // where they'd stand, not at the thing itself (a fountain's basin
+      // has no felt temperature).
+      const pulls = destinations.map((target) =>
+        felt ? visitFactor(target.kind, felt(...this.network.nodes[target.node])) : 1
+      );
+      const toDestination = Math.min(
+        TO_DESTINATION_MAX,
+        (TO_DESTINATION * pulls.reduce((sum, pull) => sum + pull, 0)) / Math.max(1, pulls.length)
+      );
       let goal: { node: number; lookAt: Point | null; leave: boolean };
-      if (!leaving && roll < TO_DESTINATION && destinations.length > 0) {
-        const target = destinations[Math.floor(this.random() * destinations.length)];
+      if (!leaving && roll < toDestination && destinations.length > 0) {
+        const target = destinations[pickWeighted(pulls, this.random())];
         goal = { node: target.node, lookAt: target.lookAt, leave: false };
-      } else if (!leaving && roll < TO_DESTINATION + STROLL) {
-        // A stroll to somewhere in the middle, a look around, then out.
+      } else if (!leaving && roll < toDestination + STROLL) {
+        // A stroll to somewhere in the middle, a look around, then out —
+        // unless it's too hot or cold there to stand around.
         const nodes = this.component.nodes;
-        goal = { node: nodes[Math.floor(this.random() * nodes.length)], lookAt: null, leave: false };
+        const node = nodes[Math.floor(this.random() * nodes.length)];
+        const stay = felt ? stayFactor(felt(...this.network.nodes[node])) : 1;
+        goal =
+          this.random() < stay
+            ? { node, lookAt: null, leave: false }
+            : { node: this.pickExit(), lookAt: null, leave: true };
       } else {
         goal = { node: this.pickExit(), lookAt: null, leave: true };
       }
-      const route = findRoute(this.network, from, goal.node, this.dark ? DARK_PENALTY : 1);
+      const route = findRoute(this.network, from, goal.node, this.conditions);
       if (!route || route.length < 2) continue;
       this.goal = goal;
       this.track = new Track(

@@ -29,7 +29,7 @@ from civic_twin import scene
 from civic_twin.config import SITE
 from civic_twin.geo_utils import to_projected
 from civic_twin.models.schema import Intervention
-from civic_twin.scene import MAX_T, MIN_T, current_scene, indicator_series, load_baseline
+from civic_twin.scene import MAX_T, MIN_T, current_scene, indicator_series, load_baseline, thermal_indicators
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "reference"
 CREATED_AT = "2026-09-30T00:00:00+00:00"
@@ -138,7 +138,14 @@ def capture(interventions: list[Intervention]) -> dict:
 
     years = []
     for t in range(MIN_T, MAX_T + 1):
-        response = current_scene(t).model_dump(mode="json")
+        # The revision depends on the backend's boot, not on the model; the
+        # site's name is only for the window title.
+        response = current_scene(t).model_dump(mode="json", exclude={"revision", "site_name"})
+        # Served apart since the scene stopped waiting for them: put back
+        # where they were recorded, so the same numbers are compared.
+        thermal = thermal_indicators(t).model_dump(mode="json")
+        response["indicators"]["thermal_comfort"] = thermal["scenario"]
+        response["baseline_indicators"]["thermal_comfort"] = thermal["baseline"]
         years.append({
             "t": t,
             "indicators": response["indicators"],

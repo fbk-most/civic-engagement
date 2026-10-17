@@ -66,7 +66,7 @@ const MAX_FACING_TILT_RAD = (26 * Math.PI) / 180;
  * different species. */
 export const SUMMER_PALETTE = [0xffffff, 0xe6efd8, 0xd2e0bd, 0xf0f2e2, 0xc8d9b4];
 
-/** Warm gold/orange/rust mix leaves are lerped toward as `autumnMix`
+/** Warm gold/orange/rust mix leaves are blended toward as `autumnMix`
  * rises — picked per cluster so one tree shows a blend rather than flipping
  * uniformly. */
 const AUTUMN_PALETTE = [0xd9a441, 0xc9622a, 0x9c3b2e, 0xe0b95c];
@@ -110,28 +110,30 @@ function shuffled<T>(items: T[], random: () => number): T[] {
 }
 
 /**
+ * The full canopy, whatever the season: the season is applied when drawing
+ * (see `vegetation.ts`'s `applySeason`), so a month change needs no new
+ * geometry. Two attributes carry it:
+ * - `rank` (0-1): the cluster's place in the tree's random cluster order.
+ *   A leaf density d draws the clusters with rank < d — the same tree,
+ *   thinning out, rather than a new random pick per month.
+ * - `autumnColor`: the cluster's autumn tint, blended over its summer
+ *   `color` by the season's `autumnMix`.
+ *
+ * One cluster is placed per selected twig — real leaf clusters sit at real
+ * twig tips, not tiled over an implicit surface.
+ *
  * @param greenPalette Summer colour pool a cluster's base tint is drawn
  *   from.
- * @param autumnMix 0 (pure `greenPalette`) to 1 (fully lerped toward
- *   `AUTUMN_PALETTE`) — pass 0 for evergreens, which don't grade (though
- *   evergreens use `needles.ts` instead of this module entirely now).
- * @param density 0 (no clusters at all) to 1 (full canopy) — the seasonal
- *   leaf-out/leaf-drop knob, see `sun.leafDensity`. One cluster is placed
- *   per selected twig — real leaf clusters sit at real twig tips, not tiled
- *   over an implicit surface — so `density` directly scales how many of
- *   `structure.twigs` get one.
  */
 export function buildLeafGeometry(
   structure: TreeStructure,
   seed: number,
   canopyDiameterM: number,
-  density: number,
-  greenPalette: number[],
-  autumnMix: number
+  greenPalette: number[]
 ): THREE.BufferGeometry | null {
   const random = mulberry32(seed);
   const candidates = structure.twigs;
-  const targetClusters = Math.round(candidates.length * CLUSTERS_PER_TWIG * Math.max(0, Math.min(1, density)));
+  const targetClusters = Math.round(candidates.length * CLUSTERS_PER_TWIG);
   // null rather than an empty BufferGeometry: an attributeless geometry
   // pushed into vegetation.ts's merge array would break `mergeGeometries`,
   // which expects every input to share the same attributes.
@@ -144,6 +146,8 @@ export function buildLeafGeometry(
   const normals: number[] = [];
   const uvs: number[] = [];
   const colors: number[] = [];
+  const autumnColors: number[] = [];
+  const ranks: number[] = [];
   const indices: number[] = [];
 
   const outward = new THREE.Vector3();
@@ -198,10 +202,8 @@ export function buildLeafGeometry(
     // sprig", which plausibly shares a colour even as neighbouring sprigs
     // vary.
     color.setHex(greenPalette[Math.floor(random() * greenPalette.length)]);
-    if (autumnMix > 0) {
-      autumnColor.setHex(AUTUMN_PALETTE[Math.floor(random() * AUTUMN_PALETTE.length)]);
-      color.lerp(autumnColor, autumnMix);
-    }
+    autumnColor.setHex(AUTUMN_PALETTE[Math.floor(random() * AUTUMN_PALETTE.length)]);
+    const rank = (cluster + 0.5) / targetClusters;
 
     for (let plane = 0; plane < PLANES_PER_CLUSTER; plane++) {
       const angle = (plane * Math.PI * 2) / PLANES_PER_CLUSTER;
@@ -216,6 +218,8 @@ export function buildLeafGeometry(
         normals.push(facingP.x, facingP.y, facingP.z);
         uvs.push(offsetU + tu * FOLIAGE_UV_REPEAT, offsetV + tv * FOLIAGE_UV_REPEAT);
         colors.push(color.r, color.g, color.b);
+        autumnColors.push(autumnColor.r, autumnColor.g, autumnColor.b);
+        ranks.push(rank);
       }
       indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
     }
@@ -226,6 +230,8 @@ export function buildLeafGeometry(
   geometry.setAttribute("normal", new THREE.Float32BufferAttribute(normals, 3));
   geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
   geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+  geometry.setAttribute("autumnColor", new THREE.Float32BufferAttribute(autumnColors, 3));
+  geometry.setAttribute("rank", new THREE.Float32BufferAttribute(ranks, 1));
   geometry.setIndex(indices);
   return geometry;
 }

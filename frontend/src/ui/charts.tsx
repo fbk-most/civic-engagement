@@ -7,6 +7,7 @@
  */
 
 import type { MouseEvent } from "react";
+import { locale, tr } from "../i18n/lang";
 import { yearLabel } from "../i18n/labels";
 
 const WIDTH = 360;
@@ -52,9 +53,9 @@ function niceTicks(min: number, max: number, count = 3): number[] {
 
 function formatTick(value: number): string {
   const abs = Math.abs(value);
-  if (abs >= 1e6) return `${(value / 1e6).toLocaleString("it-IT", { maximumFractionDigits: 1 })} M`;
-  if (abs >= 1e4) return `${(value / 1e3).toLocaleString("it-IT", { maximumFractionDigits: 0 })} k`;
-  return value.toLocaleString("it-IT", { maximumFractionDigits: 1 });
+  if (abs >= 1e6) return `${(value / 1e6).toLocaleString(locale(), { maximumFractionDigits: 1 })} M`;
+  if (abs >= 1e4) return `${(value / 1e3).toLocaleString(locale(), { maximumFractionDigits: 0 })} k`;
+  return value.toLocaleString(locale(), { maximumFractionDigits: 1 });
 }
 
 /** Clicking anywhere in the plot picks the nearest year. */
@@ -104,7 +105,7 @@ function ClickArea({ years, onSelectYear }: Omit<Frame, "t">) {
       height={PLOT_H}
       onClick={(event) => onSelectYear(yearAtClick(event, years))}
     >
-      <title>Clicca per spostarti a quell'anno</title>
+      <title>{tr("Clicca per spostarti a quell'anno", "Click to move to that year")}</title>
     </rect>
   );
 }
@@ -124,7 +125,7 @@ export function LineChart({
   zeroBased,
 }: Frame & { series: LineSeries[]; zeroBased: boolean }) {
   const all = series.flatMap((s) => s.values).filter((v): v is number => v !== null);
-  if (all.length === 0) return <p className="chart__empty">Non disponibile</p>;
+  if (all.length === 0) return <p className="chart__empty">{tr("Non disponibile", "Not available")}</p>;
   const ticks = zeroBased
     ? niceTicks(Math.min(0, ...all), Math.max(0, ...all))
     : niceTicks(Math.min(...all), Math.max(...all));

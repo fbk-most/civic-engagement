@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import type { CardSpec, Intervention } from "../api/types";
-import { summarizeParams, yearLabel } from "../i18n/labels";
+import { tr } from "../i18n/lang";
+import { cardLabel, summarizeParams, yearLabel } from "../i18n/labels";
 import { CardIcon } from "./cardIcons";
 import { CATEGORY_COLORS } from "./categoryColors";
 
@@ -19,18 +20,18 @@ export function InterventionInfoCard({ intervention, card, onEdit, onClose }: Pr
     <div className="param-form intervention-info" style={{ "--card-color": color } as CSSProperties}>
       <div className="intervention-info__title">
         <span className="intervention-info__icon">{card && <CardIcon cardType={card.card_type} />}</span>
-        <h3>{card?.label ?? intervention.card_type}</h3>
+        <h3>{card ? cardLabel(card) : intervention.card_type}</h3>
       </div>
       <p className="param-form__planted-year">
-        In vigore da: <strong>{yearLabel(intervention.planted_year)}</strong>
+        {tr("In vigore da: ", "In effect from: ")}<strong>{yearLabel(intervention.planted_year)}</strong>
       </p>
       <p className="intervention-info__summary">{summarizeParams(card ?? undefined, intervention.params)}</p>
       <div className="param-form__actions">
         <button type="submit" onClick={onEdit}>
-          Modifica nella mappa 2D
+          {tr("Modifica nella mappa 2D", "Edit on the 2D map")}
         </button>
         <button type="button" onClick={onClose}>
-          Chiudi
+          {tr("Chiudi", "Close")}
         </button>
       </div>
     </div>

@@ -1,9 +1,11 @@
+import { tr } from "../i18n/lang";
+
 export type AppView = "2d" | "3d" | "indicators";
 
-const TABS: { value: AppView; label: string }[] = [
-  { value: "2d", label: "Mappa 2D" },
-  { value: "3d", label: "Vista 3D" },
-  { value: "indicators", label: "Indicatori" },
+const TABS: { value: AppView; label: [it: string, en: string] }[] = [
+  { value: "2d", label: ["Mappa 2D", "2D map"] },
+  { value: "3d", label: ["Vista 3D", "3D view"] },
+  { value: "indicators", label: ["Indicatori", "Indicators"] },
 ];
 
 interface Props {
@@ -23,7 +25,7 @@ export function ViewTabs({ view, onChange }: Props) {
           className={tab.value === view ? "view-tabs__tab view-tabs__tab--active" : "view-tabs__tab"}
           onClick={() => onChange(tab.value)}
         >
-          {tab.label}
+          {tr(...tab.label)}
         </button>
       ))}
     </nav>

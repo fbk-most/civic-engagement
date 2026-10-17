@@ -19,11 +19,13 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from civic_twin.domains.urban.parameters import GROVE_PLANTING_DIAMETER
-from civic_twin.geo_utils import centroid_point, grove_points_within
+from shapely.ops import unary_union
+
+from civic_twin.geo_utils import centroid_point, grove_points_within, points_along, to_projected_many
 from civic_twin.models.schema import BaselineScene, CoverPolygon, DiscreteElement, Intervention
 
-# A grove's trees are counted per grove for its cost (see encode.py).
-TreeOrigin = Literal["baseline", "planted", "grove"]
+# A grove's or a row's trees are counted per card for its cost (see encode.py).
+TreeOrigin = Literal["baseline", "planted", "grove", "row"]
 
 
 @dataclass(frozen=True)
@@ -102,6 +104,36 @@ def _planted_tree(
     )
 
 
+# Where a tree row doesn't plant (see `_room_for_trees`): this far from a
+# path's edge or a building, and nowhere under another tree's crown.
+ROW_CLEARANCE_M = 0.5
+ROW_TRAFFIC_TYPES = ("path", "street", "crossing")
+
+
+def _room_for_trees(layout: Layout, points: list[dict]) -> list[dict]:
+    """The points where a tree fits: not on a path, street or crossing, not
+    in or against a building, not under a tree already there (at its
+    planting size) — so a row drawn along a path, across it or past old
+    trees only plants where it makes sense."""
+    elements = [e.element for e in layout.entries if e.element is not None]
+    traffic = [e for e in elements if e.type in ROW_TRAFFIC_TYPES]
+    buildings = [e for e in elements if e.type == "building"]
+    projected = to_projected_many(
+        [e.geometry for e in traffic] + [e.geometry for e in buildings] + [s.geometry for s in layout.trees] + points
+    )
+    n_traffic, n_buildings, n_trees = len(traffic), len(buildings), len(layout.trees)
+    blocked = unary_union(
+        [g.buffer(e.properties.get("width", 2.0) / 2 + ROW_CLEARANCE_M) for e, g in zip(traffic, projected)]
+        + [g.buffer(ROW_CLEARANCE_M) for g in projected[n_traffic:n_traffic + n_buildings]]
+        + [
+            g.buffer(max(slot.initial_diameter / 2, 1.0))
+            for slot, g in zip(layout.trees, projected[n_traffic + n_buildings:n_traffic + n_buildings + n_trees])
+        ]
+    )
+    candidates = projected[n_traffic + n_buildings + n_trees:]
+    return [point for point, at in zip(points, candidates) if not blocked.contains(at)]
+
+
 def _add_intervention(layout: Layout, intervention: Intervention) -> None:
     start = intervention.planted_year
     params = intervention.params
@@ -120,6 +152,17 @@ def _add_intervention(layout: Layout, intervention: Intervention) -> None:
         element("path", {"width": params.get("width", 2.0), "material": params.get("material", "gravel")})
     elif card in ("add_streetlight", "add_bench", "add_kiosk"):
         element(card.removeprefix("add_"), {})
+    elif card == "plant_tree_row":
+        # One tree every `spacing` metres or so along the line, ends
+        # included, wherever there's room.
+        diameter = params.get("canopy_diameter", 2.0)
+        points = _room_for_trees(layout, points_along(intervention.geometry, params.get("spacing", 8.0)))
+        for i, point in enumerate(points):
+            layout.add_tree(_planted_tree(intervention, "row", point, diameter, suffix=f"-{i}"))
+    elif card == "add_streetlight_path":
+        # One streetlight every `spacing` metres or so, ends included.
+        for i, point in enumerate(points_along(intervention.geometry, params.get("spacing", 15.0))):
+            element("streetlight", {}, point, suffix=f"-{i}")
     elif card == "add_pergola":
         element("pergola", {"size": params.get("size", "medium")})
     elif card == "change_ground_cover":

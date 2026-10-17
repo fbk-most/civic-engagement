@@ -16,6 +16,21 @@ export function hashString(value: string): number {
   return hash >>> 0;
 }
 
+/** Deterministic 0-1 draw for a key. `hashString` alone won't do: keys that
+ * differ only in their last characters (`…:seat0`, `…:seat1`) get nearly the
+ * same high bits, so their draws would rise and fall together — both seats
+ * of a bench taken or both free. A final avalanche (MurmurHash3's fmix32)
+ * spreads every input bit over the whole result. */
+export function hashUnit(value: string): number {
+  let h = hashString(value);
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
+  return (h >>> 0) / 2 ** 32;
+}
+
 /** Deterministic yaw (radians) for furniture OSM gives no orientation to
  * (benches, kiosks, playgrounds...) — a plaza of identically aligned benches
  * looks like a rendering artefact. Shared so anything placed relative to a

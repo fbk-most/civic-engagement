@@ -46,39 +46,34 @@ function buildOne(job: TreeJob): TreeBuildResult {
     index: barkGeometry.index!.array as Uint16Array | Uint32Array,
   };
 
+  // The full canopy: the season is applied when drawing (see
+  // `vegetation.ts`), so it isn't part of the job.
   let foliage: FoliageAttributes | null = null;
-  if (job.density > 0) {
-    if (job.isEvergreen) {
-      const needleGeometry = buildNeedleGeometry(structure, hashString(`${job.id}:needles`), job.density);
-      if (needleGeometry) {
-        needleGeometry.translate(job.x, 0, job.z);
-        foliage = {
-          kind: "needle",
-          position: needleGeometry.attributes.position.array as Float32Array,
-          normal: needleGeometry.attributes.normal.array as Float32Array,
-          color: needleGeometry.attributes.color.array as Float32Array,
-        };
-      }
-    } else {
-      const leafGeometry = buildLeafGeometry(
-        structure,
-        hashString(`${job.id}:leaves`),
-        job.canopyDiameter,
-        job.density,
-        SUMMER_PALETTE,
-        job.autumnMix
-      );
-      if (leafGeometry) {
-        leafGeometry.translate(job.x, 0, job.z);
-        foliage = {
-          kind: "leaf",
-          position: leafGeometry.attributes.position.array as Float32Array,
-          normal: leafGeometry.attributes.normal.array as Float32Array,
-          uv: leafGeometry.attributes.uv.array as Float32Array,
-          color: leafGeometry.attributes.color.array as Float32Array,
-          index: leafGeometry.index!.array as Uint16Array | Uint32Array,
-        };
-      }
+  if (job.isEvergreen) {
+    const needleGeometry = buildNeedleGeometry(structure, hashString(`${job.id}:needles`), 1);
+    if (needleGeometry) {
+      needleGeometry.translate(job.x, 0, job.z);
+      foliage = {
+        kind: "needle",
+        position: needleGeometry.attributes.position.array as Float32Array,
+        normal: needleGeometry.attributes.normal.array as Float32Array,
+        color: needleGeometry.attributes.color.array as Float32Array,
+      };
+    }
+  } else {
+    const leafGeometry = buildLeafGeometry(structure, hashString(`${job.id}:leaves`), job.canopyDiameter, SUMMER_PALETTE);
+    if (leafGeometry) {
+      leafGeometry.translate(job.x, 0, job.z);
+      foliage = {
+        kind: "leaf",
+        position: leafGeometry.attributes.position.array as Float32Array,
+        normal: leafGeometry.attributes.normal.array as Float32Array,
+        uv: leafGeometry.attributes.uv.array as Float32Array,
+        color: leafGeometry.attributes.color.array as Float32Array,
+        autumnColor: leafGeometry.attributes.autumnColor.array as Float32Array,
+        rank: leafGeometry.attributes.rank.array as Float32Array,
+        index: leafGeometry.index!.array as Uint16Array | Uint32Array,
+      };
     }
   }
 
@@ -106,7 +101,12 @@ function collectTransferables(results: TreeBuildResult[]): ArrayBuffer[] {
         result.foliage.color.buffer as ArrayBuffer
       );
       if (result.foliage.kind === "leaf") {
-        buffers.push(result.foliage.uv.buffer as ArrayBuffer, result.foliage.index.buffer as ArrayBuffer);
+        buffers.push(
+          result.foliage.uv.buffer as ArrayBuffer,
+          result.foliage.autumnColor.buffer as ArrayBuffer,
+          result.foliage.rank.buffer as ArrayBuffer,
+          result.foliage.index.buffer as ArrayBuffer
+        );
       }
     }
   }

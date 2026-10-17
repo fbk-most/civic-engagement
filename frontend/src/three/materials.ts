@@ -106,6 +106,36 @@ function toMaterial(surface: Surface, extra?: THREE.MeshStandardMaterialParamete
   );
 }
 
+/** Leaves' autumn tint, blended in when drawing: each leaf cluster carries
+ * its autumn colour as an attribute (`autumnColor`, see foliageCards.ts),
+ * and the season's `autumnMix` mixes it over the summer `color` — so a
+ * month change is a uniform, not new geometry. */
+function withAutumnBlend(material: THREE.MeshStandardMaterial): THREE.MeshStandardMaterial {
+  const autumnMix = { value: 0 };
+  material.userData.autumnMix = autumnMix;
+  const previous = material.onBeforeCompile.bind(material);
+  const previousKey = material.customProgramCacheKey.bind(material);
+  material.onBeforeCompile = (shader, renderer) => {
+    previous(shader, renderer);
+    shader.uniforms.autumnMix = autumnMix;
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nattribute vec3 autumnColor;\nuniform float autumnMix;")
+      .replace(
+        "#include <color_vertex>",
+        "#include <color_vertex>\n#ifdef USE_COLOR\n  vColor.rgb = mix(vColor.rgb, autumnColor, autumnMix);\n#endif"
+      );
+  };
+  material.customProgramCacheKey = () => `${previousKey()}|autumn-blend`;
+  return material;
+}
+
+/** Sets how far `material` (a `foliage()` material) shows its autumn tint,
+ * 0 (summer) to 1. */
+export function setAutumnMix(material: THREE.Material, mix: number): void {
+  const uniform = material.userData.autumnMix as { value: number } | undefined;
+  if (uniform) uniform.value = mix;
+}
+
 export class MaterialLibrary {
   private cache = new Map<string, THREE.MeshStandardMaterial>();
   private ground = new Map<string, GroundTextureSet>();
@@ -261,16 +291,18 @@ export class MaterialLibrary {
    */
   foliage(atlas: THREE.Texture): THREE.MeshStandardMaterial {
     return this.get(`foliage:${atlas.uuid}`, () =>
-      toMaterial(
-        { color: 0xffffff, roughness: 0.9 },
-        {
-          map: atlas,
-          vertexColors: true,
-          alphaTest: FOLIAGE_ALPHA_TEST,
-          // Clusters are thin planes seen from both sides as the camera
-          // moves through a crown.
-          side: THREE.DoubleSide,
-        }
+      withAutumnBlend(
+        toMaterial(
+          { color: 0xffffff, roughness: 0.9 },
+          {
+            map: atlas,
+            vertexColors: true,
+            alphaTest: FOLIAGE_ALPHA_TEST,
+            // Clusters are thin planes seen from both sides as the camera
+            // moves through a crown.
+            side: THREE.DoubleSide,
+          }
+        )
       )
     );
   }
@@ -293,7 +325,7 @@ export class MaterialLibrary {
   }
 
   furniture(): THREE.MeshStandardMaterial {
-    return this.get("furniture", () => toMaterial({ color: 0x6f6a63, roughness: 0.8 }));
+    return this.get("furniture", () => toMaterial({ color: 0x4a4640, roughness: 0.8 }));
   }
 
   waterFeature(): THREE.MeshStandardMaterial {

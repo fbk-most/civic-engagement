@@ -7,8 +7,9 @@ printed map — as a 3D digital twin: a facilitator places the same intervention
 live 3D view of a real site, and the scene plus a set of indicators (CO2, thermal
 comfort, accessibility, cost, space use) update immediately.
 
-See `civic_twin/config.py` for the available pilot sites (Piazza Dante, Trento
-and Piazza XX Settembre, Bologna) and how the active one is selected. The app
+See `civic_twin/config.py` for the available pilot sites (Piazza Dante, Utopia
+— an imaginary city, built on the data of Piazza Dante in Trento — and Piazza
+XX Settembre, Bologna) and how the active one is selected. The app
 supports one active site per process — switch sites by relaunching with
 `CIVIC_TWIN_SITE=<site_id>` (defaults to `piazza_dante`), not live in-session.
 
@@ -31,15 +32,40 @@ uv run uvicorn civic_twin.main:app --reload
 # Or, for the other site:
 CIVIC_TWIN_SITE=piazza_xx_settembre uv run uvicorn civic_twin.main:app --reload
 
+# Start from a saved scenario instead of the last session (see below)
+CIVIC_TWIN_SCENARIO=demo uv run uvicorn civic_twin.main:app
+
 # Tests
 uv run pytest
 ```
+
+The workshop's cards (the session) live in the backend, shared by every open
+window, and are mirrored to `data/<site>/session.json`. A set of cards can be
+saved under a name as a *scenario*, in `data/<site>/scenarios/<id>.json`, and
+loaded back later in place of the session — from the "Scenarios" menu, or
+through the API (`GET /api/scenarios`, `POST /api/scenarios`,
+`POST /api/scenarios/{id}/load`, `DELETE /api/scenarios/{id}`;
+`POST /api/session/clear` starts again with no cards). Whatever a load
+replaces is kept as `data/<site>/session.<timestamp>.json`.
+`CIVIC_TWIN_SCENARIO=<id>` loads a scenario when the backend starts — at
+every start, `--reload` restarts included, so leave it out once a workshop
+is under way.
 
 The model — tree growth, and the indicators computed over the 30-year
 horizon — is a [civic-digital-twins](https://github.com/fbk-most/civic-digital-twins)
 model (a dependency installed by uv), in `civic_twin/domains/urban/`. The
 backend evaluates it once per set of interventions, for every year at once,
 and serves the scene and the indicators for the year asked.
+
+Felt temperature is a second model (`civic_twin/domains/urban/thermal_field.py`):
+a 1 m grid over the site, hour by hour through one day, from the shade of
+buildings, trees and pergolas (real sun position for the date), the ground's
+surface and a typical day's air temperature for Trento, warming over the
+years by a climate assumption (a summer like 2022 becomes the usual one in
+ten years, see `CLIMATE_WARMING_C`). It is evaluated on
+demand — `GET /api/thermal-field?t=&month=&day=` — and its values at a
+reference moment (21 June, 11:00) are the thermal indicators. A cheap,
+uncalibrated proxy: see `parameters.py`.
 
 `tests/test_reference.py` checks that what the backend serves is unchanged
 against outputs recorded in `tests/fixtures/reference/`, for both sites. It
@@ -58,6 +84,19 @@ cd frontend
 npm install
 npm run dev     # http://localhost:5173, proxies /api to the backend on :8000
 ```
+
+For workshops, demos and performance measurements, use the production build
+instead:
+
+```bash
+npm run build && npm run preview   # http://localhost:4173, same proxy
+```
+
+The development build is much slower in the 3D view: React's development
+mode records every component render for the browser's performance panel,
+diffing their props, and the 3D view's props are large (the scene, the
+felt-temperature fields). A date change measured about 2.5 s in development,
+almost all of it that bookkeeping.
 
 ### Realistic 3D view
 
@@ -97,15 +136,20 @@ The frontend reads a few optional parameters from its URL (see
 
 | Parameter | Values | Effect |
 | --- | --- | --- |
+| `lang` | `it`, `en` | Interface language (default: the last one chosen with the IT/EN switch, else English). |
 | `viewer` | `1` | Open on the 3D view. |
 | `t` | years, `0`–`30` | Scenario year (as the "Anno" slider). |
 | `month`, `day`, `hour` | e.g. `6`, `21`, `22.5` | Date and time for the sun; all three are needed. |
 | `lng`, `lat`, `eyeHeight`, `bearing`, `pitch` | degrees / metres | A placed viewpoint (all five needed); opens the 3D view there. |
 | `fov` | degrees | Field of view for that viewpoint (optional). |
 | `life` | `off`, `still`, `live` | People and traffic: hidden, frozen, moving (default `live`). A `still` link always shows the same picture. |
-| `perf` | `1` | Performance readout, with the "Misura" day/night benchmark. |
+| `perf` | `1` | Performance readout, with the "Measure" day/night and "Responsiveness" benchmarks. |
 | `lights` | `all` | Comparison only: a real light for every streetlight, as before the simplified lamp lighting (much slower at night). |
 | `realLights` | `1`–`10` | Testing only: how many streetlights near the view get a real, shadow-casting light (default 8). |
+| `thermal` | `1` | Open with the felt-temperature panel open and its field drawn on the ground. |
+| `panels` | `closed` | Open with the side boxes (cards, interventions, key indicators) collapsed. |
+| `interventions` | `attuale`, `carte`, `simulazione` | Open on "Situazione attuale", "Carte proposte" or "Simulazione" (default). |
+| `comfort` | `off` | Comparison only: people ignore the felt temperature (by default they stop less, and walk less, where it's very hot or cold). |
 
 The active site is not a URL parameter: it's chosen when starting the backend
 (`CIVIC_TWIN_SITE`, see above).

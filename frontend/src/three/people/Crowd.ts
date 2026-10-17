@@ -9,11 +9,11 @@
 
 import * as THREE from "three";
 import * as SkeletonUtils from "three/examples/jsm/utils/SkeletonUtils.js";
-import { hashString } from "../hash";
+import { hashUnit } from "../hash";
 import { loadCharacters, loadDogs, type CharacterAsset, type DogAsset } from "./assets";
 import { Dog, type DogOwner } from "./dog";
 import { GazeGroup, Gaze } from "./gaze";
-import type { WalkNetwork } from "./network";
+import type { RouteConditions, WalkNetwork } from "./network";
 import type { PersonPlacement } from "./plan";
 import { PoseLayer } from "./poseLayer";
 import { applySeatedPose, hipCentre } from "./seatedPose";
@@ -55,7 +55,7 @@ export class Crowd {
   private plan: PersonPlacement[] = [];
   private walkerSpecs: WalkerSpec[] = [];
   private network: WalkNetwork | null = null;
-  private dark = false;
+  private conditions: RouteConditions = { dark: false, walkCosts: null, felt: null };
   private characters: CharacterAsset[] | null = null;
   private dogs: Record<DogBreed, DogAsset> | null = null;
   private disposed = false;
@@ -81,12 +81,17 @@ export class Crowd {
     this.sync();
   }
 
-  /** A new network (the paths changed) restarts every walker on it; the
-   * same network only adds/removes walkers as the count changes. */
-  setWalkers(specs: WalkerSpec[], network: WalkNetwork | null, dark: boolean): void {
+  /** A new network (the paths changed) restarts every walker on it — the
+   * same figures (a walker's looks depend on its id only), on new routes;
+   * the same network only adds/removes walkers as the count changes. */
+  setWalkers(specs: WalkerSpec[], network: WalkNetwork | null, conditions: RouteConditions): void {
+    this.conditions = conditions;
     if (network !== this.network) {
       for (const [id, actor] of this.actors) {
-        if (actor.walker) {
+        if (!actor.walker) continue;
+        if (network) {
+          this.restartWalker(actor, network);
+        } else {
           this.remove(actor);
           this.actors.delete(id);
         }
@@ -94,8 +99,7 @@ export class Crowd {
       this.network = network;
     }
     this.walkerSpecs = specs;
-    this.dark = dark;
-    for (const actor of this.actors.values()) actor.walker?.motion.setDark(dark);
+    for (const actor of this.actors.values()) actor.walker?.motion.setConditions(conditions);
     this.sync();
   }
 
@@ -141,6 +145,11 @@ export class Crowd {
   }
 
   /** Where the walkers are, for cars to give way at crossings. */
+  /** Where everyone is (walkers: right now). */
+  positions(): { x: number; z: number; walking: boolean }[] {
+    return Array.from(this.actors.values(), (actor) => ({ x: actor.x, z: actor.z, walking: actor.walker !== null }));
+  }
+
   walkerPositions(): [number, number][] {
     const positions: [number, number][] = [];
     for (const actor of this.actors.values()) if (actor.walker) positions.push([actor.x, actor.z]);
@@ -270,13 +279,13 @@ export class Crowd {
       root.position.y += SEAT_HIP_HEIGHT_M - hips.y;
       root.position.z += placement.z - hips.z;
     }
-    fitBounds(root);
+    fitBounds(root, `${placement.character}:${placement.pose}`);
     if (placement.dog) actor.dog = new Dog(placement.dog, this.dogs![placement.dog], this.group, placement.phase);
     return actor;
   }
 
   private createWalker(spec: WalkerSpec, network: WalkNetwork): Actor {
-    const motion = new WalkerMotion(spec, network, this.dark);
+    const motion = new WalkerMotion(spec, network, this.conditions);
     const { root, mixer, layer, asset, scale } = this.createFigure(
       spec.id,
       spec.character,
@@ -307,9 +316,25 @@ export class Crowd {
       walker: { motion, walk, idle, timeScale: spec.speed / (asset.walkSpeed * scale), blend: 1 },
     };
     this.animate(actor, 0);
-    fitBounds(root);
+    fitBounds(root, `${spec.character}:walking`);
     if (spec.dog) actor.dog = new Dog(spec.dog, this.dogs![spec.dog], this.group, seededPhase(`${spec.id}:dog`));
     return actor;
+  }
+
+  /** Puts a walker on a new route — on `network`, from where its spec
+   * would start it — keeping the figure. */
+  private restartWalker(actor: Actor, network: WalkNetwork): void {
+    const walker = actor.walker!;
+    walker.motion = new WalkerMotion(walker.motion.spec, network, this.conditions);
+    actor.x = walker.motion.x;
+    actor.z = walker.motion.z;
+    actor.yaw = walker.motion.yaw;
+    actor.root.position.set(actor.x, 0, actor.z);
+    actor.root.rotation.y = actor.yaw;
+    actor.gaze = new Gaze(actor.id, actor.x, actor.z, actor.yaw);
+    // The bounds (see fitBounds) are the figure's own: moving it keeps them.
+    this.animate(actor, 0);
+    actor.dog?.update(0, this.ownerOf(actor));
   }
 
   private remove(actor: Actor): void {
@@ -330,19 +355,36 @@ const SEATED_DOG_OFFSET: [number, number] = [0.25, 0.95];
 /** 0-1 animation phase fixed per id, so a frozen scene (see Viewer's
  * "still" mode) is the same picture every time it's loaded. */
 function seededPhase(id: string): number {
-  return hashString(`${id}:phase`) / 2 ** 32;
+  return hashUnit(`${id}:phase`);
 }
 
 /** A skinned mesh's bounds come from its bind pose (arms out, standing),
  * which a seated, walking or moved figure no longer matches; recompute
  * them from the posed skeleton so frustum culling doesn't clip people at
- * the edge of the view. */
-function fitBounds(root: THREE.Object3D): void {
-  root.updateMatrixWorld(true);
+ * the edge of the view. That means skinning every vertex — about 2 ms a
+ * figure, which added up to hundreds when many appear at once — so it's
+ * done once per character and pose (`kind`), and copied after: the bounds
+ * are in the figure's own frame, and the margin covers the differences
+ * between one moment of a pose and another. */
+function fitBounds(root: THREE.Object3D, kind: string): void {
+  const meshes: THREE.SkinnedMesh[] = [];
   root.traverse((object) => {
-    const mesh = object as THREE.SkinnedMesh;
-    if (!mesh.isSkinnedMesh) return;
-    mesh.computeBoundingSphere();
-    mesh.boundingSphere!.radius *= 1.3;
+    if ((object as THREE.SkinnedMesh).isSkinnedMesh) meshes.push(object as THREE.SkinnedMesh);
+  });
+  let spheres = boundsByKind.get(kind);
+  if (!spheres || spheres.length !== meshes.length) {
+    root.updateMatrixWorld(true);
+    spheres = meshes.map((mesh) => {
+      mesh.computeBoundingSphere();
+      mesh.boundingSphere!.radius *= 1.3;
+      return mesh.boundingSphere!.clone();
+    });
+    boundsByKind.set(kind, spheres);
+    return;
+  }
+  meshes.forEach((mesh, i) => {
+    mesh.boundingSphere = spheres[i].clone();
   });
 }
+
+const boundsByKind = new Map<string, THREE.Sphere[]>();

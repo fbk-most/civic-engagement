@@ -2,8 +2,9 @@
  *
  * Deliberately simple and explainable (see the crowd plan agreed for the 3D
  * view): the people in the scene are an illustration of how a public space
- * is typically used, not a prediction of attendance for this site. The
- * indicators never feed into it.
+ * is typically used, not a prediction of attendance for this site. Felt
+ * temperature then keeps some of them away, and changes where the others
+ * stop and which way they walk (comfort.ts).
  */
 
 import { daylightFraction, type SunSetting } from "../sun";

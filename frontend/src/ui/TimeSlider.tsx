@@ -1,3 +1,4 @@
+import { tr } from "../i18n/lang";
 import { yearLabel } from "../i18n/labels";
 
 const PRESETS = [0, 5, 10, 20, 30] as const;
@@ -17,7 +18,7 @@ interface Props {
 export function TimeSlider({ t, onChange, embedded = false }: Props) {
   return (
     <div className={embedded ? "time-slider time-slider--embedded" : "time-slider"}>
-      <span className="time-slider__label">{embedded ? "Anno" : "Tempo:"}</span>
+      <span className="time-slider__label">{embedded ? tr("Anno", "Year") : tr("Tempo:", "Time:")}</span>
       <input
         type="range"
         min={0}

@@ -15,7 +15,7 @@ Source = Literal["baseline", "intervention"]
 CardType = Literal[
     "plant_tree", "new_path", "change_ground_cover", "plant_grove",
     "add_streetlight", "add_bench", "add_pergola", "add_kiosk",
-    "add_playground", "add_fitness_area",
+    "add_playground", "add_fitness_area", "add_streetlight_path", "plant_tree_row",
 ]
 CardCategory = Literal["vegetazione", "copertura_suolo", "elementi_architettonici", "sociale"]
 PlacementType = Literal["point", "polyline", "area"]
@@ -79,6 +79,7 @@ class InterventionUpdate(BaseModel):
 class ParamSpec(BaseModel):
     key: str
     label: str
+    label_en: str
     type: Literal["select", "number", "text"]
     default: Any
     options: list[str] | None = None
@@ -86,9 +87,24 @@ class ParamSpec(BaseModel):
     max: float | None = None
 
 
+class ScenarioInfo(BaseModel):
+    """A saved scenario, as listed — see civic_twin/store/scenarios.py."""
+
+    id: str = Field(description="Its file name, a slug of the name; what the load/delete routes take")
+    name: str
+    saved_at: str | None = Field(default=None, description="ISO 8601, UTC; None for a hand-made file")
+    interventions: int = Field(description="How many interventions it holds")
+
+
+class ScenarioSave(BaseModel):
+    name: str
+    overwrite: bool = Field(default=False, description="Replace a scenario with the same id")
+
+
 class CardSpec(BaseModel):
     card_type: CardType
     label: str
+    label_en: str
     category: CardCategory
     placement_type: PlacementType
     params: list[ParamSpec]
@@ -100,8 +116,13 @@ class CO2Indicator(BaseModel):
 
 
 class ThermalComfort(BaseModel):
-    estimated_temperature_c: float
-    cooling_delta_c: float
+    """Felt temperature over the site's open space at a fixed reference
+    moment (parameters.THERMAL_REFERENCE: a midsummer late morning), whatever
+    date and hour the 3D view shows."""
+
+    felt_temperature_c: float = Field(description="Mean felt temperature")
+    heat_stress_pct: float = Field(description="% of the open space at or above the heat-stress threshold")
+    sunlit_pct: float = Field(description="% of the open space in the sun")
 
 
 class Accessibility(BaseModel):
@@ -121,13 +142,33 @@ class SocialIndicators(BaseModel):
     age_inclusivity: AgeInclusivity
 
 
+class MaintenanceIndicator(BaseModel):
+    """The upkeep the interventions add (the existing square's isn't counted)."""
+
+    annual_eur: float = Field(description="In the year shown")
+    cumulative_eur: float = Field(description="Paid from now up to (not including) the year shown")
+
+
 class Indicators(BaseModel):
     space_use_pct: dict[str, float]
     co2: CO2Indicator
-    thermal_comfort: ThermalComfort
+    thermal_comfort: ThermalComfort | None = Field(
+        default=None,
+        description="Null in a scene (GET /indicators/thermal has it, so a scene doesn't wait for two "
+        "fields); set in the yearly series.",
+    )
     accessibility: Accessibility
     social: SocialIndicators
     cost_eur: float
+    maintenance: MaintenanceIndicator
+
+
+class ThermalIndicators(BaseModel):
+    """The thermal indicators at year t, with and without the interventions."""
+
+    t: int
+    scenario: ThermalComfort
+    baseline: ThermalComfort
 
 
 class IndicatorSeries(BaseModel):
@@ -136,8 +177,44 @@ class IndicatorSeries(BaseModel):
     scenario: list[Indicators] = Field(description="Indicators with the session's interventions, per year")
 
 
+class FieldGrid(BaseModel):
+    """Where a field's cells are: in the 3D view's local frame (metres east
+    and north of the anchor, see frontend/src/three/geo.ts), cell (i, j)
+    spans x0 + i*cell_m .. x0 + (i+1)*cell_m east, y0 + j*cell_m ..
+    y0 + (j+1)*cell_m north."""
+
+    anchor_lng: float
+    anchor_lat: float
+    x0: float
+    y0: float
+    nx: int
+    ny: int
+    cell_m: float
+
+
+class ThermalFieldResponse(BaseModel):
+    t: int
+    date: str = Field(description="ISO date the field is computed for")
+    scenario: Literal["current", "as_is"]
+    grid: FieldGrid
+    hours: int = Field(description="Hourly layers, from 00:00 local time")
+    data: str = Field(
+        description="Felt temperature, base64 of one byte per cell: hour by hour, each hour row by row "
+        "from the southern row, each row west to east. Byte b is offset + b * scale °C; nodata "
+        "(outside the site, inside buildings) is 255."
+    )
+    scale: float
+    offset: float
+    nodata: int
+    air_temperature_c: list[float] = Field(description="Per hour")
+    mean_felt_c: list[float] = Field(description="Per hour, over the open space")
+    heat_stress_pct: list[float] = Field(description="Per hour, over the open space")
+    sunlit_pct: list[float] = Field(description="Per hour, over the open space")
+
+
 class SceneResponse(BaseModel):
     site_id: str = Field(description="Which site this is (config.py's SITES key), e.g. for naming exports.")
+    site_name: str = Field(default="", description="The site's display name, e.g. \"Piazza Dante, Utopia\".")
     site_boundary: dict[str, Any]
     boundary_status: str = Field(
         description="\"surveyed\": site_boundary is real digitized/sourced data. \"provisional\": a "
@@ -155,4 +232,9 @@ class SceneResponse(BaseModel):
     interventions: list[Intervention] = Field(
         description="Active (non-deleted) interventions, so the frontend can render one card per "
         "placed intervention without a second round trip"
+    )
+    revision: str = Field(
+        default="",
+        description="The session's revision this scene was computed from (see GET /session/revision): "
+        "a window compares the two to tell whether another window changed the session.",
     )

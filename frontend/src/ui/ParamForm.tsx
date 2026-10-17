@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { CardSpec } from "../api/types";
-import { optionLabel, yearLabel } from "../i18n/labels";
+import { tr } from "../i18n/lang";
+import { cardLabel, optionLabel, paramLabel, yearLabel } from "../i18n/labels";
 
 interface Props {
   card: CardSpec;
@@ -20,7 +21,7 @@ interface Props {
 export function ParamForm({
   card,
   initialValues,
-  submitLabel = "Posiziona",
+  submitLabel = tr("Posiziona", "Place"),
   plantedYear,
   onSubmit,
   onCancel,
@@ -38,16 +39,16 @@ export function ParamForm({
         onSubmit(values);
       }}
     >
-      <h3>{card.label}</h3>
+      <h3>{cardLabel(card)}</h3>
       {plantedYear !== undefined && (
         <p className="param-form__planted-year">
-          {initialValues ? "In vigore da: " : "Entrerà in vigore: "}
+          {initialValues ? tr("In vigore da: ", "In effect from: ") : tr("Entrerà in vigore: ", "Takes effect: ")}
           <strong>{yearLabel(plantedYear)}</strong>
         </p>
       )}
       {card.params.map((param) => (
         <label key={param.key} className="param-form__field">
-          {param.label}
+          {paramLabel(param)}
           {param.type === "select" ? (
             <select
               value={values[param.key] as string}
@@ -79,11 +80,11 @@ export function ParamForm({
       <div className="param-form__actions">
         <button type="submit">{submitLabel}</button>
         <button type="button" onClick={onCancel}>
-          Annulla
+          {tr("Annulla", "Cancel")}
         </button>
         {onDelete && (
           <button type="button" className="param-form__delete" onClick={onDelete}>
-            Elimina
+            {tr("Elimina", "Delete")}
           </button>
         )}
       </div>

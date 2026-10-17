@@ -6,9 +6,11 @@
  * bugs. It was cheap enough (a few milliseconds) for that tradeoff to be a
  * clear win when this was written; procedural tree density has since made
  * vegetation alone ~1-1.5s of it (see `builders/vegetation.ts`,
- * `builders/branches.ts`), which now fires on every scenario-year *and*
- * every month/date change (see `SeasonState`) — worth knowing before
- * reaching for "just rebuild everything" again elsewhere in this file.
+ * `builders/branches.ts`) — which is why the trees, alone, are not rebuilt
+ * wholesale: unchanged ones are reused across scenes (see `TreeChunk`),
+ * and a date change rebuilds nothing (see `applySeason`). Worth knowing
+ * before reaching for "just rebuild everything" again elsewhere in this
+ * file.
  */
 
 import * as THREE from "three";
@@ -24,8 +26,6 @@ import { anchorFromPolygon, localBounds, polygonRings, toLocal, type GeoAnchor }
 import { MaterialLibrary } from "./materials";
 import type { SeasonState } from "./sun";
 import type { Footprint } from "./walk";
-
-const FULL_LEAF_SEASON: SeasonState = { leafDensity: 1, autumnMix: 0 };
 
 export interface BuiltScene {
   group: THREE.Group;
@@ -43,9 +43,16 @@ export interface BuiltScene {
   /** One per pond, updated every frame (camera position, elapsed time) and
    * on every sun change (direction/colour) — see Viewer.tsx. */
   waterSurfaces: Water[];
+  /** Shows the trees as in `season` (leaf density, autumn tint): the scene
+   * itself doesn't depend on the date, so a date change needs no rebuild. */
+  applySeason: (season: SeasonState) => void;
+  /** Lets go of what the scene shares with others (the tree chunks, see
+   * builders/vegetation.ts): call `disposeScene`, not this. */
+  release: () => void;
 }
 
-/** Disposes every geometry under a subtree. Materials are owned by the
+/** Disposes every geometry under a subtree — but the shared ones (the tree
+ * chunks, released by `disposeScene`). Materials are owned by the
  * MaterialLibrary and outlive individual rebuilds, so they're left alone —
  * except `Water` (see builders/water.ts), which builds itself a private
  * `ShaderMaterial` and its own reflection render target rather than sharing
@@ -57,7 +64,7 @@ export interface BuiltScene {
  * from outside it short of vendoring a patched copy.) */
 export function disposeGroup(object: THREE.Object3D): void {
   object.traverse((child) => {
-    if (child instanceof THREE.Mesh || child instanceof THREE.InstancedMesh) {
+    if ((child instanceof THREE.Mesh || child instanceof THREE.InstancedMesh) && !child.userData.sharedGeometry) {
       child.geometry.dispose();
     }
     if (child instanceof Water) {
@@ -67,11 +74,16 @@ export function disposeGroup(object: THREE.Object3D): void {
   });
 }
 
+/** Disposes a built scene that's no longer drawn. */
+export function disposeScene(built: BuiltScene): void {
+  disposeGroup(built.group);
+  built.release();
+}
+
 export async function buildScene(
   scene: SceneResponse,
   materials: MaterialLibrary,
-  showInterventions = true,
-  season: SeasonState = FULL_LEAF_SEASON
+  showInterventions = true
 ): Promise<BuiltScene> {
   const elements = showInterventions
     ? scene.elements
@@ -105,7 +117,8 @@ export async function buildScene(
     )
   );
   group.add(await ACTIVE_PROVIDER.build(buildings, { anchor, materials }));
-  group.add(await buildVegetation(elements, anchor, materials, season));
+  const vegetation = await buildVegetation(elements, anchor, materials);
+  group.add(vegetation.group);
 
   const streetlights = buildStreetlights(elements, anchor, materials);
   if (streetlights.poleMesh) group.add(streetlights.poleMesh);
@@ -122,6 +135,8 @@ export async function buildScene(
     footprints: buildingFootprints(buildings, anchor),
     streetlights,
     waterSurfaces,
+    applySeason: vegetation.applySeason,
+    release: vegetation.release,
   };
 }
 

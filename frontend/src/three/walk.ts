@@ -79,22 +79,22 @@ export class WalkController {
    * walked from — the overview camera hovers well outside the site, and
    * dropping it to eye height there would leave every step blocked — the
    * walk starts at `fallback` instead (the orbit target, i.e. what the view
-   * was centred on), or the nearest free spot around it, looking level along
-   * the same heading. */
+   * was centred on), or the nearest free spot around it. Either way it
+   * starts looking level along the same heading: a camera looking down on
+   * the square would otherwise put the walker face to the pavement. */
   lock(fallback: THREE.Vector3): void {
     const object = this.controls.object;
-    if (this.blocked(object.position.x, object.position.z)) {
-      const heading = new THREE.Vector3();
-      object.getWorldDirection(heading);
-      heading.y = 0;
-      if (heading.lengthSq() < 1e-6) heading.set(0, 0, -1);
-      heading.normalize();
+    const heading = new THREE.Vector3();
+    object.getWorldDirection(heading);
+    heading.y = 0;
+    if (heading.lengthSq() < 1e-6) heading.set(0, 0, -1);
+    heading.normalize();
 
-      const start = this.freeSpotNear(fallback.x, fallback.z);
-      object.position.set(start.x, EYE_HEIGHT_M, start.z);
-      object.lookAt(start.x + heading.x, EYE_HEIGHT_M, start.z + heading.z);
-    }
-    object.position.y = EYE_HEIGHT_M;
+    const start = this.blocked(object.position.x, object.position.z)
+      ? this.freeSpotNear(fallback.x, fallback.z)
+      : object.position;
+    object.position.set(start.x, EYE_HEIGHT_M, start.z);
+    object.lookAt(start.x + heading.x, EYE_HEIGHT_M, start.z + heading.z);
     this.controls.lock();
   }
 

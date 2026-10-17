@@ -3,7 +3,7 @@
 ## Context
 
 The demonstrator (cards on a map, 2D/3D views, indicators over time) runs
-today on two urban squares, Piazza Dante in Trento and Piazza XX Settembre
+today on two urban squares, Piazza Dante in Utopia and Piazza XX Settembre
 in Bologna. The next goal is to port it to a mountain valley and a forestry
 domain: forest diseases, fallen trees, timber production, tourism,
 socio-economic aspects. The card concept and the 2D/3D/KPI design stay the
@@ -87,7 +87,7 @@ the urban scene with its full crowd runs at 8–10 fps in the overview and at
   Choosing between the two is part of the study: texture painting is
   probably the only option at valley scale.
 - **Terrain must stay optional.** A site without a DTM is flat, as today,
-  and Trento and Bologna must look exactly the same.
+  and Piazza Dante and Bologna must look exactly the same.
 
 Known flat-ground assumptions in the current code (not exhaustive):
 

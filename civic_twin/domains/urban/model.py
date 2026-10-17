@@ -7,7 +7,10 @@ stump) and every indicator. Comparing scenarios (e.g. with the "as is" one,
 which has no interventions) is up to the caller.
 
 `UrbanModel` wires together one sub-model per concern: `TreeGrowth`,
-`Carbon`, `Thermal`, `Accessibility`, `Costs`, `Social`, `SpaceUse`.
+`Carbon`, `Accessibility`, `Costs`, `Social`, `SpaceUse`.
+
+Felt temperature, which varies across the site and through the day, is a
+separate model (see thermal_field.py).
 
 The model is built once; each scenario passes its own arrays, whose lengths
 vary from one scenario to the next, as `Scenario` overrides. All the tables
@@ -47,23 +50,20 @@ from civic_twin.domains.urban.parameters import (
     ACCESSIBILITY_SCORE_BY_MATERIAL,
     AGE_CLASS_DIAMETER_FRACTION,
     CO2_SEQUESTRATION_KG_PER_M2_CANOPY_PER_YEAR,
-    COOLING_C_PER_M2_CANOPY,
     COST_PER_COVER_M2_EUR,
     COST_PER_ELEMENT_EUR,
     COST_PER_PATH_M2_EUR,
     COST_PER_PERGOLA_EUR,
     COST_PER_TREE_EUR,
     FRAGILE_PATH_MATERIALS,
-    HARDSCAPE_COVER_TYPES,
     HEIGHT_TO_CANOPY_RATIO,
     HEIGHT_TO_CANOPY_RATIO_BY_FORM,
+    MAINTENANCE_PER_YEAR_EUR,
     HORIZON_YEARS,
-    REFERENCE_SUMMER_TEMPERATURE_C,
     SHELTER_RADIUS_M,
     SPECIES_GROWTH,
     STREETLIGHT_ILLUMINATION_RADIUS_M,
     STUMP_HEIGHT,
-    WARMING_C_PER_M2_HARDSCAPE,
 )
 from civic_twin.domains.urban.shapes import (
     AGE_CLASS,
@@ -115,6 +115,7 @@ INCLUSION_CARDS = {
     "add_pergola": "generale",
     "add_kiosk": "generale",
     "add_streetlight": "generale",
+    "add_streetlight_path": "generale",
 }
 
 # Prices, one key per (thing, kind); the `:other` keys are the fallbacks the
@@ -129,6 +130,7 @@ PRICES: dict[str, float] = {
     **{f"pergola:{k}": v for k, v in COST_PER_PERGOLA_EUR.items()},
 }
 PRICE_KEYS = list(PRICES)
+assert set(MAINTENANCE_PER_YEAR_EUR) == set(PRICES), "every priced item needs its upkeep, and vice versa"
 
 # Axes of every per-scenario input — what `encode.py` must produce.
 SCENARIO_INPUT_AXES: dict[str, tuple] = {
@@ -146,7 +148,6 @@ SCENARIO_INPUT_AXES: dict[str, tuple] = {
     "cost_quantity": (COST_ITEM,),
     "cost_price_key": (COST_ITEM, PRICE_KEY),
     "cost_start": (COST_ITEM,),
-    "cover_area": (COVER,),
     "cover_type": (COVER, COVER_TYPE),
     "cover_start": (COVER,),
     "cover_wkb": (COVER_WKB,),
@@ -312,52 +313,6 @@ class Carbon(Model):
         return Carbon.Outputs(annual=annual, cumulative=cumulative), Carbon.Expose(increment=increment, yearly=yearly)
 
 
-@define("Thermal")
-class Thermal(Model):
-    """Summer temperature: cooled by tree canopies, warmed by hardscape."""
-
-    @inputs
-    class Inputs:
-        years: TimeseriesIndex
-        canopy_area: TreeTimeseriesIndex
-        cover_area: CoverIndex
-        cover_type: Index  # (cover, cover_type), one-hot
-        cover_start: CoverIndex
-        hardscape: Index  # (cover_type,)
-        cooling_per_m2_canopy: Index
-        warming_per_m2_hardscape: Index
-        reference_temperature: Index
-
-    @outputs
-    class Outputs:
-        estimated_temperature: TimeseriesIndex
-        delta: TimeseriesIndex
-
-    @expose
-    class Expose:
-        cooling: TimeseriesIndex
-        warming: TimeseriesIndex
-
-    def compute(self, inputs: Inputs) -> tuple[Outputs, Expose]:
-        i = inputs
-        cooling = TimeseriesIndex("cooling", (i.canopy_area * i.cooling_per_m2_canopy).sum(axis=TREE))
-        hardscape = CoverIndex("hardscape cover", _lookup(i.cover_type, i.hardscape, COVER_TYPE))
-        warming = TimeseriesIndex(
-            "warming",
-            graph.where(
-                (i.years >= i.cover_start) & (hardscape > 0.5), i.cover_area * i.warming_per_m2_hardscape, 0.0
-            ).sum(axis=COVER),
-        )
-        delta = TimeseriesIndex("temperature delta", cooling + warming)
-        return (
-            Thermal.Outputs(
-                estimated_temperature=TimeseriesIndex("estimated temperature", i.reference_temperature + delta),
-                delta=delta,
-            ),
-            Thermal.Expose(cooling=cooling, warming=warming),
-        )
-
-
 @define("Accessibility")
 class Accessibility(Model):
     """Walkability (path score weighted by length) and the share of path
@@ -408,7 +363,9 @@ class Accessibility(Model):
 @define("Costs")
 class Costs(Model):
     """Cost of the interventions in place: quantity times unit price, from
-    each item's start year on."""
+    each item's start year on; and the upkeep they add, every year from
+    then on — that year's, and the total paid before it (like the CO₂
+    absorbed: at t=10, ten years of upkeep)."""
 
     @inputs
     class Inputs:
@@ -417,16 +374,29 @@ class Costs(Model):
         price_key: Index  # (cost_item, price_key), one-hot
         start: CostItemIndex
         price: Index  # (price_key,)
+        maintenance_price: Index  # (price_key,)
 
     @outputs
     class Outputs:
         cost: TimeseriesIndex
+        maintenance: TimeseriesIndex
+        maintenance_cumulative: TimeseriesIndex
 
     def compute(self, inputs: Inputs) -> Outputs:
         i = inputs
+        in_place = i.years >= i.start
         unit_price = CostItemIndex("unit price", _lookup(i.price_key, i.price, PRICE_KEY))
-        cost = graph.where(i.years >= i.start, i.quantity * unit_price, 0.0).sum(axis=COST_ITEM)
-        return Costs.Outputs(cost=TimeseriesIndex("cost", cost))
+        cost = graph.where(in_place, i.quantity * unit_price, 0.0).sum(axis=COST_ITEM)
+        unit_upkeep = CostItemIndex("unit upkeep", _lookup(i.price_key, i.maintenance_price, PRICE_KEY))
+        maintenance = TimeseriesIndex(
+            "maintenance", graph.where(in_place, i.quantity * unit_upkeep, 0.0).sum(axis=COST_ITEM)
+        )
+        running = TimeseriesIndex("maintenance running sum", maintenance.cumulative(axis=TIME))
+        return Costs.Outputs(
+            cost=TimeseriesIndex("cost", cost),
+            maintenance=maintenance,
+            maintenance_cumulative=TimeseriesIndex("maintenance cumulative", running.shift(1, axis=TIME)),
+        )
 
 
 @define("Social")
@@ -554,7 +524,6 @@ class UrbanModel(Model):
         cost_quantity: CostItemIndex
         cost_price_key: Index  # (cost_item, price_key), one-hot
         cost_start: CostItemIndex
-        cover_area: CoverIndex
         cover_type: Index  # (cover, cover_type), one-hot
         cover_start: CoverIndex
         cover_wkb: Index  # (cover_wkb,)
@@ -577,13 +546,10 @@ class UrbanModel(Model):
         age_class_diameter_fraction: Index  # (age_class,)
         stump_height: Index
         co2_per_m2_canopy: Index
-        cooling_per_m2_canopy: Index
-        warming_per_m2_hardscape: Index
-        reference_temperature: Index
-        hardscape: Index  # (cover_type,)
         material_score: MaterialIndex
         material_fragile: MaterialIndex
         price: Index  # (price_key,)
+        maintenance_price: Index  # (price_key,)
         streetlight_radius: Index
         shelter_radius: Index  # (shelter_kind,)
 
@@ -594,11 +560,11 @@ class UrbanModel(Model):
         tree_status: TreeTimeseriesIndex  # 0 absent, 1 alive, 2 stump
         co2_annual: TimeseriesIndex
         co2_cumulative: TimeseriesIndex
-        estimated_temperature: TimeseriesIndex
-        cooling_delta: TimeseriesIndex
         walkability: TimeseriesIndex
         fragile_path_pct: TimeseriesIndex
         cost: TimeseriesIndex
+        maintenance: TimeseriesIndex
+        maintenance_cumulative: TimeseriesIndex
         safety: TimeseriesIndex
         evening_winter: TimeseriesIndex
         inclusion: Index  # (inclusion_group, time)
@@ -608,8 +574,6 @@ class UrbanModel(Model):
     class Expose:
         tree_canopy_area: TreeTimeseriesIndex
         co2_yearly: TimeseriesIndex
-        cooling: TimeseriesIndex
-        warming: TimeseriesIndex
         total_path_length: TimeseriesIndex
         shelter: TimeseriesIndex
         shelter_reach: ShelterIndex
@@ -636,18 +600,13 @@ class UrbanModel(Model):
             growing_area=trees.outputs.growing_area, growing_area_next=trees.outputs.growing_area_next,
             co2_per_m2_canopy=i.co2_per_m2_canopy,
         ))
-        thermal = Thermal(inputs=Thermal.Inputs(
-            years=years, canopy_area=trees.outputs.canopy_area,
-            cover_area=i.cover_area, cover_type=i.cover_type, cover_start=i.cover_start, hardscape=i.hardscape,
-            cooling_per_m2_canopy=i.cooling_per_m2_canopy, warming_per_m2_hardscape=i.warming_per_m2_hardscape,
-            reference_temperature=i.reference_temperature,
-        ))
         accessibility = Accessibility(inputs=Accessibility.Inputs(
             years=years, length=i.path_length, material=i.path_material, start=i.path_start,
             material_score=i.material_score, material_fragile=i.material_fragile,
         ))
         costs = Costs(inputs=Costs.Inputs(
             years=years, quantity=i.cost_quantity, price_key=i.cost_price_key, start=i.cost_start, price=i.price,
+            maintenance_price=i.maintenance_price,
         ))
         social = Social(
             inputs=Social.Inputs(
@@ -673,11 +632,11 @@ class UrbanModel(Model):
                 tree_status=trees.outputs.status,
                 co2_annual=carbon.outputs.annual,
                 co2_cumulative=carbon.outputs.cumulative,
-                estimated_temperature=thermal.outputs.estimated_temperature,
-                cooling_delta=thermal.outputs.delta,
                 walkability=accessibility.outputs.walkability,
                 fragile_path_pct=accessibility.outputs.fragile_pct,
                 cost=costs.outputs.cost,
+                maintenance=costs.outputs.maintenance,
+                maintenance_cumulative=costs.outputs.maintenance_cumulative,
                 safety=social.outputs.safety,
                 evening_winter=social.outputs.evening_winter,
                 inclusion=social.outputs.inclusion,
@@ -686,8 +645,6 @@ class UrbanModel(Model):
             UrbanModel.Expose(
                 tree_canopy_area=trees.outputs.canopy_area,
                 co2_yearly=carbon.expose.yearly,
-                cooling=thermal.expose.cooling,
-                warming=thermal.expose.warming,
                 total_path_length=accessibility.expose.total_length,
                 shelter=social.expose.shelter,
                 shelter_reach=social.expose.shelter_reach,
@@ -727,17 +684,14 @@ def build_model() -> UrbanModel:
         ),
         "stump_height": Index("stump height", STUMP_HEIGHT),
         "co2_per_m2_canopy": Index("co2 per m2 canopy", CO2_SEQUESTRATION_KG_PER_M2_CANOPY_PER_YEAR),
-        "cooling_per_m2_canopy": Index("cooling per m2 canopy", COOLING_C_PER_M2_CANOPY),
-        "warming_per_m2_hardscape": Index("warming per m2 hardscape", WARMING_C_PER_M2_HARDSCAPE),
-        "reference_temperature": Index("reference temperature", REFERENCE_SUMMER_TEMPERATURE_C),
-        "hardscape": _table(
-            Index, "hardscape", [float(c in HARDSCAPE_COVER_TYPES) for c in COVER_TYPES], (COVER_TYPE,)
-        ),
         "material_score": _table(
             MaterialIndex, "material score", [ACCESSIBILITY_SCORE_BY_MATERIAL.get(m, 50) for m in MATERIALS]
         ),
         "material_fragile": _table(MaterialIndex, "fragile", [float(m in FRAGILE_PATH_MATERIALS) for m in MATERIALS]),
         "price": _table(Index, "unit price", [PRICES[k] for k in PRICE_KEYS], (PRICE_KEY,)),
+        "maintenance_price": _table(
+            Index, "unit upkeep per year", [MAINTENANCE_PER_YEAR_EUR[k] for k in PRICE_KEYS], (PRICE_KEY,)
+        ),
         "streetlight_radius": Index("streetlight radius", STREETLIGHT_ILLUMINATION_RADIUS_M),
         "shelter_radius": _table(
             Index, "shelter radius", [SHELTER_RADIUS_M[k] for k in SHELTER_KINDS], (SHELTER_KIND,)
@@ -811,8 +765,9 @@ class UrbanEvaluator(ModelEvaluator[UrbanModel, UrbanOutput]):
             return read(index, (TREE, TIME))[: self._n_trees]
 
         names = [
-            "co2_annual", "co2_cumulative", "estimated_temperature", "cooling_delta", "walkability",
-            "fragile_path_pct", "cost", "safety", "evening_winter", "inclusion", "space_use_pct",
+            "co2_annual", "co2_cumulative", "walkability",
+            "fragile_path_pct", "cost", "maintenance", "maintenance_cumulative",
+            "safety", "evening_winter", "inclusion", "space_use_pct",
         ]
         return UrbanOutput(
             tree_diameter=trees(out.tree_diameter),

@@ -91,10 +91,15 @@ def _paths(layout: Layout) -> dict[str, np.ndarray]:
 
 def _cost_items(layout: Layout) -> dict[str, np.ndarray]:
     items: list[tuple[float, str, int]] = []
-    grove_trees: dict[str, int] = {}
+    card_trees: dict[str, int] = {}
     for slot in layout.trees:
-        if slot.origin == "grove":
-            grove_trees[slot.intervention_id] = grove_trees.get(slot.intervention_id, 0) + 1
+        if slot.origin in ("grove", "row"):
+            card_trees[slot.intervention_id] = card_trees.get(slot.intervention_id, 0) + 1
+    # A lit path's lamps are counted per path, like a grove's trees.
+    lamps: dict[str, int] = {}
+    for entry in _elements(layout, "streetlight"):
+        if entry.element.intervention_id is not None:
+            lamps[entry.element.intervention_id] = lamps.get(entry.element.intervention_id, 0) + 1
 
     def tree_key(species: str) -> str:
         return f"tree:{species if species in COST_PER_TREE_EUR else 'unknown'}"
@@ -114,9 +119,13 @@ def _cost_items(layout: Layout) -> dict[str, np.ndarray]:
             items.append((area_m2(iv.geometry), keyed("cover", params.get("cover_type", "meadow")), start))
         elif card == "plant_grove":
             items.append((area_m2(iv.geometry), "cover:lawn", start))
-            items.append((float(grove_trees.get(iv.id, 0)), tree_key(params.get("species", "unknown")), start))
+            items.append((float(card_trees.get(iv.id, 0)), tree_key(params.get("species", "unknown")), start))
+        elif card == "plant_tree_row":
+            items.append((float(card_trees.get(iv.id, 0)), tree_key(params.get("species", "unknown")), start))
         elif card in ("add_streetlight", "add_bench", "add_kiosk"):
             items.append((1.0, f"element:{card.removeprefix('add_')}", start))
+        elif card == "add_streetlight_path":
+            items.append((float(lamps.get(iv.id, 0)), "element:streetlight", start))
         elif card == "add_pergola":
             size = params.get("size", "medium")
             items.append((1.0, f"pergola:{size if size in COST_PER_PERGOLA_EUR else 'medium'}", start))
@@ -139,7 +148,6 @@ def _covers(layout: Layout) -> dict[str, np.ndarray]:
     projected = [to_projected(e.cover.geometry) for e in entries]
     wkb, offsets = cdt_compat.geometries_to_arrays([*projected, Polygon()])
     return {
-        "cover_area": cdt_compat.with_sentinel([g.area for g in projected], 0.0),
         "cover_type": cdt_compat.with_sentinel(
             [_onehot(COVER_TYPES, e.cover.cover_type) for e in entries], np.zeros(len(COVER_TYPES))
         ),

@@ -1,6 +1,7 @@
 import { useState, type CSSProperties } from "react";
 import type { CardCategory, CardSpec } from "../api/types";
-import { CARD_CATEGORY_LABELS_IT } from "../i18n/labels";
+import { tr } from "../i18n/lang";
+import { cardCategoryLabel, cardLabel } from "../i18n/labels";
 import { CardIcon } from "./cardIcons";
 import { CATEGORY_COLORS } from "./categoryColors";
 
@@ -8,6 +9,7 @@ interface Props {
   cards: CardSpec[];
   selected: CardSpec | null;
   onSelect: (card: CardSpec | null) => void;
+  initiallyCollapsed?: boolean;
 }
 
 const CATEGORY_ORDER: CardCategory[] = [
@@ -17,8 +19,8 @@ const CATEGORY_ORDER: CardCategory[] = [
   "sociale",
 ];
 
-export function CardPalette({ cards, selected, onSelect }: Props) {
-  const [collapsed, setCollapsed] = useState(false);
+export function CardPalette({ cards, selected, onSelect, initiallyCollapsed = false }: Props) {
+  const [collapsed, setCollapsed] = useState(initiallyCollapsed);
   const byCategory = CATEGORY_ORDER.map((category) => ({
     category,
     cards: cards.filter((c) => c.category === category),
@@ -27,12 +29,12 @@ export function CardPalette({ cards, selected, onSelect }: Props) {
   return (
     <div className="card-palette">
       <button type="button" className="panel-header" onClick={() => setCollapsed((c) => !c)}>
-        <h3>Carte</h3>
+        <h3>{tr("Carte", "Cards")}</h3>
         <span className="panel-header__chevron">{collapsed ? "▸" : "▾"}</span>
       </button>
       {!collapsed && byCategory.map(({ category, cards: categoryCards }) => (
         <div key={category} className="card-palette__category">
-          <h4 className="card-palette__category-label">{CARD_CATEGORY_LABELS_IT[category]}</h4>
+          <h4 className="card-palette__category-label">{cardCategoryLabel(category)}</h4>
           <div className="card-palette__row">
             {categoryCards.map((card) => (
               <button
@@ -47,7 +49,7 @@ export function CardPalette({ cards, selected, onSelect }: Props) {
                 <span className="card-button__icon">
                   <CardIcon cardType={card.card_type} />
                 </span>
-                <span className="card-button__label">{card.label}</span>
+                <span className="card-button__label">{cardLabel(card)}</span>
               </button>
             ))}
           </div>

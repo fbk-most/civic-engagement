@@ -1,5 +1,6 @@
 import type { DiscreteElement, TreeProperties } from "../api/types";
-import { AGE_CLASS_LABELS_IT, SPECIES_LABELS_IT } from "../i18n/labels";
+import { tr } from "../i18n/lang";
+import { ageClassLabel, speciesLabel, yearLabel } from "../i18n/labels";
 
 interface Props {
   element: DiscreteElement;
@@ -18,30 +19,30 @@ export function TreeIdentityCard({ element, onClose, onReplant }: Props) {
 
   return (
     <div className="param-form tree-identity-card">
-      <h3>{isStump ? "Albero abbattuto" : "Albero esistente"}</h3>
+      <h3>{isStump ? tr("Albero abbattuto", "Felled tree") : tr("Albero esistente", "Existing tree")}</h3>
       <p>
-        <strong>Specie:</strong> {SPECIES_LABELS_IT[props.species] ?? props.species}
+        <strong>{tr("Specie:", "Species:")}</strong> {speciesLabel(props.species)}
       </p>
       <p>
-        <strong>Età:</strong> {AGE_CLASS_LABELS_IT[props.age_class] ?? props.age_class}
+        <strong>{tr("Età:", "Age:")}</strong> {ageClassLabel(props.age_class)}
       </p>
       {!isStump && (
         <p>
-          <strong>Diametro chioma:</strong> {props.canopy_diameter.toFixed(1)} m
+          <strong>{tr("Diametro chioma:", "Crown diameter:")}</strong> {props.canopy_diameter.toFixed(1)} m
         </p>
       )}
       <p>
-        <strong>{isStump ? "Abbattuto nell'anno" : "Abbattimento previsto"}:</strong>{" "}
-        {props.cut_year === null ? "nessuno previsto in questo orizzonte" : `+${props.cut_year}a`}
+        <strong>{isStump ? tr("Abbattuto nell'anno", "Felled in year") : tr("Abbattimento previsto", "Felling planned")}:</strong>{" "}
+        {props.cut_year === null ? tr("nessuno previsto in questo orizzonte", "none within this horizon") : yearLabel(props.cut_year)}
       </p>
       <div className="param-form__actions">
         {isStump && (
           <button type="button" onClick={onReplant}>
-            Ripianta qui
+            {tr("Ripianta qui", "Replant here")}
           </button>
         )}
         <button type="button" onClick={onClose}>
-          Chiudi
+          {tr("Chiudi", "Close")}
         </button>
       </div>
     </div>

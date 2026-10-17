@@ -116,11 +116,9 @@ function shuffled<T>(items: T[], random: () => number): T[] {
 }
 
 /**
- * @param density 0 (no needles) to 1 (full) — evergreens pass a constant 1
- *   from `vegetation.ts` (see `sun.leafDensity`'s docstring), but this
- *   still takes the parameter for symmetry with `foliageCards.buildLeafGeometry`
- *   and in case a future scenario wants partial defoliation (storm damage,
- *   disease) independent of season.
+ * @param density 0 (no needles) to 1 (full) — evergreens always pass 1
+ *   (see `treeWorker.ts`), but this still takes the parameter in case a
+ *   future scenario wants partial defoliation (storm damage, disease).
  */
 export function buildNeedleGeometry(
   structure: TreeStructure,

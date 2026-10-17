@@ -15,6 +15,8 @@ cache/
 # Runtime session state (not the baseline fixture, which is committed) — one
 # per site, see civic_twin/config.py's SiteConfig.session_json_path.
 data/*/session.json
+# Sessions set aside when a scenario replaces them (store/state.py's replace).
+data/*/session.*.json
 
 # Raw LiDAR/orthophoto inputs for build_baseline.py, one per-site directory
 # under data/ (see civic_twin/ingestion/lidar.py and ortofoto.py). Re-derived

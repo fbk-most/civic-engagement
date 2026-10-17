@@ -128,7 +128,9 @@ _TRENTO_BUILDING_KIND_DEFAULT_HEIGHT_M = {
 SITES: dict[str, SiteConfig] = {
     "piazza_dante": SiteConfig(
         site_id="piazza_dante",
-        name="Piazza Dante, Trento",
+        # Shown as a square in an imaginary city, Utopia; the data (OSM,
+        # LiDAR, orthophoto, climate) are those of Piazza Dante in Trento.
+        name="Piazza Dante, Utopia",
         # Fetched via osmnx.geocode_to_gdf("Piazza Dante, Trento, Italy") —
         # the OSM-tagged boundary of the square itself, not a radius circle,
         # so site-area indicators have a well-defined denominator.

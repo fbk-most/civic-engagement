@@ -198,16 +198,18 @@ export function buildPlaygroundGeometry(): THREE.BufferGeometry {
   slide.translate(1.6, 0.75, 1.6);
   parts.push(slide);
 
-  // A-frame swing set beside the platform.
+  // A-frame swing set beside the platform: each pair of legs leans in to
+  // meet under the crossbar (a positive rotation about Z tips a leg's top
+  // towards -X).
   const swingX = -2.6;
   for (const dz of [-0.9, 0.9]) {
     const leg1 = new THREE.BoxGeometry(0.1, 2.0, 0.1);
-    leg1.rotateZ(0.3);
-    leg1.translate(swingX - 0.4, 1.0, dz);
+    leg1.rotateZ(-0.3);
+    leg1.translate(swingX - 0.3, 1.0, dz);
     parts.push(leg1);
     const leg2 = new THREE.BoxGeometry(0.1, 2.0, 0.1);
-    leg2.rotateZ(-0.3);
-    leg2.translate(swingX + 0.4, 1.0, dz);
+    leg2.rotateZ(0.3);
+    leg2.translate(swingX + 0.3, 1.0, dz);
     parts.push(leg2);
   }
   parts.push(box(0.1, 0.1, 1.9, swingX, 2.0, 0));

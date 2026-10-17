@@ -34,9 +34,9 @@ export interface SunSetting {
  * the two solstices bound the year's range of sun heights, and the equinox
  * sits between them. */
 export const SEASON_PRESETS = [
-  { key: "winter", label: "Solstizio d'inverno", month: 12, day: 21 },
-  { key: "equinox", label: "Equinozio", month: 3, day: 21 },
-  { key: "summer", label: "Solstizio d'estate", month: 6, day: 21 },
+  { key: "winter", label: ["Solstizio d'inverno", "Winter solstice"], month: 12, day: 21 },
+  { key: "equinox", label: ["Equinozio", "Equinox"], month: 3, day: 21 },
+  { key: "summer", label: ["Solstizio d'estate", "Summer solstice"], month: 6, day: 21 },
 ] as const;
 
 /** Mid-afternoon in high summer: the moment a square's lack of shade is most
@@ -44,8 +44,10 @@ export const SEASON_PRESETS = [
 export const DEFAULT_SUN_SETTING: SunSetting = { month: 6, day: 21, hour: 15 };
 
 export function formatHour(hour: number): string {
-  const hours = Math.floor(hour);
-  const minutes = Math.round((hour - hours) * 60);
+  // Rounded as a whole, so 11.999 reads 12:00 rather than 11:60.
+  const total = Math.round(hour * 60);
+  const hours = Math.floor(total / 60);
+  const minutes = total % 60;
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
 
@@ -104,6 +106,9 @@ function piecewiseLinear(points: Array<[month: number, value: number]>, month: n
   return points[points.length - 1][1];
 }
 
+// The felt-temperature field uses the same curve for how much sun crowns
+// let through (LEAF_DENSITY_BY_MONTH in civic_twin/domains/urban/parameters.py):
+// keep the two equal.
 const LEAF_DENSITY_POINTS: Array<[number, number]> = [
   [1, 0],
   [3, 0],

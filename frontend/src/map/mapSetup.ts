@@ -1,5 +1,12 @@
-import { MapLibreMap, type StyleSpecification } from "maplibre-gl";
+import { MapLibreMap, setWorkerUrl, type StyleSpecification } from "maplibre-gl";
+import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { OVERVIEW_FOV_DEG } from "../three/camera";
+
+// MapLibre finds its worker by a path it builds at run time, next to its own
+// file — a name the production build can't see, so the worker would be left
+// out and the map silently never draw. Bundled here instead (with the
+// module it imports), and its URL handed over.
+setWorkerUrl(maplibreWorkerUrl);
 
 // Approximate centroid of the Piazza Dante site boundary (civic_twin/config.py).
 // The camera re-fits to the real boundary once the baseline scene loads.

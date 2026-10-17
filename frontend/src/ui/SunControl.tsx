@@ -1,8 +1,13 @@
+import { tr } from "../i18n/lang";
 import { daysInMonth, formatHour, SEASON_PRESETS, type SunSetting } from "../three/sun";
 
 const MONTH_LABELS_IT = [
   "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
   "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre",
+];
+const MONTH_LABELS_EN = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
 ];
 
 interface SunControlProps {
@@ -31,7 +36,7 @@ export function SunControl({ setting, altitudeDeg, year, onChange }: SunControlP
     <div className="sun-control">
       <div className="sun-control__row">
         <label className="sun-control__field">
-          <span className="sun-control__label">Giorno</span>
+          <span className="sun-control__label">{tr("Giorno", "Day")}</span>
           <select
             value={setting.month}
             onChange={(event) => {
@@ -42,7 +47,7 @@ export function SunControl({ setting, altitudeDeg, year, onChange }: SunControlP
           >
             {MONTH_LABELS_IT.map((label, i) => (
               <option key={label} value={i + 1}>
-                {label}
+                {tr(label, MONTH_LABELS_EN[i])}
               </option>
             ))}
           </select>
@@ -63,11 +68,11 @@ export function SunControl({ setting, altitudeDeg, year, onChange }: SunControlP
             <button
               key={preset.key}
               type="button"
-              title={preset.label}
+              title={tr(preset.label[0], preset.label[1])}
               aria-pressed={setting.month === preset.month && setting.day === preset.day}
               onClick={() => onChange({ ...setting, month: preset.month, day: preset.day })}
             >
-              {preset.label}
+              {tr(preset.label[0], preset.label[1])}
             </button>
           ))}
         </div>
@@ -75,7 +80,7 @@ export function SunControl({ setting, altitudeDeg, year, onChange }: SunControlP
 
       <div className="sun-control__row">
         <label className="sun-control__field sun-control__field--grow">
-          <span className="sun-control__label">Ora</span>
+          <span className="sun-control__label">{tr("Ora", "Time")}</span>
           <input
             type="range"
             min={4}
@@ -89,8 +94,8 @@ export function SunControl({ setting, altitudeDeg, year, onChange }: SunControlP
           <strong>{formatHour(setting.hour)}</strong>
           {" · "}
           {belowHorizon
-            ? "sole sotto l'orizzonte"
-            : `sole a ${Math.round(altitudeDeg)}° sull'orizzonte`}
+            ? tr("sole sotto l'orizzonte", "sun below the horizon")
+            : tr(`sole a ${Math.round(altitudeDeg)}° sull'orizzonte`, `sun ${Math.round(altitudeDeg)}° above the horizon`)}
         </span>
       </div>
     </div>

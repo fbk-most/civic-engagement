@@ -20,8 +20,6 @@ export interface TreeJob {
   canopyDiameter: number;
   crownForm: CrownForm;
   isEvergreen: boolean;
-  density: number;
-  autumnMix: number;
 }
 
 /** Typed-array attribute set for one merge-ready geometry, already
@@ -42,6 +40,10 @@ export type FoliageAttributes =
       normal: Float32Array;
       uv: Float32Array;
       color: Float32Array;
+      /** Per vertex: the cluster's autumn tint, and its place (0-1) in the
+       * order clusters thin out by season (see `buildLeafGeometry`). */
+      autumnColor: Float32Array;
+      rank: Float32Array;
       index: Uint16Array | Uint32Array;
     }
   | {

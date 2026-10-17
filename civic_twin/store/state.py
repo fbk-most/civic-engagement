@@ -7,6 +7,8 @@ runtime source of truth.
 """
 
 import json
+import os
+import shutil
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,7 +24,26 @@ DEFAULT_SESSION_ID = "default"
 class SessionStore:
     def __init__(self) -> None:
         self._sessions: dict[str, list[Intervention]] = {}
+        # Bumped on every change, so a window can ask "anything new?" without
+        # fetching the scene (see `revision`).
+        self._boot = uuid.uuid4().hex[:8]
+        self._changes = 0
         self._load()
+        # CIVIC_TWIN_SCENARIO=<id>: start from that saved scenario (see
+        # store/scenarios.py) instead of the last session — at every start,
+        # a --reload restart included; the session it replaces is set aside.
+        startup = os.environ.get("CIVIC_TWIN_SCENARIO")
+        if startup:
+            from civic_twin.store.scenarios import read_scenario
+
+            self.replace(read_scenario(startup)[1])
+
+    @property
+    def revision(self) -> str:
+        """Changes on every change to the session. The boot part keeps a
+        restarted backend (say with another session file loaded) from
+        repeating a revision a window has already seen."""
+        return f"{self._boot}-{self._changes}"
 
     def list_interventions(self, session_id: str = DEFAULT_SESSION_ID) -> list[Intervention]:
         return [i for i in self._sessions.get(session_id, []) if not i.deleted]
@@ -66,7 +87,18 @@ class SessionStore:
         self._sessions[session_id] = []
         self._save()
 
+    def replace(self, interventions: list[Intervention], session_id: str = DEFAULT_SESSION_ID) -> None:
+        """The session becomes these interventions (a scenario loaded, or
+        none to start afresh). The session file as it was is set aside next
+        to it, timestamped, unless it held nothing."""
+        if self.list_interventions(session_id) and SESSION_JSON_PATH.exists():
+            kept = SESSION_JSON_PATH.with_name(f"session.{datetime.now():%Y%m%d-%H%M%S}.json")
+            shutil.copy(SESSION_JSON_PATH, kept)
+        self._sessions[session_id] = [i.model_copy(deep=True) for i in interventions]
+        self._save()
+
     def _save(self) -> None:
+        self._changes += 1
         SESSION_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             session_id: [i.model_dump() for i in interventions]

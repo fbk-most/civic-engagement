@@ -1,9 +1,15 @@
 import { useState } from "react";
-import type { Indicators } from "../api/types";
+import type { Indicators, ThermalIndicators } from "../api/types";
+import { locale, tr } from "../i18n/lang";
 
 interface Props {
   indicators: Indicators;
   baselineIndicators: Indicators;
+  /** Fetched apart from the scene; null until it arrives. */
+  thermal: ThermalIndicators | null;
+  /** "Situazione attuale": the current values only, no deltas and no costs. */
+  asIs: boolean;
+  initiallyCollapsed?: boolean;
 }
 
 // Cover types counted as "green" ground. Tree canopy isn't a cover type (it
@@ -24,27 +30,29 @@ function KpiRow({
   betterWhen,
 }: {
   label: string;
-  value: number;
+  /** Null while it's still on its way. */
+  value: number | null;
   baseline: number | null;
   unit: string;
   decimals: number;
   /** Which way a change counts as an improvement, for the delta's colour. */
   betterWhen: "higher" | "lower";
 }) {
-  const delta = baseline === null ? 0 : value - baseline;
+  const delta = baseline === null || value === null ? 0 : value - baseline;
   const changed = Math.abs(delta) >= 5 * 10 ** -(decimals + 1);
   const improved = betterWhen === "higher" ? delta > 0 : delta < 0;
   return (
     <div className="kpi-panel__row">
       <span className="kpi-panel__label">{label}</span>
       <span className="kpi-panel__value">
-        {value.toLocaleString("it-IT", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}
-        {unit}
+        {value === null
+          ? "…"
+          : `${value.toLocaleString(locale(), { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}${unit}`}
       </span>
       {changed && (
         <span className={improved ? "kpi-panel__delta kpi-panel__delta--better" : "kpi-panel__delta kpi-panel__delta--worse"}>
           {delta > 0 ? "+" : ""}
-          {delta.toLocaleString("it-IT", { maximumFractionDigits: decimals })}
+          {delta.toLocaleString(locale(), { maximumFractionDigits: decimals })}
         </span>
       )}
     </div>
@@ -53,50 +61,66 @@ function KpiRow({
 
 /** The handful of headline indicators kept on screen over the 2D and 3D
  * views; the full set lives in the "Indicatori" tab. Deltas are against the
- * current situation (no interventions) at the same year. */
-export function KpiPanel({ indicators, baselineIndicators }: Props) {
-  const [collapsed, setCollapsed] = useState(false);
+ * current situation (no interventions) at the same year — except in the
+ * current situation itself, which shows its own values alone. */
+export function KpiPanel({ indicators, baselineIndicators, thermal, asIs, initiallyCollapsed = false }: Props) {
+  const [collapsed, setCollapsed] = useState(initiallyCollapsed);
+  const shown = asIs ? baselineIndicators : indicators;
+  const compared = asIs ? null : baselineIndicators;
+  const shownThermal = asIs ? thermal?.baseline : thermal?.scenario;
 
   return (
     <div className="kpi-panel">
       <button type="button" className="panel-header" onClick={() => setCollapsed((c) => !c)}>
-        <h3>Indicatori chiave</h3>
+        <h3>{tr("Indicatori chiave", "Key indicators")}</h3>
         <span className="panel-header__chevron">{collapsed ? "▸" : "▾"}</span>
       </button>
       {!collapsed && (
         <>
           <KpiRow
-            label="Temperatura estiva"
-            value={indicators.thermal_comfort.estimated_temperature_c}
-            baseline={baselineIndicators.thermal_comfort.estimated_temperature_c}
+            label={tr("Temp. percepita, 21/6 ore 11", "Felt temp., 21 June 11:00")}
+            value={shownThermal?.felt_temperature_c ?? null}
+            baseline={compared && thermal ? thermal.baseline.felt_temperature_c : null}
             unit=" °C"
             decimals={1}
             betterWhen="lower"
           />
           <KpiRow
-            label="Superficie verde"
-            value={greenPct(indicators)}
-            baseline={greenPct(baselineIndicators)}
+            label={tr("Superficie verde", "Green surface")}
+            value={greenPct(shown)}
+            baseline={compared && greenPct(compared)}
             unit="%"
             decimals={1}
             betterWhen="higher"
           />
           <KpiRow
-            label="CO₂ assorbita"
-            value={indicators.co2.annual_rate_kg}
-            baseline={baselineIndicators.co2.annual_rate_kg}
-            unit=" kg/anno"
+            label={tr("CO₂ assorbita", "CO₂ absorbed")}
+            value={shown.co2.annual_rate_kg}
+            baseline={compared && compared.co2.annual_rate_kg}
+            unit={tr(" kg/anno", " kg/year")}
             decimals={0}
             betterWhen="higher"
           />
-          <KpiRow
-            label="Costo interventi"
-            value={indicators.cost_eur}
-            baseline={null}
-            unit=" €"
-            decimals={0}
-            betterWhen="lower"
-          />
+          {!asIs && (
+            <>
+              <KpiRow
+                label={tr("Costo interventi", "Cost of interventions")}
+                value={indicators.cost_eur}
+                baseline={null}
+                unit=" €"
+                decimals={0}
+                betterWhen="lower"
+              />
+              <KpiRow
+                label={tr("Manutenzione aggiuntiva", "Added maintenance")}
+                value={indicators.maintenance.annual_eur}
+                baseline={null}
+                unit={tr(" €/anno", " €/year")}
+                decimals={0}
+                betterWhen="lower"
+              />
+            </>
+          )}
         </>
       )}
     </div>

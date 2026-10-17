@@ -1,28 +1,41 @@
 import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
 import * as THREE from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { MapControls } from "three/examples/jsm/controls/MapControls.js";
+import type { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import type { CardSpec, DiscreteElement, InterventionDisplayMode, SceneResponse } from "../api/types";
-import { buildScene, disposeGroup, type BuiltScene } from "./SceneBuilder";
+import { buildScene, disposeScene, type BuiltScene } from "./SceneBuilder";
 import { applyNightLights, updateStreetlightShadows } from "./builders/streetlights";
 import { updateWaterSun } from "./builders/water";
 import { buildPlacards, disposePlacards, facePlacards, type Placards } from "./builders/placards";
+import { tr, useLang } from "../i18n/lang";
 import { Lighting } from "./Lighting";
 import { MaterialLibrary } from "./materials";
 import { terminateTreeWorkerPool } from "./workers/treeWorkerPool";
 import type { SeasonState, SunPosition } from "./sun";
 import { DEFAULT_FOV_DEG, LOOK_DISTANCE_M, MIN_CAMERA_HEIGHT_M, OVERVIEW_FOV_DEG, type CameraPose } from "./camera";
 import { anchorFromPolygon, bearingToDirection, directionToBearing, toLocal, toLngLat, type GeoAnchor } from "./geo";
-import { WalkController } from "./walk";
+import { WalkController, type Footprint } from "./walk";
+import * as timeline from "../perf/timeline";
 import { Crowd } from "./people/Crowd";
-import { crowdSize, planCrowd } from "./people/plan";
+import { planCrowd, walkerCount, type StopTally } from "./people/plan";
 import { buildWalkNetwork, type WalkNetwork } from "./people/network";
 import { planWalkers } from "./people/walkers";
 import { buildRoadNetwork, Traffic, type RoadNetwork } from "./people/traffic";
 import type { CrowdActivity, LifeMode } from "./people/activity";
 import { PerfRecorder, type PerfSummary } from "./perf";
+import { OVERLAY_HEIGHT_M, ThermalOverlay } from "./thermalOverlay";
+import { layerAt, summaryAt, valueAt, type ThermalField, type ThermalReading } from "../thermal/field";
+import {
+  crowdExposure,
+  edgeWalkCosts,
+  networkExposure,
+  type CrowdExposure,
+  type FeltSampler,
+  type StopShortfall,
+} from "./people/comfort";
 
 /** Element types the walking network is built from (see people/network.ts). */
 const WALK_NETWORK_TYPES = new Set<DiscreteElement["type"]>([
@@ -55,6 +68,9 @@ export interface ViewerHandle {
    * of the view — how the 2D map's framing is carried over (map/viewSync.ts).
    * Unlike `pose`, this is not a placed viewpoint. */
   showView: (view: CameraPose) => void;
+  /** Back to the framing the view opened on, out of walking or wherever
+   * the camera was moved — "Vista d'insieme". */
+  showOverview: () => void;
 }
 
 interface ViewerProps {
@@ -76,7 +92,8 @@ interface ViewerProps {
   /** How full/coloured deciduous tree canopies are — derived from the sun's
    * `month`, not `SunPosition` itself (which only carries the resolved
    * direction/altitude/azimuth), so this is threaded through as its own
-   * prop rather than recomputed here. */
+   * prop rather than recomputed here. Applied to the scene built, without
+   * rebuilding it. */
   season: SeasonState;
   /** Eye-level viewpoint placed on the map. Null shows the overview instead. */
   pose: CameraPose | null;
@@ -92,6 +109,20 @@ interface ViewerProps {
   /** Where to start, instead of the default overview — the 2D map's framing
    * when the view is first opened (see `ViewerHandle.showView`). */
   initialView?: CameraPose | null;
+  /** The felt-temperature field at the hour shown, as a sheet over the site;
+   * null hides it. */
+  thermal?: { field: ThermalField; layer: Float32Array; stale: boolean } | null;
+  /** Felt temperature under the pointer while the sheet is shown — or, while
+   * walking, where the walker stands. Null off the field. */
+  onThermalReading?: (reading: ThermalReading) => void;
+  /** The felt-temperature field of the scene built, and the hour to read
+   * it at: people react to it (where they stop, which way they walk) when
+   * `react`, and are measured against it either way. Shown or not,
+   * independently of `thermal`. */
+  comfort?: { field: ThermalField; hour: number; react: boolean } | null;
+  /** How the crowd fares in it, a few times a second while it changes;
+   * null with no field or nobody around. */
+  onCrowdExposure?: (exposure: CrowdExposure | null) => void;
 }
 
 /** The realistic 3D view.
@@ -117,6 +148,10 @@ export function Viewer({
   crowdActivity,
   lifeMode,
   initialView = null,
+  thermal = null,
+  onThermalReading,
+  comfort = null,
+  onCrowdExposure,
 }: ViewerProps) {
   // Only "simulated" changes the built geometry; "hidden" and "cards" share
   // the same current-situation build, so switching between those two only
@@ -133,11 +168,18 @@ export function Viewer({
   const builtRef = useRef<BuiltScene | null>(null);
   const placardsRef = useRef<Placards | null>(null);
   const crowdRef = useRef<Crowd | null>(null);
+  const thermalOverlayRef = useRef<ThermalOverlay | null>(null);
+  const thermalRef = useRef(thermal);
+  thermalRef.current = thermal;
+  const onThermalReadingRef = useRef(onThermalReading);
+  onThermalReadingRef.current = onThermalReading;
   // What the crowd was last planned against: the elements actually built
   // (with or without interventions) and the build's anchor/footprints.
   const crowdSceneRef = useRef<{
     elements: DiscreteElement[];
     built: BuiltScene;
+    /** The site's boundary, as a ring in the local frame. */
+    site: Footprint;
     network: WalkNetwork;
     roads: RoadNetwork;
   } | null>(null);
@@ -150,6 +192,14 @@ export function Viewer({
   const roadsRef = useRef<{ key: string; roads: RoadNetwork } | null>(null);
   const crowdActivityRef = useRef(crowdActivity);
   crowdActivityRef.current = crowdActivity;
+  const comfortRef = useRef(comfort);
+  comfortRef.current = comfort;
+  const onCrowdExposureRef = useRef(onCrowdExposure);
+  onCrowdExposureRef.current = onCrowdExposure;
+  // The field the crowd was last planned against, at its hour: null off the
+  // field (for measuring, unlike the planning's sampler).
+  const comfortFeltRef = useRef<FeltSampler | null>(null);
+  const shortfallRef = useRef<StopShortfall | null>(null);
   const lifeModeRef = useRef(lifeMode);
   lifeModeRef.current = lifeMode;
   const perfRef = useRef(new PerfRecorder());
@@ -172,6 +222,8 @@ export function Viewer({
   // over a stale prop.
   const sunRef = useRef(sun);
   sunRef.current = sun;
+  const seasonRef = useRef(season);
+  seasonRef.current = season;
   const activeRef = useRef(active);
   activeRef.current = active;
   const poseRef = useRef(pose);
@@ -189,11 +241,46 @@ export function Viewer({
     const input = crowdSceneRef.current;
     if (!input || !crowdRef.current) return;
     const activity = crowdActivityRef.current;
-    const placed = planCrowd(input.elements, input.built.anchor, input.built.footprints, activity);
+    const comfort = comfortRef.current;
+    let felt: FeltSampler | null = null;
+    comfortFeltRef.current = null;
+    if (comfort) {
+      const layer = layerAt(comfort.field, comfort.hour);
+      const onField: FeltSampler = (x, z) => valueAt(comfort.field, layer, x, -z);
+      comfortFeltRef.current = onField;
+      // Beyond the site the field says nothing, though walkers' routes run
+      // through the streets around it: there, the site's average. Counted
+      // as comfortable instead, routes would leave the square for streets
+      // just as hot.
+      const elsewhere = summaryAt(comfort.field.meanFelt, comfort.hour);
+      if (comfort.react) felt = (x, z) => onField(x, z) ?? elsewhere;
+    }
+    // Who the temperature keeps from stopping, and from walking through:
+    // they go elsewhere.
+    const onField = comfortFeltRef.current;
+    const tally: StopTally | null = felt ? { wouldStop: 0, stop: 0, stressed: 0 } : null;
+    const placed = planCrowd(
+      input.elements,
+      input.built.anchor,
+      input.built.footprints,
+      input.site,
+      activity,
+      felt,
+      tally
+    );
     crowdRef.current.setPlan(placed);
-    // Walkers are everyone who isn't standing or sitting somewhere.
-    const walkers = Math.max(0, crowdSize(activity).total - placed.length);
-    crowdRef.current.setWalkers(planWalkers(walkers, input.network), input.network, activity.dark);
+    let walkers = walkerCount(activity);
+    shortfallRef.current = null;
+    if (tally && onField) {
+      const { pass } = networkExposure(input.network, onField);
+      walkers = Math.round(walkers * pass);
+      shortfallRef.current = { wouldStop: tally.wouldStop, stop: tally.stop, pass };
+    }
+    crowdRef.current.setWalkers(planWalkers(walkers, input.network), input.network, {
+      dark: activity.dark,
+      walkCosts: felt ? edgeWalkCosts(input.network, felt) : null,
+      felt,
+    });
     trafficRef.current?.setNetwork(input.roads);
     trafficRef.current?.setActivity(activity.traffic, activity.dark);
   }
@@ -279,7 +366,10 @@ export function Viewer({
     composer.addPass(new OutputPass());
     composerRef.current = composer;
 
-    const controls = new OrbitControls(camera, renderer.domElement);
+    // The 2D map's gestures (MapControls): left drag / one finger pans, right
+    // drag or Ctrl + drag rotates and tilts, wheel / pinch zooms — so
+    // switching tab doesn't swap what the buttons do.
+    const controls = new MapControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.maxPolarAngle = Math.PI / 2 - 0.02; // never orbit under the ground
     // Pan across the ground plane rather than across the screen. Screen-space
@@ -299,6 +389,8 @@ export function Viewer({
     walk.controls.addEventListener("unlock", () => {
       walk.detach();
       controls.enabled = true;
+      hereReported = undefined;
+      onThermalReadingRef.current?.(null);
       // Leave the orbit target where the walker was looking, so exiting the
       // walk doesn't teleport the view back to wherever it started.
       const forward = new THREE.Vector3();
@@ -341,6 +433,9 @@ export function Viewer({
     traffic.setFrozen(lifeModeRef.current !== "live");
     threeScene.add(traffic.group);
     trafficRef.current = traffic;
+    const thermalOverlay = new ThermalOverlay(renderer.toneMappingExposure);
+    threeScene.add(thermalOverlay.mesh);
+    thermalOverlayRef.current = thermalOverlay;
 
     const resize = () => {
       const { clientWidth, clientHeight } = container;
@@ -385,13 +480,35 @@ export function Viewer({
       const id = placardAt(event);
       if (id) onSelectInterventionRef.current?.(id);
     };
+    // Where the pointer meets the felt-temperature sheet.
+    const sheet = new THREE.Plane(new THREE.Vector3(0, 1, 0), -OVERLAY_HEIGHT_M);
+    const onSheet = new THREE.Vector3();
+    const reportThermal = (event: PointerEvent) => {
+      const report = onThermalReadingRef.current;
+      const shown = thermalRef.current;
+      // While walking, the reading is where the walker stands (see the
+      // render loop), not under a pointer that is locked anyway.
+      if (!report || walk.isLocked) return;
+      if (!shown) return report(null);
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
+      raycaster.setFromCamera(pointer, camera);
+      const hit = raycaster.ray.intersectPlane(sheet, onSheet);
+      const celsius = hit ? valueAt(shown.field, shown.layer, onSheet.x, -onSheet.z) : null;
+      report(celsius === null ? null : { celsius, where: "pointer" });
+    };
     const handlePointerMove = (event: PointerEvent) => {
       if (event.buttons !== 0) return;
       renderer.domElement.style.cursor = placardAt(event) ? "pointer" : "";
+      reportThermal(event);
+    };
+    const handlePointerLeave = () => {
+      if (!walk.isLocked) onThermalReadingRef.current?.(null);
     };
     renderer.domElement.addEventListener("pointerdown", handlePointerDown);
     renderer.domElement.addEventListener("pointerup", handlePointerUp);
     renderer.domElement.addEventListener("pointermove", handlePointerMove);
+    renderer.domElement.addEventListener("pointerleave", handlePointerLeave);
 
     // Live view reporting, rate-limited on both time and movement: the render
     // loop runs at 60fps and each report redraws a GeoJSON source on the map,
@@ -451,6 +568,41 @@ export function Viewer({
       notify(cameraView(camera, built.anchor), walk.isLocked ? "walk" : "orbit");
     };
 
+    // While walking: the felt temperature where the walker stands, checked a
+    // few times a second and reported when it changes.
+    const HERE_INTERVAL_MS = 200;
+    let hereCheckedAt = 0;
+    let hereReported: number | null | undefined;
+    const reportHere = (now: number) => {
+      if (now - hereCheckedAt < HERE_INTERVAL_MS) return;
+      hereCheckedAt = now;
+      const shown = thermalRef.current;
+      const raw = shown ? valueAt(shown.field, shown.layer, camera.position.x, -camera.position.z) : null;
+      const celsius = raw === null ? null : Math.round(raw * 10) / 10;
+      if (celsius === hereReported) return;
+      hereReported = celsius;
+      onThermalReadingRef.current?.(celsius === null ? null : { celsius, where: "here" });
+    };
+
+    // How the crowd fares: once a second (walkers move), reported when the
+    // figures change.
+    const EXPOSURE_INTERVAL_MS = 1000;
+    let exposureCheckedAt = 0;
+    let exposureReported = "";
+    const reportExposure = (now: number) => {
+      if (now - exposureCheckedAt < EXPOSURE_INTERVAL_MS) return;
+      exposureCheckedAt = now;
+      const felt = comfortFeltRef.current;
+      const exposure =
+        felt && lifeModeRef.current !== "off" && crowdRef.current
+          ? crowdExposure(crowdRef.current.positions(), felt, shortfallRef.current)
+          : null;
+      const key = JSON.stringify(exposure);
+      if (key === exposureReported) return;
+      exposureReported = key;
+      onCrowdExposureRef.current?.(exposure?.all.people ? exposure : null);
+    };
+
     let frame = 0;
     const clock = new THREE.Clock();
     let lastFrameAt = 0;
@@ -483,6 +635,9 @@ export function Viewer({
         water.material.uniforms.eye.value.copy(camera.position);
       }
       if (placardsRef.current) facePlacards(placardsRef.current, camera);
+      thermalOverlay.setViewHeight(camera.position.y);
+      if (walk.isLocked) reportHere(performance.now());
+      reportExposure(performance.now());
       // "still" doesn't advance anything; it only settles figures added
       // since the last frame (a replan) into their pose. "off" does neither.
       const simStart = performance.now();
@@ -518,6 +673,9 @@ export function Viewer({
       renderer.domElement.removeEventListener("pointerdown", handlePointerDown);
       renderer.domElement.removeEventListener("pointerup", handlePointerUp);
       renderer.domElement.removeEventListener("pointermove", handlePointerMove);
+      renderer.domElement.removeEventListener("pointerleave", handlePointerLeave);
+      thermalOverlay.dispose();
+      thermalOverlayRef.current = null;
       if (placardsRef.current) disposePlacards(placardsRef.current);
       placardsRef.current = null;
       crowd.dispose();
@@ -527,12 +685,13 @@ export function Viewer({
       crowdSceneRef.current = null;
       controls.dispose();
       walk.dispose();
-      if (builtRef.current) disposeGroup(builtRef.current.group);
+      if (builtRef.current) disposeScene(builtRef.current);
       lighting.dispose();
       materialsRef.current?.dispose();
       terminateTreeWorkerPool();
       composer.dispose();
       composerRef.current = null;
+      threeSceneRef.current = null;
       renderer.dispose();
       renderer.domElement.remove();
       rendererRef.current = null;
@@ -541,112 +700,167 @@ export function Viewer({
     };
   }, []);
 
-  useEffect(() => {
+  // One build at a time: a full build (trees above all) takes a while and a
+  // lot of memory, and changing the date back and forth while one is running
+  // used to start another next to it, and another — enough to crash the
+  // tab. A change during a build is only recorded; when the build is done,
+  // the latest one asked for is built (and a build already out of date is
+  // dropped rather than shown).
+  const buildInputsRef = useRef<{ scene: SceneResponse; showInterventions: boolean } | null>(null);
+  const buildingRef = useRef(false);
+
+  function runBuild() {
     const threeScene = threeSceneRef.current;
     const materials = materialsRef.current;
     const lighting = lightingRef.current;
-    if (!scene || !threeScene || !materials || !lighting) return;
-
-    let cancelled = false;
-    buildScene(scene, materials, showInterventions, season).then((built) => {
-      // The effect can re-fire (or the component unmount) while a build is in
-      // flight; dropping a stale result avoids adding an orphaned group.
-      if (cancelled) {
-        disposeGroup(built.group);
+    const inputs = buildInputsRef.current;
+    if (!inputs || !threeScene || !materials || !lighting || buildingRef.current) return;
+    buildingRef.current = true;
+    buildScene(inputs.scene, materials, inputs.showInterventions).then((built) => {
+      buildingRef.current = false;
+      // Unmounted meanwhile (the mount effect's cleanup clears the scene ref).
+      if (threeSceneRef.current !== threeScene) {
+        disposeScene(built);
+        // A remount (React's development double mount) has its own scene
+        // waiting for a build, if it's there.
+        runBuild();
         return;
       }
-      if (builtRef.current) {
-        threeScene.remove(builtRef.current.group);
-        disposeGroup(builtRef.current.group);
+      if (buildInputsRef.current !== inputs) {
+        disposeScene(built);
+        runBuild();
+        return;
       }
-      threeScene.add(built.group);
-      builtRef.current = built;
-      const crowdElements = showInterventions ? scene.elements : scene.elements.filter((e) => e.source === "baseline");
-      const networkKey = JSON.stringify([
-        scene.site_boundary,
-        crowdElements.filter((e) => WALK_NETWORK_TYPES.has(e.type)).map((e) => [e.type, e.geometry]),
-      ]);
-      if (networkRef.current?.key !== networkKey) {
-        networkRef.current = {
-          key: networkKey,
-          network: buildWalkNetwork(crowdElements, built.anchor, scene.site_boundary),
-        };
-      }
-      const roadsKey = JSON.stringify([
-        scene.site_boundary,
-        crowdElements.filter((e) => ROAD_NETWORK_TYPES.has(e.type)).map((e) => [e.type, e.geometry, e.properties]),
-      ]);
-      if (roadsRef.current?.key !== roadsKey) {
-        roadsRef.current = { key: roadsKey, roads: buildRoadNetwork(crowdElements, built.anchor, scene.site_boundary) };
-      }
-      crowdSceneRef.current = {
-        elements: crowdElements,
-        built,
-        network: networkRef.current.network,
-        roads: roadsRef.current.roads,
-      };
-      replanCrowd();
-      // fitTo moves the shadow camera's centre, so the sun has to be re-placed
-      // relative to it afterwards.
-      lighting.fitTo(built.bounds);
-      lighting.setSun(sunRef.current);
-      applyNightLights(built.streetlights, materials, sunRef.current.altitudeDeg);
-      // Facade materials are cached/shared by colour (see materials.ts's
-      // facade()), not rebuilt per scene — but a rebuild can still be the
-      // first time a given colour's material gets created, so this has to
-      // run here too, not just from the sun-change effect below.
-      materials.applyNightWindows(sunRef.current.altitudeDeg);
-      // A rebuild's fresh Water instances (see builders/water.ts) start with
-      // a placeholder sun direction until this runs — without it a pond
-      // would briefly show the wrong specular highlight after every model
-      // edit, not just the ones that happen to also change the sun.
-      updateWaterSun(built.waterSurfaces, sunRef.current);
-      // A rebuild creates a fresh array of PointLight objects (see
-      // buildStreetlights), all starting castShadow=false — without this the
-      // render loop's throttle (see updateShadowCasters) could wait up to
-      // SHADOW_CASTER_MIN_MOVE_M of camera movement before picking any
-      // casters for them, leaving newly-placed or newly-loaded streetlights
-      // shadowless until the facilitator happens to walk a few metres.
-      if (cameraRef.current) {
-        updateStreetlightShadows(built.streetlights, cameraRef.current);
-        shadowCasterStateRef.current.time = performance.now();
-        shadowCasterStateRef.current.position.copy(cameraRef.current.position);
-        cameraRef.current.getWorldDirection(shadowCasterStateRef.current.direction);
-      }
-
-      // Frame the site once, on the first successful build — and only when no
-      // viewpoint was placed, since a pose is an explicit instruction about
-      // where to stand. Re-framing on every edit would yank the view away from
-      // wherever the facilitator had put it.
-      if (pendingViewRef.current) {
-        showViewAt(built.anchor, cameraRef.current, controlsRef.current, pendingViewRef.current);
-        pendingViewRef.current = null;
-        framedRef.current = true;
-        appliedPoseRef.current = poseRef.current;
-      }
-      if (!framedRef.current && !poseRef.current) {
-        frameSite(built, cameraRef.current, controlsRef.current);
-        framedRef.current = true;
-      }
-      // A pose set before this build finished had no anchor to resolve against
-      // yet, so apply it now that there is one. Guarded on identity: without
-      // that, every edit to the model would teleport the camera back to the
-      // placed viewpoint, undoing wherever the facilitator had walked to.
-      if (poseRef.current && appliedPoseRef.current !== poseRef.current) {
-        applyPose(built, cameraRef.current, controlsRef.current, poseRef.current);
-        appliedPoseRef.current = poseRef.current;
-      }
-      walkRef.current?.setCollision(built.footprints, built.bounds);
+      applyBuilt(built, inputs.scene, inputs.showInterventions, threeScene, materials, lighting);
+      timeline.end("build");
+    }).catch((error) => {
+      buildingRef.current = false;
+      timeline.end("build");
+      console.error("Could not build the 3D scene", error);
     });
+  }
 
-    return () => {
-      cancelled = true;
+  function applyBuilt(
+    built: BuiltScene,
+    scene: SceneResponse,
+    showInterventions: boolean,
+    threeScene: THREE.Scene,
+    materials: MaterialLibrary,
+    lighting: Lighting
+  ) {
+    if (builtRef.current) {
+      threeScene.remove(builtRef.current.group);
+      disposeScene(builtRef.current);
+    }
+    threeScene.add(built.group);
+    builtRef.current = built;
+    built.applySeason(seasonRef.current);
+    thermalOverlayRef.current?.set(thermalRef.current?.field ?? null, thermalRef.current?.layer ?? null, thermalRef.current?.stale);
+    const crowdElements = showInterventions ? scene.elements : scene.elements.filter((e) => e.source === "baseline");
+    const networkKey = JSON.stringify([
+      scene.site_boundary,
+      crowdElements.filter((e) => WALK_NETWORK_TYPES.has(e.type)).map((e) => [e.type, e.geometry]),
+    ]);
+    if (networkRef.current?.key !== networkKey) {
+      networkRef.current = {
+        key: networkKey,
+        network: buildWalkNetwork(crowdElements, built.anchor, scene.site_boundary),
+      };
+    }
+    const roadsKey = JSON.stringify([
+      scene.site_boundary,
+      crowdElements.filter((e) => ROAD_NETWORK_TYPES.has(e.type)).map((e) => [e.type, e.geometry, e.properties]),
+    ]);
+    if (roadsRef.current?.key !== roadsKey) {
+      roadsRef.current = { key: roadsKey, roads: buildRoadNetwork(crowdElements, built.anchor, scene.site_boundary) };
+    }
+    crowdSceneRef.current = {
+      elements: crowdElements,
+      built,
+      site: (scene.site_boundary.coordinates[0] ?? []).flatMap(([lng, lat]) => toLocal(built.anchor, lng, lat)),
+      network: networkRef.current.network,
+      roads: roadsRef.current.roads,
     };
-  }, [scene, showInterventions, season]);
+    replanCrowd();
+    // fitTo moves the shadow camera's centre, so the sun has to be re-placed
+    // relative to it afterwards.
+    lighting.fitTo(built.bounds);
+    lighting.setSun(sunRef.current);
+    applyNightLights(built.streetlights, materials, sunRef.current.altitudeDeg);
+    // Facade materials are cached/shared by colour (see materials.ts's
+    // facade()), not rebuilt per scene — but a rebuild can still be the
+    // first time a given colour's material gets created, so this has to
+    // run here too, not just from the sun-change effect below.
+    materials.applyNightWindows(sunRef.current.altitudeDeg);
+    // A rebuild's fresh Water instances (see builders/water.ts) start with
+    // a placeholder sun direction until this runs — without it a pond
+    // would briefly show the wrong specular highlight after every model
+    // edit, not just the ones that happen to also change the sun.
+    updateWaterSun(built.waterSurfaces, sunRef.current);
+    // A rebuild creates a fresh array of PointLight objects (see
+    // buildStreetlights), all starting castShadow=false — without this the
+    // render loop's throttle (see updateShadowCasters) could wait up to
+    // SHADOW_CASTER_MIN_MOVE_M of camera movement before picking any
+    // casters for them, leaving newly-placed or newly-loaded streetlights
+    // shadowless until the facilitator happens to walk a few metres.
+    if (cameraRef.current) {
+      updateStreetlightShadows(built.streetlights, cameraRef.current);
+      shadowCasterStateRef.current.time = performance.now();
+      shadowCasterStateRef.current.position.copy(cameraRef.current.position);
+      cameraRef.current.getWorldDirection(shadowCasterStateRef.current.direction);
+    }
+
+    // Frame the site once, on the first successful build — and only when no
+    // viewpoint was placed, since a pose is an explicit instruction about
+    // where to stand. Re-framing on every edit would yank the view away from
+    // wherever the facilitator had put it.
+    if (pendingViewRef.current) {
+      showViewAt(built.anchor, cameraRef.current, controlsRef.current, pendingViewRef.current);
+      pendingViewRef.current = null;
+      framedRef.current = true;
+      appliedPoseRef.current = poseRef.current;
+    }
+    if (!framedRef.current && !poseRef.current) {
+      frameSite(built, cameraRef.current, controlsRef.current);
+      framedRef.current = true;
+    }
+    // A pose set before this build finished had no anchor to resolve against
+    // yet, so apply it now that there is one. Guarded on identity: without
+    // that, every edit to the model would teleport the camera back to the
+    // placed viewpoint, undoing wherever the facilitator had walked to.
+    if (poseRef.current && appliedPoseRef.current !== poseRef.current) {
+      applyPose(built, cameraRef.current, controlsRef.current, poseRef.current);
+      appliedPoseRef.current = poseRef.current;
+    }
+    walkRef.current?.setCollision(built.footprints, built.bounds);
+}
+
+  useEffect(() => {
+    if (!scene) return;
+    buildInputsRef.current = { scene, showInterventions };
+    // Pending until a build of the latest inputs is in place (one already
+    // under way for older inputs keeps it pending and starts another).
+    if (!timeline.isPending("build")) timeline.begin("build");
+    runBuild();
+  }, [scene, showInterventions]);
+
+  // The date only changes how the trees look (see BuiltScene.applySeason):
+  // no rebuild.
+  useEffect(() => {
+    builtRef.current?.applySeason(season);
+  }, [season]);
 
   useEffect(() => {
     replanCrowd();
-  }, [crowdActivity.level, crowdActivity.traffic, crowdActivity.dark]);
+  }, [crowdActivity.level, crowdActivity.traffic, crowdActivity.dark, comfort]);
+
+  useEffect(() => {
+    // Not before the landscape is there: a coloured sheet over an empty
+    // scene reads as something wrong. The build shows it once done.
+    const shown = builtRef.current ? thermal : null;
+    thermalOverlayRef.current?.set(shown?.field ?? null, shown?.layer ?? null, shown?.stale);
+    if (!thermal) onThermalReadingRef.current?.(null);
+  }, [thermal]);
 
   useEffect(() => {
     if (crowdRef.current) crowdRef.current.group.visible = lifeMode !== "off";
@@ -682,7 +896,9 @@ export function Viewer({
 
   // Placards live outside the main build (see `showInterventions` above), so
   // toggling "Carte proposte" on and off costs a handful of textured quads,
-  // not a whole scene rebuild.
+  // not a whole scene rebuild. Their text is drawn in the current language,
+  // hence `lang` among the dependencies.
+  const lang = useLang();
   useEffect(() => {
     const threeScene = threeSceneRef.current;
     if (!threeScene) return;
@@ -695,7 +911,7 @@ export function Viewer({
     const placards = buildPlacards(scene.interventions, cards, anchorFromPolygon(scene.site_boundary), scene.t);
     threeScene.add(placards.group);
     placardsRef.current = placards;
-  }, [scene, cards, mode]);
+  }, [scene, cards, mode, lang]);
 
   useImperativeHandle(handleRef, () => ({
     captureFrame,
@@ -721,6 +937,12 @@ export function Viewer({
       walkRef.current?.controls.unlock();
       showViewAt(built.anchor, cameraRef.current, controlsRef.current, view);
     },
+    showOverview: () => {
+      walkRef.current?.controls.unlock();
+      if (builtRef.current) frameSite(builtRef.current, cameraRef.current, controlsRef.current);
+      // The cleared pose that follows has nothing left to undo.
+      appliedPoseRef.current = null;
+    },
     setAutoRotate: (on: boolean) => {
       const controls = controlsRef.current;
       if (!controls) return;
@@ -743,10 +965,27 @@ export function Viewer({
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `${(scene?.site_id ?? "vista").replaceAll("_", "-")}-t${t}-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "")}.png`;
+      link.download = `${(scene?.site_id ?? "view").replaceAll("_", "-")}-t${t}-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "")}.png`;
       link.click();
       URL.revokeObjectURL(url);
     }, "image/png");
+  }
+
+  function startWalk() {
+    const controls = controlsRef.current;
+    const camera = cameraRef.current;
+    if (!controls || !camera || !walkRef.current) return;
+    walkRef.current.lock(controls.target);
+    // The browser grants the pointer lock a few frames later, and until then
+    // the orbit controls keep turning the camera to their target — on the
+    // ground, from the overview. Moved straight ahead of the walker, just
+    // low enough for maxPolarAngle not to lift the camera, it keeps the view
+    // level (and stays sensible if the lock is refused).
+    const forward = new THREE.Vector3();
+    camera.getWorldDirection(forward);
+    controls.target.copy(camera.position).addScaledVector(forward, LOOK_DISTANCE_M);
+    controls.target.y -= LOOK_DISTANCE_M * Math.tan(0.03);
+    controls.update();
   }
 
   return (
@@ -754,15 +993,18 @@ export function Viewer({
       <div ref={containerRef} className="viewer-canvas" />
       {walking ? (
         <div className="viewer-walk-hint">
-          WASD o frecce per muoverti · Shift per correre · Esc per uscire
+          {tr(
+            "WASD o frecce per muoverti · Shift per correre · Esc per uscire",
+            "WASD or arrows to move · Shift to run · Esc to exit"
+          )}
         </div>
       ) : (
         <button
           type="button"
           className="viewer-walk-button"
-          onClick={() => controlsRef.current && walkRef.current?.lock(controlsRef.current.target)}
+          onClick={startWalk}
         >
-          Cammina nello spazio
+          {tr("Cammina nello spazio", "Walk through the space")}
         </button>
       )}
     </div>

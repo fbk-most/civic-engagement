@@ -1,14 +1,15 @@
 import type { InterventionDisplayMode } from "../api/types";
+import { tr } from "../i18n/lang";
 
 interface Props {
   mode: InterventionDisplayMode;
   onChange: (mode: InterventionDisplayMode) => void;
 }
 
-const MODES: { value: InterventionDisplayMode; label: string }[] = [
-  { value: "hidden", label: "Situazione attuale" },
-  { value: "cards", label: "Carte proposte" },
-  { value: "simulated", label: "Simulazione" },
+const MODES: { value: InterventionDisplayMode; label: [it: string, en: string] }[] = [
+  { value: "hidden", label: ["Situazione attuale", "Current situation"] },
+  { value: "cards", label: ["Carte proposte", "Proposed cards"] },
+  { value: "simulated", label: ["Simulazione", "Simulation"] },
 ];
 
 export function InterventionsToggle({ mode, onChange }: Props) {
@@ -25,7 +26,7 @@ export function InterventionsToggle({ mode, onChange }: Props) {
           }
           onClick={() => onChange(option.value)}
         >
-          {option.label}
+          {tr(...option.label)}
         </button>
       ))}
     </div>

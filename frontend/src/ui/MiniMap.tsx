@@ -5,6 +5,7 @@ import { createMap } from "../map/mapSetup";
 import { renderScene, setCameraView } from "../map/layers";
 import { anchorFromPolygon } from "../three/geo";
 import { frustumWedge, poseFromPoints, type CameraPose } from "../three/camera";
+import { tr } from "../i18n/lang";
 
 export interface MiniMapHandle {
   /** Where the 3D camera is right now, or null to fall back to the placed
@@ -165,7 +166,7 @@ export function MiniMap({ scene, mode, cards, pose, onPlacePose, onClearPose, ha
     <div className={large ? "mini-map mini-map--large" : "mini-map"}>
       <div className="mini-map__header">
         <button type="button" className="panel-header" onClick={() => setCollapsed((c) => !c)}>
-          <h3>Mappa</h3>
+          <h3>{tr("Mappa", "Map")}</h3>
           <span className="panel-header__chevron">{collapsed ? "▸" : "▾"}</span>
         </button>
         {!collapsed && (
@@ -173,9 +174,9 @@ export function MiniMap({ scene, mode, cards, pose, onPlacePose, onClearPose, ha
             type="button"
             className="mini-map__size"
             onClick={() => setLarge((l) => !l)}
-            title={large ? "Riduci la mappa" : "Ingrandisci la mappa"}
+            title={large ? tr("Riduci la mappa", "Shrink the map") : tr("Ingrandisci la mappa", "Enlarge the map")}
           >
-            {large ? "Riduci" : "Ingrandisci"}
+            {large ? tr("Riduci", "Shrink") : tr("Ingrandisci", "Enlarge")}
           </button>
         )}
       </div>
@@ -185,15 +186,20 @@ export function MiniMap({ scene, mode, cards, pose, onPlacePose, onClearPose, ha
       {!collapsed && (
         <>
           {placing && (
-            <p className="mini-map__hint">Clicca dove ti trovi, poi nella direzione in cui guardi · Esc per annullare</p>
+            <p className="mini-map__hint">
+              {tr(
+                "Clicca dove ti trovi, poi nella direzione in cui guardi · Esc per annullare",
+                "Click where you stand, then in the direction you look · Esc to cancel"
+              )}
+            </p>
           )}
           <div className="mini-map__actions">
             <button type="button" aria-pressed={placing} onClick={() => setPlacing((p) => !p)}>
-              {placing ? "Annulla" : "Posiziona un punto di vista"}
+              {placing ? tr("Annulla", "Cancel") : tr("Posiziona un punto di vista", "Place a viewpoint")}
             </button>
-            {pose && !placing && (
+            {!placing && (
               <button type="button" onClick={onClearPose}>
-                Vista d'insieme
+                {tr("Vista d'insieme", "Overview")}
               </button>
             )}
           </div>

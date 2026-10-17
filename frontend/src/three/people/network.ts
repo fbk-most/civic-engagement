@@ -15,6 +15,7 @@
 
 import type { DiscreteElement } from "../../api/types";
 import { toLocal, type GeoAnchor } from "../geo";
+import type { FeltSampler } from "./comfort";
 
 const SNAP_M = 6;
 const CROSSING_SNAP_M = 8;
@@ -35,6 +36,8 @@ const DESTINATION_TYPES = new Set<DiscreteElement["type"]>(["kiosk", "playground
 type Point = [number, number];
 
 export interface NetworkEdge {
+  /** Shared by both directions: an index into `WalkNetwork.edgeEnds`. */
+  id: number;
   to: number;
   length: number;
   /** 0-1: how much of the edge is within reach of a streetlight. */
@@ -44,6 +47,8 @@ export interface NetworkEdge {
 export interface WalkNetwork {
   nodes: Point[];
   edges: NetworkEdge[][];
+  /** Each edge's end points, by id. */
+  edgeEnds: [Point, Point][];
   /** Connected pieces worth walking, each with its exits and destinations. */
   components: NetworkComponent[];
 }
@@ -52,8 +57,9 @@ export interface NetworkComponent {
   length: number;
   nodes: number[];
   exits: number[];
-  /** Node near a destination, with the point the walker faces on arrival. */
-  destinations: { node: number; lookAt: Point }[];
+  /** Node near a destination, with the point the walker faces on arrival
+   * and what's there. */
+  destinations: { node: number; lookAt: Point; kind: DiscreteElement["type"] }[];
 }
 
 export interface Polyline {
@@ -260,6 +266,7 @@ export function buildWalkNetwork(
     return index;
   };
   const edges: NetworkEdge[][] = [];
+  const edgeEnds: [Point, Point][] = [];
   const lights = elements
     .filter((e) => e.type === "streetlight" && e.geometry.type === "Point")
     .map((e) => toLocal(anchor, ...((e.geometry as GeoJSON.Point).coordinates as [number, number])));
@@ -275,8 +282,10 @@ export function buildWalkNetwork(
     let litSamples = 0;
     for (let k = 0; k < samples; k++) if (isLit(lerp(p, q, k / (samples - 1)))) litSamples++;
     const lit = litSamples / samples;
-    (edges[i] ??= []).push({ to: j, length, lit });
-    (edges[j] ??= []).push({ to: i, length, lit });
+    const id = edgeEnds.length;
+    edgeEnds.push([p, q]);
+    (edges[i] ??= []).push({ id, to: j, length, lit });
+    (edges[j] ??= []).push({ id, to: i, length, lit });
   };
   for (const segment of [...segments, ...connectors]) {
     const splits = [...new Set(segment.splits)].sort((x, y) => x - y);
@@ -290,7 +299,10 @@ export function buildWalkNetwork(
   const boundary = (siteBoundary.coordinates[0] ?? []).map(([lng, lat]) => toLocal(anchor, lng, lat));
   const destinations = elements
     .filter((e) => DESTINATION_TYPES.has(e.type) && e.geometry.type === "Point")
-    .map((e) => toLocal(anchor, ...((e.geometry as GeoJSON.Point).coordinates as [number, number])));
+    .map((e) => ({
+      at: toLocal(anchor, ...((e.geometry as GeoJSON.Point).coordinates as [number, number])),
+      kind: e.type,
+    }));
   const seen = new Uint8Array(nodes.length);
   const components: NetworkComponent[] = [];
   for (let start = 0; start < nodes.length; start++) {
@@ -329,7 +341,7 @@ export function buildWalkNetwork(
     }
 
     const componentDestinations: NetworkComponent["destinations"] = [];
-    for (const target of destinations) {
+    for (const { at: target, kind } of destinations) {
       let best = -1;
       let bestDistance = DESTINATION_SNAP_M;
       for (const node of members) {
@@ -339,34 +351,80 @@ export function buildWalkNetwork(
           bestDistance = distance;
         }
       }
-      if (best >= 0) componentDestinations.push({ node: best, lookAt: target });
+      if (best >= 0) componentDestinations.push({ node: best, lookAt: target, kind });
     }
     components.push({ length, nodes: members, exits, destinations: componentDestinations });
   }
 
-  return { nodes, edges, components };
+  return { nodes, edges, edgeEnds, components };
 }
 
-/** Shortest route between two nodes, as node indices. At night, the unlit
- * part of each stretch counts as `darkPenalty` times longer: people prefer
- * lit paths. */
-export function findRoute(network: WalkNetwork, from: number, to: number, darkPenalty: number): number[] | null {
+/** What makes a stretch of path feel longer than it is. */
+export interface RouteConditions {
+  /** At night, the unlit part of each stretch counts DARK_PENALTY times
+   * longer: people prefer lit paths. */
+  dark: boolean;
+  /** Per edge id, how much longer the felt temperature along it makes it
+   * feel (see comfort.ts); null when temperature plays no part. */
+  walkCosts: Float32Array | null;
+  /** Felt temperature, for where to stop on the way (see walkers.ts);
+   * null when temperature plays no part. */
+  felt: FeltSampler | null;
+}
+
+const DARK_PENALTY = 3;
+
+/** The cheapest a metre of the network can feel under `walkCosts`, for
+ * A*'s estimate (see `findRoute`). Cached: walkers route against the same
+ * costs all hour. */
+const cheapestWalkCost = new WeakMap<Float32Array, number>();
+
+function cheapestMetre(walkCosts: Float32Array | null): number {
+  if (!walkCosts) return 1;
+  let cheapest = cheapestWalkCost.get(walkCosts);
+  if (cheapest === undefined) {
+    cheapest = 1;
+    for (const cost of walkCosts) cheapest = Math.min(cheapest, cost);
+    cheapestWalkCost.set(walkCosts, cheapest);
+  }
+  return cheapest;
+}
+
+/** Shortest route between two nodes as it feels (`conditions`), as node
+ * indices. A*: the straight line to `to`, at the cheapest a metre can feel,
+ * never overestimates (an edge is at least as long as the straight line
+ * between its ends, and darkness only adds), so the route is the same as
+ * a full search's — found in a fraction of the time, which counts when
+ * every walker reroutes at once (a new network, see Crowd.setWalkers). */
+export function findRoute(network: WalkNetwork, from: number, to: number, conditions: RouteConditions): number[] | null {
+  const darkPenalty = conditions.dark ? DARK_PENALTY : 1;
+  const walkCosts = conditions.walkCosts;
   if (from === to) return null;
-  const cost = new Float64Array(network.nodes.length).fill(Infinity);
-  const previous = new Int32Array(network.nodes.length).fill(-1);
+  const nodes = network.nodes;
+  const [tx, tz] = nodes[to];
+  const perMetre = cheapestMetre(walkCosts);
+  const estimate = (node: number) => Math.hypot(nodes[node][0] - tx, nodes[node][1] - tz) * perMetre;
+  const cost = new Float64Array(nodes.length).fill(Infinity);
+  const previous = new Int32Array(nodes.length).fill(-1);
+  const done = new Uint8Array(nodes.length);
   const heap = new MinHeap();
   cost[from] = 0;
-  heap.push(from, 0);
+  heap.push(from, estimate(from));
   while (heap.size > 0) {
-    const [node, nodeCost] = heap.pop();
+    const node = heap.pop();
     if (node === to) break;
-    if (nodeCost > cost[node]) continue;
+    // Popped again through a costlier path: with this estimate, the first
+    // time a node is popped its cost is final.
+    if (done[node]) continue;
+    done[node] = 1;
+    const nodeCost = cost[node];
     for (const edge of network.edges[node]) {
-      const next = nodeCost + edge.length * (edge.lit + (1 - edge.lit) * darkPenalty);
+      const next =
+        nodeCost + edge.length * (edge.lit + (1 - edge.lit) * darkPenalty) * (walkCosts ? walkCosts[edge.id] : 1);
       if (next < cost[edge.to]) {
         cost[edge.to] = next;
         previous[edge.to] = node;
-        heap.push(edge.to, next);
+        heap.push(edge.to, next + estimate(edge.to));
       }
     }
   }
@@ -376,43 +434,54 @@ export function findRoute(network: WalkNetwork, from: number, to: number, darkPe
   return route.reverse();
 }
 
+/** Binary min-heap of node indices by priority, on typed arrays (a route
+ * pushes thousands of entries; tuples would each be an allocation). */
 class MinHeap {
-  private readonly items: [number, number][] = [];
-
-  get size(): number {
-    return this.items.length;
-  }
+  private values = new Int32Array(256);
+  private priorities = new Float64Array(256);
+  size = 0;
 
   push(value: number, priority: number): void {
-    const items = this.items;
-    items.push([value, priority]);
-    let i = items.length - 1;
+    if (this.size === this.values.length) {
+      const values = new Int32Array(this.size * 2);
+      values.set(this.values);
+      this.values = values;
+      const priorities = new Float64Array(this.size * 2);
+      priorities.set(this.priorities);
+      this.priorities = priorities;
+    }
+    const { values, priorities } = this;
+    let i = this.size++;
     while (i > 0) {
       const parent = (i - 1) >> 1;
-      if (items[parent][1] <= items[i][1]) break;
-      [items[parent], items[i]] = [items[i], items[parent]];
+      if (priorities[parent] <= priority) break;
+      values[i] = values[parent];
+      priorities[i] = priorities[parent];
       i = parent;
     }
+    values[i] = value;
+    priorities[i] = priority;
   }
 
-  pop(): [number, number] {
-    const items = this.items;
-    const top = items[0];
-    const last = items.pop()!;
-    if (items.length > 0) {
-      items[0] = last;
-      let i = 0;
-      for (;;) {
-        const l = 2 * i + 1;
-        const r = l + 1;
-        let smallest = i;
-        if (l < items.length && items[l][1] < items[smallest][1]) smallest = l;
-        if (r < items.length && items[r][1] < items[smallest][1]) smallest = r;
-        if (smallest === i) break;
-        [items[smallest], items[i]] = [items[i], items[smallest]];
-        i = smallest;
-      }
+  pop(): number {
+    const { values, priorities } = this;
+    const top = values[0];
+    const last = --this.size;
+    const value = values[last];
+    const priority = priorities[last];
+    let i = 0;
+    for (;;) {
+      const l = 2 * i + 1;
+      if (l >= last) break;
+      const r = l + 1;
+      const child = r < last && priorities[r] < priorities[l] ? r : l;
+      if (priorities[child] >= priority) break;
+      values[i] = values[child];
+      priorities[i] = priorities[child];
+      i = child;
     }
+    values[i] = value;
+    priorities[i] = priority;
     return top;
   }
 }

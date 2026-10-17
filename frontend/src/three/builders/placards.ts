@@ -13,7 +13,7 @@ import * as THREE from "three";
 import type { CardSpec, Intervention } from "../../api/types";
 import { drawCardIcon } from "../../map/cardMarkerIcons";
 import { CATEGORY_COLORS } from "../../ui/categoryColors";
-import { yearLabel } from "../../i18n/labels";
+import { cardLabel, yearLabel } from "../../i18n/labels";
 import { representativePoint, toLocal, type GeoAnchor } from "../geo";
 
 const PANEL_WIDTH_M = 0.8;
@@ -146,7 +146,7 @@ function drawPlacard(iv: Intervention, card: CardSpec | undefined, color: string
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
   ctx.font = "bold 26px system-ui, sans-serif";
-  const lines = wrapText(ctx, card?.label ?? iv.card_type, CANVAS_WIDTH_PX - BORDER_PX * 2 - 16).slice(0, 3);
+  const lines = wrapText(ctx, card ? cardLabel(card) : iv.card_type, CANVAS_WIDTH_PX - BORDER_PX * 2 - 16).slice(0, 3);
   lines.forEach((line, i) => ctx.fillText(line, CANVAS_WIDTH_PX / 2, HEADER_PX + 16 + i * 32));
 
   ctx.fillStyle = "#666";

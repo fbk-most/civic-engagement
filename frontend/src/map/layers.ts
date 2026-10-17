@@ -617,6 +617,8 @@ function ensureLayers(map: MapLibreMap, latDeg: number, showBoundary: boolean): 
     id: "highlight-fill",
     type: "fill",
     source: "highlight",
+    // Areas only: MapLibre would otherwise fill a path as if it were closed.
+    filter: ["==", ["geometry-type"], "Polygon"],
     paint: { "fill-color": "#ffcc00", "fill-opacity": 0.3 },
   });
   map.addLayer({
@@ -629,6 +631,7 @@ function ensureLayers(map: MapLibreMap, latDeg: number, showBoundary: boolean): 
     id: "highlight-circle",
     type: "circle",
     source: "highlight",
+    filter: ["==", ["geometry-type"], "Point"],
     paint: {
       "circle-radius": 14,
       "circle-color": "rgba(0,0,0,0)",

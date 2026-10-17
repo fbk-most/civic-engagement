@@ -19,6 +19,13 @@ def to_projected(geojson: dict) -> BaseGeometry:
     return gpd.GeoSeries([geom], crs=WGS84_CRS).to_crs(PROJECTED_CRS).iloc[0]
 
 
+def to_projected_many(geojsons: list[dict]) -> list[BaseGeometry]:
+    """`to_projected` for many geometries at once (one reprojection)."""
+    if not geojsons:
+        return []
+    return list(gpd.GeoSeries([shape(g) for g in geojsons], crs=WGS84_CRS).to_crs(PROJECTED_CRS))
+
+
 def area_m2(geojson: dict) -> float:
     return to_projected(geojson).area
 
@@ -97,6 +104,17 @@ def grove_points_within(geojson: dict, spacing_m: float, seed: str) -> list[dict
     if SITE.grove_placement_algorithm == "jittered":
         return jittered_grid_points_within(geojson, spacing_m, seed)
     return grid_points_within(geojson, spacing_m)
+
+
+def points_along(geojson: dict, spacing_m: float) -> list[dict]:
+    """Points along a line, both ends included, evenly spaced as close to
+    `spacing_m` apart as the line's length allows — used to lay out the
+    streetlights of a lit path. Returned as WGS84 GeoJSON Points."""
+    line = to_projected(geojson)
+    gaps = max(1, round(line.length / spacing_m))
+    points = [line.interpolate(line.length * i / gaps) for i in range(gaps + 1)]
+    wgs84_points = gpd.GeoSeries(points, crs=PROJECTED_CRS).to_crs(WGS84_CRS)
+    return [mapping(p) for p in wgs84_points]
 
 
 def centroid_point(geojson: dict) -> dict:

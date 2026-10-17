@@ -7980,28 +7980,6 @@
       "intervention_id": null
     },
     {
-      "id": "tree-158",
-      "type": "tree",
-      "geometry": {
-        "type": "Point",
-        "coordinates": [
-          11.12009,
-          46.0717131
-        ]
-      },
-      "properties": {
-        "species": "birch",
-        "age_class": "young",
-        "canopy_diameter": 2.5,
-        "height": 3.25,
-        "cut_year": 1,
-        "foliage_type": "deciduous",
-        "crown_form": "round"
-      },
-      "source": "baseline",
-      "intervention_id": null
-    },
-    {
       "id": "tree-159",
       "type": "tree",
       "geometry": {
@@ -11032,20 +11010,6 @@
       "intervention_id": null
     },
     {
-      "id": "streetlight-29",
-      "type": "streetlight",
-      "geometry": {
-        "type": "Point",
-        "coordinates": [
-          11.120122,
-          46.0717442
-        ]
-      },
-      "properties": {},
-      "source": "baseline",
-      "intervention_id": null
-    },
-    {
       "id": "streetlight-30",
       "type": "streetlight",
       "geometry": {
@@ -11109,20 +11073,6 @@
         "coordinates": [
           11.1207905,
           46.0717246
-        ]
-      },
-      "properties": {},
-      "source": "baseline",
-      "intervention_id": null
-    },
-    {
-      "id": "streetlight-35",
-      "type": "streetlight",
-      "geometry": {
-        "type": "Point",
-        "coordinates": [
-          11.1202573,
-          46.0718957
         ]
       },
       "properties": {},

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from civic_twin.api import routes_cards, routes_interventions, routes_scene
+from civic_twin.api import routes_cards, routes_interventions, routes_scenarios, routes_scene
 
 app = FastAPI(title="Civic Digital Twin PoC")
 
@@ -16,3 +16,4 @@ app.add_middleware(
 app.include_router(routes_scene.router, prefix="/api")
 app.include_router(routes_cards.router, prefix="/api")
 app.include_router(routes_interventions.router, prefix="/api")
+app.include_router(routes_scenarios.router, prefix="/api")

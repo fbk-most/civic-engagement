@@ -12,6 +12,7 @@
 
 import { DEFAULT_FOV_DEG, type CameraPose } from "./three/camera";
 import type { SunSetting } from "./three/sun";
+import type { InterventionDisplayMode } from "./api/types";
 import { LIFE_MODES, type LifeMode } from "./three/people/activity";
 
 export interface DebugParams {
@@ -33,7 +34,25 @@ export interface DebugParams {
   /** `?realLights=N`: how many streetlights near what's in view get a real,
    * shadow-casting light (default 8) — for testing. */
   realLights: number | null;
+  /** `?thermal=1`: open with the felt-temperature layer on. */
+  thermal: boolean;
+  /** `?panels=closed`: open with the side boxes (cards, interventions,
+   * indicators) collapsed — for a demo that starts on the bare map. */
+  panelsClosed: boolean;
+  /** `?interventions=attuale|carte|simulazione`: open on "Situazione
+   * attuale", "Carte proposte" or "Simulazione" (default). */
+  interventionMode: InterventionDisplayMode | null;
+  /** `?comfort=off`: people ignore the felt temperature (where they stop,
+   * which way they walk) — for comparison. */
+  comfort: boolean;
 }
+
+// The interventions switch's buttons, by their URL name.
+const MODE_BY_PARAM: Record<string, InterventionDisplayMode> = {
+  attuale: "hidden",
+  carte: "cards",
+  simulazione: "simulated",
+};
 
 function num(params: URLSearchParams, key: string): number | null {
   const raw = params.get(key);
@@ -69,11 +88,22 @@ export function readDebugParams(search: string = window.location.search): DebugP
     perf: params.get("perf") === "1",
     nightLights: params.get("lights") === "all" ? "all" : "cheap",
     realLights: num(params, "realLights"),
+    thermal: params.get("thermal") === "1",
+    panelsClosed: params.get("panels") === "closed",
+    interventionMode: MODE_BY_PARAM[params.get("interventions") ?? ""] ?? null,
+    comfort: params.get("comfort") !== "off",
   };
 }
 
 /** Inverse of `readDebugParams`, used by the "Copia URL vista" button. */
-export function buildDebugUrl(state: { t: number; sun: SunSetting; pose: CameraPose | null; life: LifeMode }): string {
+export function buildDebugUrl(state: {
+  t: number;
+  sun: SunSetting;
+  pose: CameraPose | null;
+  life: LifeMode;
+  comfort: boolean;
+  interventionMode: InterventionDisplayMode;
+}): string {
   const params = new URLSearchParams();
   params.set("viewer", "1");
   params.set("t", String(state.t));
@@ -89,5 +119,8 @@ export function buildDebugUrl(state: { t: number; sun: SunSetting; pose: CameraP
     params.set("fov", String(state.pose.fovDeg));
   }
   params.set("life", state.life);
+  const mode = Object.entries(MODE_BY_PARAM).find(([, value]) => value === state.interventionMode)?.[0];
+  if (mode && mode !== "simulazione") params.set("interventions", mode);
+  if (!state.comfort) params.set("comfort", "off");
   return `${window.location.origin}${window.location.pathname}?${params.toString()}`;
 }

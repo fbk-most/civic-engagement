@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { IndicatorSeries, Indicators, Intervention } from "../api/types";
 import { fetchIndicatorSeries } from "../api/client";
-import { COVER_TYPE_LABELS_IT, yearLabel } from "../i18n/labels";
+import { locale, tr } from "../i18n/lang";
+import { coverTypeLabel, yearLabel } from "../i18n/labels";
 import { COVER_COLORS } from "../map/layers";
 import { LineChart, StackedAreaChart } from "./charts";
 
@@ -11,9 +12,12 @@ interface Props {
   onTimeChange: (t: number) => void;
 }
 
+type Pair = [it: string, en: string];
+
 interface LineSpec {
-  title: string;
-  unit: string;
+  title: Pair;
+  /** Either the same in both languages, or a pair. */
+  unit: string | Pair;
   decimals: number;
   get: (indicators: Indicators) => number | null;
   /** Which way a change counts as an improvement, for the delta's colour. */
@@ -22,26 +26,33 @@ interface LineSpec {
   scenarioOnly?: boolean;
 }
 
-const SECTIONS: { title: string; charts: LineSpec[] }[] = [
+const SECTIONS: { title: Pair; charts: LineSpec[]; inclusivity?: boolean }[] = [
   {
-    title: "Clima e ambiente",
+    title: ["Clima e ambiente", "Climate and environment"],
     charts: [
       {
-        title: "Temperatura estiva stimata",
+        title: ["Temperatura percepita (21 giugno, ore 11)", "Felt temperature (21 June, 11:00)"],
         unit: " °C",
         decimals: 1,
-        get: (i) => i.thermal_comfort.estimated_temperature_c,
+        get: (i) => i.thermal_comfort?.felt_temperature_c ?? null,
         betterWhen: "lower",
       },
       {
-        title: "CO₂ assorbita all'anno",
-        unit: " kg/anno",
+        title: ["Area in stress da caldo (21 giugno, ore 11)", "Area in heat stress (21 June, 11:00)"],
+        unit: "%",
+        decimals: 1,
+        get: (i) => i.thermal_comfort?.heat_stress_pct ?? null,
+        betterWhen: "lower",
+      },
+      {
+        title: ["CO₂ assorbita all'anno", "CO₂ absorbed per year"],
+        unit: [" kg/anno", " kg/year"],
         decimals: 0,
         get: (i) => i.co2.annual_rate_kg,
         betterWhen: "higher",
       },
       {
-        title: "CO₂ assorbita da oggi (cumulata)",
+        title: ["CO₂ assorbita da oggi (cumulata)", "CO₂ absorbed from today (cumulative)"],
         unit: " kg",
         decimals: 0,
         get: (i) => i.co2.cumulative_kg,
@@ -50,17 +61,17 @@ const SECTIONS: { title: string; charts: LineSpec[] }[] = [
     ],
   },
   {
-    title: "Accessibilità",
+    title: ["Accessibilità", "Accessibility"],
     charts: [
       {
-        title: "Percorribilità pedonale",
+        title: ["Percorribilità pedonale", "Walkability"],
         unit: "",
         decimals: 1,
         get: (i) => i.accessibility.walkability_score,
         betterWhen: "higher",
       },
       {
-        title: "Percorsi fragili",
+        title: ["Percorsi fragili", "Fragile paths"],
         unit: "%",
         decimals: 1,
         get: (i) => i.accessibility.fragile_path_pct,
@@ -69,17 +80,18 @@ const SECTIONS: { title: string; charts: LineSpec[] }[] = [
     ],
   },
   {
-    title: "Sicurezza e inclusività",
+    title: ["Sicurezza e inclusività", "Safety and inclusivity"],
+    inclusivity: true,
     charts: [
       {
-        title: "Sicurezza percepita",
+        title: ["Sicurezza percepita", "Perceived safety"],
         unit: "%",
         decimals: 1,
         get: (i) => i.social.safety_score,
         betterWhen: "higher",
       },
       {
-        title: "Utilizzo serale/invernale",
+        title: ["Utilizzo serale/invernale", "Evening/winter use"],
         unit: "%",
         decimals: 1,
         get: (i) => i.social.evening_winter_score,
@@ -88,13 +100,29 @@ const SECTIONS: { title: string; charts: LineSpec[] }[] = [
     ],
   },
   {
-    title: "Costi",
+    title: ["Costi", "Costs"],
     charts: [
       {
-        title: "Costo degli interventi realizzati",
+        title: ["Costo degli interventi realizzati", "Cost of the interventions built"],
         unit: " €",
         decimals: 0,
         get: (i) => i.cost_eur,
+        betterWhen: "lower",
+        scenarioOnly: true,
+      },
+      {
+        title: ["Manutenzione aggiuntiva all'anno", "Added maintenance per year"],
+        unit: [" €/anno", " €/year"],
+        decimals: 0,
+        get: (i) => i.maintenance.annual_eur,
+        betterWhen: "lower",
+        scenarioOnly: true,
+      },
+      {
+        title: ["Manutenzione aggiuntiva da oggi (cumulata)", "Added maintenance from today (cumulative)"],
+        unit: " €",
+        decimals: 0,
+        get: (i) => i.maintenance.cumulative_eur,
         betterWhen: "lower",
         scenarioOnly: true,
       },
@@ -102,20 +130,21 @@ const SECTIONS: { title: string; charts: LineSpec[] }[] = [
   },
 ];
 
-const AGE_GROUPS: { key: keyof Indicators["social"]["age_inclusivity"]; label: string }[] = [
-  { key: "bambini", label: "Bambini" },
-  { key: "giovani", label: "Giovani" },
-  { key: "generale", label: "Generale" },
+const AGE_GROUPS: { key: keyof Indicators["social"]["age_inclusivity"]; label: Pair }[] = [
+  { key: "bambini", label: ["Bambini", "Children"] },
+  { key: "giovani", label: ["Giovani", "Young people"] },
+  { key: "generale", label: ["Generale", "Everyone"] },
 ];
 
 /** Marks a read-out as being for the selected year, not the whole series. */
 function yearTag(t: number): string {
-  return t === 0 ? "(oggi)" : `(anno +${t})`;
+  return t === 0 ? tr("(oggi)", "(today)") : tr(`(anno +${t})`, `(year +${t})`);
 }
 
-function format(value: number | null, decimals: number, unit: string): string {
-  if (value === null) return "n/d";
-  return `${value.toLocaleString("it-IT", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}${unit}`;
+function format(value: number | null, decimals: number, unitSpec: LineSpec["unit"]): string {
+  if (value === null) return tr("n/d", "n/a");
+  const unit = typeof unitSpec === "string" ? unitSpec : tr(...unitSpec);
+  return `${value.toLocaleString(locale(), { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}${unit}`;
 }
 
 function ChartCard({
@@ -142,7 +171,7 @@ function ChartCard({
 
   return (
     <div className="indicator-card">
-      <h4>{spec.title}</h4>
+      <h4>{tr(...spec.title)}</h4>
       <p className="indicator-card__values">
         {!spec.scenarioOnly && (
           <>
@@ -154,7 +183,7 @@ function ChartCard({
         {changed && (
           <span className={improved ? "indicator-card__delta indicator-card__delta--better" : "indicator-card__delta indicator-card__delta--worse"}>
             {delta! > 0 ? "+" : ""}
-            {delta!.toLocaleString("it-IT", { maximumFractionDigits: spec.decimals })}
+            {delta!.toLocaleString(locale(), { maximumFractionDigits: spec.decimals })}
           </span>
         )}
         <span className="indicator-card__year">{yearTag(t)}</span>
@@ -201,14 +230,14 @@ function SpaceUseCard({
 
   return (
     <div className="indicator-card indicator-card--wide">
-      <h4>Uso dello spazio</h4>
+      <h4>{tr("Uso dello spazio", "Use of space")}</h4>
       <div className="indicator-card__pair">
         <div>
-          <p className="indicator-card__subtitle">Situazione attuale</p>
+          <p className="indicator-card__subtitle">{tr("Situazione attuale", "Current situation")}</p>
           <StackedAreaChart years={series.years} t={t} onSelectYear={onTimeChange} layers={layersFor(series.baseline)} />
         </div>
         <div>
-          <p className="indicator-card__subtitle">Simulazione</p>
+          <p className="indicator-card__subtitle">{tr("Simulazione", "Simulation")}</p>
           <StackedAreaChart years={series.years} t={t} onSelectYear={onTimeChange} layers={layersFor(series.scenario)} />
         </div>
       </div>
@@ -216,7 +245,7 @@ function SpaceUseCard({
         {coverTypes.map((type) => (
           <span key={type} className="indicator-card__legend-item">
             <span className="indicator-card__swatch" style={{ background: COVER_COLORS[type] ?? "#c9c6bd" }} />
-            {COVER_TYPE_LABELS_IT[type] ?? type}{" "}
+            {coverTypeLabel(type)}{" "}
             <span className="indicator-card__legend-values">
               {series.baseline[index]?.space_use_pct[type] ?? 0}% → {series.scenario[index]?.space_use_pct[type] ?? 0}%
             </span>
@@ -236,20 +265,20 @@ function InclusivityCard({ series, t }: { series: IndicatorSeries; t: number }) 
   return (
     <div className="indicator-card">
       <h4>
-        Spazio adatto a… <span className="indicator-card__year">{yearTag(t)}</span>
+        {tr("Spazio adatto a…", "Space suited to…")} <span className="indicator-card__year">{yearTag(t)}</span>
       </h4>
       <table className="indicator-card__table">
         <thead>
           <tr>
             <th />
-            <th>Attuale</th>
-            <th>Simulazione</th>
+            <th>{tr("Attuale", "Current")}</th>
+            <th>{tr("Simulazione", "Simulation")}</th>
           </tr>
         </thead>
         <tbody>
           {AGE_GROUPS.map((group) => (
             <tr key={group.key}>
-              <td>{group.label}</td>
+              <td>{tr(...group.label)}</td>
               <td>{baseline[group.key] ? "✓" : "—"}</td>
               <td className={scenario[group.key] && !baseline[group.key] ? "indicator-card__gain" : undefined}>
                 {scenario[group.key] ? "✓" : "—"}
@@ -298,37 +327,40 @@ export function IndicatorsView({ interventions, t, onTimeChange }: Props) {
     <div className="indicators-view">
       <div className="indicators-view__inner">
         <header className="indicators-view__header">
-          <h2>Indicatori · {yearLabel(t)}</h2>
+          <h2>{tr("Indicatori", "Indicators")} · {yearLabel(t)}</h2>
           <div className="indicators-view__legend">
             <span className="indicators-view__legend-item">
               <svg width="28" height="8">
                 <line x1="0" x2="28" y1="4" y2="4" className="chart__line chart__line--baseline" />
               </svg>
-              Situazione attuale
+              {tr("Situazione attuale", "Current situation")}
             </span>
             <span className="indicators-view__legend-item">
               <svg width="28" height="8">
                 <line x1="0" x2="28" y1="4" y2="4" className="chart__line chart__line--scenario" />
               </svg>
-              Simulazione (con gli interventi)
+              {tr("Simulazione (con gli interventi)", "Simulation (with the interventions)")}
             </span>
-            {loading && <span className="indicators-view__status">Calcolo delle serie in corso…</span>}
-            {failed && <span className="indicators-view__status">Impossibile calcolare le serie</span>}
+            {loading && <span className="indicators-view__status">{tr("Calcolo delle serie in corso…", "Computing the series…")}</span>}
+            {failed && <span className="indicators-view__status">{tr("Impossibile calcolare le serie", "Could not compute the series")}</span>}
           </div>
           <div className="indicators-view__options">
-            <p className="indicators-view__hint">Clicca su un grafico per spostarti a quell'anno.</p>
-            <div className="indicators-view__scale" role="group" aria-label="Scala dei grafici">
-              <span>Scala:</span>
+            <p className="indicators-view__hint">{tr("Clicca su un grafico per spostarti a quell'anno.", "Click on a chart to move to that year.")}</p>
+            <div className="indicators-view__scale" role="group" aria-label={tr("Scala dei grafici", "Chart scale")}>
+              <span>{tr("Scala:", "Scale:")}</span>
               <button type="button" aria-pressed={zeroBased} onClick={() => setZeroBased(true)}>
-                Da zero
+                {tr("Da zero", "From zero")}
               </button>
               <button
                 type="button"
                 aria-pressed={!zeroBased}
                 onClick={() => setZeroBased(false)}
-                title="Adatta la scala ai valori: rende visibili le piccole variazioni, ma le fa sembrare più grandi"
+                title={tr(
+                  "Adatta la scala ai valori: rende visibili le piccole variazioni, ma le fa sembrare più grandi",
+                  "Fit the scale to the values: makes small changes visible, but makes them look bigger"
+                )}
               >
-                Adattata ai valori
+                {tr("Adattata ai valori", "Fitted to the values")}
               </button>
             </div>
           </div>
@@ -342,12 +374,12 @@ export function IndicatorsView({ interventions, t, onTimeChange }: Props) {
               </div>
             </section>
             {SECTIONS.map((section) => (
-              <section key={section.title}>
-                <h3>{section.title}</h3>
+              <section key={section.title[0]}>
+                <h3>{tr(...section.title)}</h3>
                 <div className="indicators-view__grid">
                   {section.charts.map((spec) => (
                     <ChartCard
-                      key={spec.title}
+                      key={spec.title[0]}
                       spec={spec}
                       series={series}
                       t={t}
@@ -355,7 +387,7 @@ export function IndicatorsView({ interventions, t, onTimeChange }: Props) {
                       zeroBased={zeroBased}
                     />
                   ))}
-                  {section.title === "Sicurezza e inclusività" && <InclusivityCard series={series} t={t} />}
+                  {section.inclusivity && <InclusivityCard series={series} t={t} />}
                 </div>
               </section>
             ))}

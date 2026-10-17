@@ -6,18 +6,17 @@
  * spawning a worker isn't free, and recreating the whole pool on every
  * scene rebuild would eat into the win. The one time they *are* torn down
  * and respawned is if a new build starts while a previous one is still
- * running: `SceneBuilder.ts`'s own docstring notes vegetation rebuilds fire
- * on every scenario-year *and* every month/date change, so rapid slider
- * scrubbing is a real interaction pattern here, not a hypothetical —
+ * running: vegetation rebuilds fire on every scenario-year change, so rapid
+ * slider scrubbing is a real interaction pattern here, not a hypothetical —
  * without hard cancellation, a stale in-flight build (whose result is about
  * to be discarded by `Viewer.tsx`'s own staleness check) would keep
  * competing for the same cores as the one build that actually matters.
  *
- * On top of that, results are memoized by job content (see `jobCacheKey`):
- * a tree's geometry depends on nothing but its own `TreeJob` fields, so an
- * exact repeat — an evergreen tree, whose `density`/`autumnMix` never vary
- * with season at all; or revisiting a month/year combination already seen
- * this session — needs no worker round trip at all, just a map lookup. The
+ * On top of that, results are memoized by job content (see `treeJobKey`):
+ * a tree's geometry depends on nothing but its own `TreeJob` fields — not
+ * on the season, which is applied when drawing (see `vegetation.ts`) — so
+ * an unchanged tree (a card added elsewhere, a year when it didn't grow)
+ * needs no worker round trip at all, just a map lookup. The
  * key is derived from every field that affects the result, so the cache is
  * self-invalidating: there's no separate invalidation path to get wrong,
  * a changed input is just a different key.
@@ -27,13 +26,28 @@ import type { TreeBuildResult, TreeJob, TreeWorkerRequest, TreeWorkerResponse } 
 
 const POOL_SIZE = Math.max(1, Math.min(navigator.hardwareConcurrency || 4, 8));
 
-/** Generous enough to hold several full scenes' worth of distinct tree
- * states (a session revisiting a handful of months across a handful of
- * scenario years) without the cache defeating its own purpose, bounded so
- * an very long-running session doesn't grow this without limit — each entry
- * is a tree's worth of typed arrays, not a trivial amount of memory times
- * hundreds of trees times many visited states. */
-const MAX_CACHE_ENTRIES = 6000;
+/** Bounded by size, not by count: one scenario year's trees for Piazza
+ * Dante are about 500 MB of typed arrays (full canopy, measured as 460 MB
+ * before the season attributes), and the scene shown holds a merged copy
+ * of them on top. A count bound (6000 entries, as before) let a session
+ * visiting a few dates and years grow the tab past its memory and crash it.
+ * This keeps a year's worth and some — returning to the year shown before
+ * reuses whatever trees didn't change — and drops the least recently used
+ * beyond that. (Dates no longer matter: the season is applied when
+ * drawing.) */
+const MAX_CACHE_BYTES = 700_000_000;
+let cacheBytes = 0;
+
+function resultBytes(result: TreeBuildResult): number {
+  let bytes = 0;
+  for (const part of [result.bark, result.foliage]) {
+    if (!part) continue;
+    for (const value of Object.values(part)) {
+      if (ArrayBuffer.isView(value)) bytes += value.byteLength;
+    }
+  }
+  return bytes;
+}
 
 /** Insertion order doubles as recency order here: a hit is re-inserted (see
  * `cacheGet`) to bump it to the end, so the oldest entry — the one evicted
@@ -45,7 +59,7 @@ const resultCache = new Map<string, TreeBuildResult>();
  * included, even though a given tree's `(x, z)` never actually changes
  * within a session, since including it costs nothing and makes the cache
  * correct without relying on that assumption. */
-function jobCacheKey(job: TreeJob): string {
+export function treeJobKey(job: TreeJob): string {
   return [
     job.id,
     job.x,
@@ -55,8 +69,6 @@ function jobCacheKey(job: TreeJob): string {
     job.canopyDiameter,
     job.crownForm,
     job.isEvergreen,
-    job.density,
-    job.autumnMix,
   ].join(":");
 }
 
@@ -70,10 +82,14 @@ function cacheGet(key: string): TreeBuildResult | undefined {
 }
 
 function cacheSet(key: string, result: TreeBuildResult): void {
+  const previous = resultCache.get(key);
+  if (previous) cacheBytes -= resultBytes(previous);
   resultCache.set(key, result);
-  if (resultCache.size > MAX_CACHE_ENTRIES) {
-    const oldestKey = resultCache.keys().next().value;
-    if (oldestKey !== undefined) resultCache.delete(oldestKey);
+  cacheBytes += resultBytes(result);
+  while (cacheBytes > MAX_CACHE_BYTES && resultCache.size > 1) {
+    const [oldestKey, oldest] = resultCache.entries().next().value!;
+    resultCache.delete(oldestKey);
+    cacheBytes -= resultBytes(oldest);
   }
 }
 
@@ -124,7 +140,7 @@ export function buildTreesInWorkers(jobs: TreeJob[]): Promise<TreeBuildResult[]>
   const missKeysById = new Map<string, string>();
   const misses: TreeJob[] = [];
   for (const job of jobs) {
-    const key = jobCacheKey(job);
+    const key = treeJobKey(job);
     const cached = cacheGet(key);
     if (cached) {
       results.push(cached);
