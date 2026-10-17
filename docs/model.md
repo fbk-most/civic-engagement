@@ -314,9 +314,12 @@ Indicators summarize a scenario for the discussion. Some guidelines:
 
 *In the reference implementation:* indicators come from the yearly model (space use, CO₂,
 accessibility, social coverage, cost) and from the felt-temperature field (mean felt temperature,
-% in heat stress, % in sun). `GET /api/scene` returns them for the proposal and for "as is" at
-year `t`, and `GET /api/indicators/series` returns them for every year. The set is still fixed in
-`schema.py` and `frontend/src/api/types.ts`; moving to descriptors is a planned step.
+% in heat stress, % in sun). The urban pack declares them as descriptors
+(`packs/bologna-civic-dt/bologna_civic_dt/indicators.py`, served by `GET /api/indicators/descriptors`)
+and the frontend shows whatever they declare. `GET /api/scene` returns the values for the proposal
+and for "as is" at year `t`, keyed by descriptor id, except the slow ones marked `deferred` (the
+field-based ones), which `GET /api/indicators/deferred` serves apart; `GET /api/indicators/series`
+returns all of them for every year.
 
 ## 10. Layer 7: views and interaction
 

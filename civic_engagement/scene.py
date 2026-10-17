@@ -11,7 +11,6 @@ with the current one here: the model itself knows nothing about baselines.
 
 import base64
 import json
-import math
 import threading
 from collections import OrderedDict
 from concurrent.futures import Future
@@ -26,13 +25,8 @@ from civic_engagement.config import SITE
 from bologna_civic_dt.encode import encode
 from bologna_civic_dt.field_grid import Anchor, Frame, rasterize
 from bologna_civic_dt.layout import Layout, TreeSlot, build_layout
-from bologna_civic_dt.model import (
-    COVER_TYPES,
-    INCLUSION_GROUPS,
-    UrbanEvaluator,
-    UrbanOutput,
-    build_model,
-)
+from bologna_civic_dt.indicators import DESCRIPTORS, indicator_values, thermal_values
+from bologna_civic_dt.model import UrbanEvaluator, UrbanOutput, build_model
 from bologna_civic_dt.parameters import (
     HORIZON_YEARS,
     SITE_TIMEZONE,
@@ -48,13 +42,15 @@ from bologna_civic_dt.trees import species_traits
 from civic_engagement.models.schema import (
     BaselineScene,
     CoverPolygon,
+    DeferredIndicators,
     DiscreteElement,
     FieldGrid,
+    IndicatorDescriptors,
     IndicatorSeries,
+    IndicatorValues,
     Intervention,
     SceneResponse,
     ThermalFieldResponse,
-    ThermalIndicators,
 )
 from civic_engagement.store.state import store
 
@@ -258,15 +254,11 @@ def _compute_field(interventions: list[Intervention], t: int, day: date) -> Fiel
     )
 
 
-def _thermal(interventions: list[Intervention], t: int) -> dict:
+def _thermal(interventions: list[Intervention], t: int) -> IndicatorValues:
     """The thermal indicators at year t: the field at the reference moment."""
     month, day, hour = THERMAL_REFERENCE
     field = _field(interventions, t, calendar_date(t, month, day))
-    return {
-        "felt_temperature_c": round(float(field.mean_felt[hour]), 1),
-        "heat_stress_pct": round(float(field.heat_stress_pct[hour]), 1),
-        "sunlit_pct": round(float(field.sunlit_pct[hour]), 1),
-    }
+    return thermal_values(field.mean_felt[hour], field.heat_stress_pct[hour], field.sunlit_pct[hour])
 
 
 # The yearly series computes the thermal indicators every few years only
@@ -274,7 +266,7 @@ def _thermal(interventions: list[Intervention], t: int) -> dict:
 THERMAL_SERIES_STEP = 5
 
 
-def _thermal_series(interventions: list[Intervention], years: list[int]) -> list[dict]:
+def _thermal_series(interventions: list[Intervention], years: list[int]) -> list[IndicatorValues]:
     sampled = sorted({*years[::THERMAL_SERIES_STEP], years[-1]})
     values = {t: _thermal(interventions, t) for t in sampled}
     return [
@@ -313,40 +305,8 @@ def thermal_field(t: int, month: int, day: int, as_is: bool = False, session_id:
     )
 
 
-def _optional(value: float, digits: int) -> float | None:
-    return None if math.isnan(value) else round(value, digits)
-
-
-def _indicators(output: UrbanOutput, t: int, thermal: dict | None) -> dict:
-    """Indicators at year t, rounded for display."""
-    ind = {name: values for name, values in output.indicators.items()}
-
-    def at(name: str) -> float:
-        return float(ind[name][t])
-
-    inclusion = ind["inclusion"][:, t]
-    space_use = ind["space_use_pct"][:, t]
-    return {
-        "space_use_pct": {
-            cover_type: round(float(v), 1) for cover_type, v in zip(COVER_TYPES, space_use) if not np.isnan(v)
-        },
-        "co2": {"annual_rate_kg": round(at("co2_annual"), 1), "cumulative_kg": round(at("co2_cumulative"), 1)},
-        "thermal_comfort": thermal,
-        "accessibility": {
-            "walkability_score": _optional(at("walkability"), 1),
-            "fragile_path_pct": _optional(at("fragile_path_pct"), 1),
-        },
-        "social": {
-            "safety_score": round(at("safety"), 1),
-            "evening_winter_score": round(at("evening_winter"), 1),
-            "age_inclusivity": {group: bool(v > 0.5) for group, v in zip(INCLUSION_GROUPS, inclusion)},
-        },
-        "cost_eur": round(at("cost"), 2),
-        "maintenance": {
-            "annual_eur": round(at("maintenance"), 2),
-            "cumulative_eur": round(at("maintenance_cumulative"), 2),
-        },
-    }
+def indicator_descriptors() -> IndicatorDescriptors:
+    return DESCRIPTORS
 
 
 def current_scene(t: int = 0, session_id: str = "default") -> SceneResponse:
@@ -369,19 +329,19 @@ def current_scene(t: int = 0, session_id: str = "default") -> SceneResponse:
         elements=elements,
         covers=covers,
         t=t,
-        # The thermal indicators come apart (see `thermal_indicators`): two
+        # The deferred indicators come apart (see `deferred_indicators`): two
         # fields, over a second, that the rest of the scene needn't wait for.
-        indicators=_indicators(scenario.output, t, None),
-        baseline_indicators=_indicators(_as_is().output, t, None),
+        indicators=indicator_values(scenario.output, t),
+        baseline_indicators=indicator_values(_as_is().output, t),
         interventions=interventions,
         revision=revision,
     )
 
 
-def thermal_indicators(t: int, session_id: str = "default") -> ThermalIndicators:
-    """The thermal indicators at year t, with and without the session's
-    interventions."""
-    return ThermalIndicators(
+def deferred_indicators(t: int, session_id: str = "default") -> DeferredIndicators:
+    """The deferred indicators (the thermal ones) at year t, with and
+    without the session's interventions."""
+    return DeferredIndicators(
         t=t,
         scenario=_thermal(store.list_interventions(session_id), t),
         baseline=_thermal([], t),
@@ -398,6 +358,6 @@ def indicator_series(session_id: str = "default") -> IndicatorSeries:
     scenario_thermal = _thermal_series(interventions, years)
     return IndicatorSeries(
         years=years,
-        baseline=[_indicators(_as_is().output, t, baseline_thermal[t]) for t in years],
-        scenario=[_indicators(scenario.output, t, scenario_thermal[t]) for t in years],
+        baseline=[{**indicator_values(_as_is().output, t), **baseline_thermal[t]} for t in years],
+        scenario=[{**indicator_values(scenario.output, t), **scenario_thermal[t]} for t in years],
     )

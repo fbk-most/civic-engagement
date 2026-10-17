@@ -1,13 +1,14 @@
 import type {
   BaselineScene,
   CardSpec,
+  DeferredIndicators,
+  IndicatorDescriptors,
   IndicatorSeries,
   Intervention,
   InterventionCreate,
   ScenarioInfo,
   SceneResponse,
   ThermalFieldResponse,
-  ThermalIndicators,
 } from "./types";
 
 async function getJson<T>(url: string): Promise<T> {
@@ -33,9 +34,14 @@ export function fetchSessionRevision(): Promise<{ revision: string }> {
   return getJson("/api/session/revision");
 }
 
-/** Apart from the scene, which would otherwise wait for their two fields. */
-export function fetchThermalIndicators(t: number): Promise<ThermalIndicators> {
-  return getJson(`/api/indicators/thermal?t=${t}`);
+export function fetchIndicatorDescriptors(): Promise<IndicatorDescriptors> {
+  return getJson("/api/indicators/descriptors");
+}
+
+/** Apart from the scene, which would otherwise wait for them (two fields,
+ * for the thermal ones). */
+export function fetchDeferredIndicators(t: number): Promise<DeferredIndicators> {
+  return getJson(`/api/indicators/deferred?t=${t}`);
 }
 
 export function fetchIndicatorSeries(): Promise<IndicatorSeries> {

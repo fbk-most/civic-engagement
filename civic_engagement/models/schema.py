@@ -110,71 +110,71 @@ class CardSpec(BaseModel):
     params: list[ParamSpec]
 
 
-class CO2Indicator(BaseModel):
-    annual_rate_kg: float
-    cumulative_kg: float
+IndicatorValue = float | dict[str, bool] | dict[str, float] | None
+# Indicator values keyed by descriptor id (see IndicatorDescriptor): a number
+# (None where it can't be computed), {part: number} for a breakdown,
+# {part: bool} for flags.
+IndicatorValues = dict[str, IndicatorValue]
 
 
-class ThermalComfort(BaseModel):
-    """Felt temperature over the site's open space at a fixed reference
-    moment (parameters.THERMAL_REFERENCE: a midsummer late morning), whatever
-    date and hour the 3D view shows."""
+class IndicatorGroup(BaseModel):
+    """A section of indicators, in display order."""
 
-    felt_temperature_c: float = Field(description="Mean felt temperature")
-    heat_stress_pct: float = Field(description="% of the open space at or above the heat-stress threshold")
-    sunlit_pct: float = Field(description="% of the open space in the sun")
+    id: str
+    label: str | None = Field(default=None, description="None: shown without a heading")
+    label_en: str | None = None
 
 
-class Accessibility(BaseModel):
-    walkability_score: float | None
-    fragile_path_pct: float | None
+class IndicatorPart(BaseModel):
+    id: str
+    label: str
+    label_en: str
 
 
-class AgeInclusivity(BaseModel):
-    bambini: bool
-    giovani: bool
-    generale: bool
+class IndicatorDescriptor(BaseModel):
+    """How to show one indicator: the frontend knows indicators only through
+    these, which the domain declares."""
 
-
-class SocialIndicators(BaseModel):
-    safety_score: float
-    evening_winter_score: float
-    age_inclusivity: AgeInclusivity
-
-
-class MaintenanceIndicator(BaseModel):
-    """The upkeep the interventions add (the existing square's isn't counted)."""
-
-    annual_eur: float = Field(description="In the year shown")
-    cumulative_eur: float = Field(description="Paid from now up to (not including) the year shown")
-
-
-class Indicators(BaseModel):
-    space_use_pct: dict[str, float]
-    co2: CO2Indicator
-    thermal_comfort: ThermalComfort | None = Field(
-        default=None,
-        description="Null in a scene (GET /indicators/thermal has it, so a scene doesn't wait for two "
-        "fields); set in the yearly series.",
+    id: str
+    group: str = Field(description="An IndicatorGroup id")
+    label: str
+    label_en: str
+    short_label: str | None = Field(default=None, description="For the key indicators panel; label if None")
+    short_label_en: str | None = None
+    kind: Literal["number", "breakdown", "flags"]
+    unit: str = Field(default="", description="Appended to the value as is (e.g. \" °C\", \"%\")")
+    unit_en: str | None = Field(default=None, description="unit if None")
+    decimals: int = 0
+    better: Literal["higher", "lower"] | None = Field(default=None, description="Which way is an improvement")
+    scenario_only: bool = Field(default=False, description="Only meaningful with interventions (e.g. their cost)")
+    key: bool = Field(default=False, description="Shown in the key indicators panel")
+    chart: bool = Field(default=True, description="Shown in the Indicators tab")
+    deferred: bool = Field(
+        default=False,
+        description="Too slow for the scene: served by GET /indicators/deferred instead (and in the series)",
     )
-    accessibility: Accessibility
-    social: SocialIndicators
-    cost_eur: float
-    maintenance: MaintenanceIndicator
+    parts: list[IndicatorPart] = Field(
+        default_factory=list, description="The parts of a breakdown or flags indicator, in display order"
+    )
 
 
-class ThermalIndicators(BaseModel):
-    """The thermal indicators at year t, with and without the interventions."""
+class IndicatorDescriptors(BaseModel):
+    groups: list[IndicatorGroup]
+    indicators: list[IndicatorDescriptor]
+
+
+class DeferredIndicators(BaseModel):
+    """The deferred indicators at year t, with and without the interventions."""
 
     t: int
-    scenario: ThermalComfort
-    baseline: ThermalComfort
+    scenario: IndicatorValues
+    baseline: IndicatorValues
 
 
 class IndicatorSeries(BaseModel):
     years: list[int] = Field(description="Year offsets from now, one per entry of the two series")
-    baseline: list[Indicators] = Field(description="Indicators with no interventions, per year")
-    scenario: list[Indicators] = Field(description="Indicators with the session's interventions, per year")
+    baseline: list[IndicatorValues] = Field(description="Every indicator with no interventions, per year")
+    scenario: list[IndicatorValues] = Field(description="Every indicator with the session's interventions, per year")
 
 
 class FieldGrid(BaseModel):
@@ -225,8 +225,8 @@ class SceneResponse(BaseModel):
     elements: list[DiscreteElement]
     covers: list[CoverPolygon]
     t: int = Field(description="Years offset from now (0, 5, or 10)")
-    indicators: Indicators
-    baseline_indicators: Indicators = Field(
+    indicators: IndicatorValues = Field(description="Every indicator but the deferred ones")
+    baseline_indicators: IndicatorValues = Field(
         description="Same indicators computed with zero interventions, for contribution comparison"
     )
     interventions: list[Intervention] = Field(

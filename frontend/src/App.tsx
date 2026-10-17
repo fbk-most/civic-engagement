@@ -14,13 +14,21 @@ import {
   createIntervention,
   deleteIntervention,
   fetchCards,
+  fetchDeferredIndicators,
+  fetchIndicatorDescriptors,
   fetchScene,
   fetchSessionRevision,
   fetchThermalField,
-  fetchThermalIndicators,
   updateIntervention,
 } from "./api/client";
-import type { CardSpec, InterventionDisplayMode, PlacementType, SceneResponse, ThermalIndicators } from "./api/types";
+import type {
+  CardSpec,
+  DeferredIndicators,
+  IndicatorDescriptors,
+  InterventionDisplayMode,
+  PlacementType,
+  SceneResponse,
+} from "./api/types";
 import { CardPalette } from "./ui/CardPalette";
 import { ParamForm } from "./ui/ParamForm";
 import { TimeSlider } from "./ui/TimeSlider";
@@ -64,9 +72,9 @@ function fieldKey(t: number, month: number, day: number, asIs: boolean, interven
   return JSON.stringify([t, month, day, asIs, asIs ? "" : interventionsKey]);
 }
 
-// The KPI panel's thermal indicators fetched so far, by year and cards.
-const kpiThermalCache = new Map<string, ThermalIndicators>();
-const KPI_THERMAL_CACHE_SIZE = 40;
+// The KPI panel's deferred indicators fetched so far, by year and cards.
+const kpiDeferredCache = new Map<string, DeferredIndicators>();
+const KPI_DEFERRED_CACHE_SIZE = 40;
 /** How often a visible window asks whether another one changed the session. */
 const REVISION_POLL_MS = 3000;
 
@@ -118,6 +126,7 @@ function App() {
 
   const [status, setStatus] = useState<Status>("loading");
   const [cards, setCards] = useState<CardSpec[]>([]);
+  const [indicatorDescriptors, setIndicatorDescriptors] = useState<IndicatorDescriptors | null>(null);
   cardsRef.current = cards;
   const [selectedCard, setSelectedCard] = useState<CardSpec | null>(null);
   const [pendingGeometry, setPendingGeometry] = useState<GeoJSON.Geometry | null>(null);
@@ -305,6 +314,7 @@ function App() {
       map.on("mouseout", () => setThermalReading(null));
 
       fetchCards().then(setCards).catch(console.error);
+      fetchIndicatorDescriptors().then(setIndicatorDescriptors).catch(console.error);
     });
   }, []);
 
@@ -406,29 +416,30 @@ function App() {
   const interventionsKey = useMemo(() => JSON.stringify(scene?.interventions ?? []), [scene?.interventions]);
   const keyFor = (asIs: boolean) => fieldKey(t, sunSetting.month, sunSetting.day, asIs, interventionsKey);
 
-  // The KPI panel's thermal row, fetched apart from the scene (two fields
-  // the rest of the scene needn't wait for) for the scene shown; kept per
-  // year and set of cards, so going back to a year is instant.
+  // The KPI panel's deferred indicators (the thermal ones), fetched apart
+  // from the scene (two fields the rest of the scene needn't wait for) for
+  // the scene shown; kept per year and set of cards, so going back to a year
+  // is instant.
   const sceneT = scene?.t ?? null;
-  const kpiThermalKey = sceneT === null ? null : JSON.stringify([sceneT, interventionsKey]);
-  const [, setKpiThermalFetched] = useState(0);
-  const kpiThermal = kpiThermalKey === null ? null : kpiThermalCache.get(kpiThermalKey) ?? null;
+  const kpiDeferredKey = sceneT === null ? null : JSON.stringify([sceneT, interventionsKey]);
+  const [, setKpiDeferredFetched] = useState(0);
+  const kpiDeferred = kpiDeferredKey === null ? null : kpiDeferredCache.get(kpiDeferredKey) ?? null;
   useEffect(() => {
-    if (kpiThermalKey === null || sceneT === null || kpiThermalCache.has(kpiThermalKey)) return;
+    if (kpiDeferredKey === null || sceneT === null || kpiDeferredCache.has(kpiDeferredKey)) return;
     let cancelled = false;
     timeline.begin("kpi");
-    fetchThermalIndicators(sceneT)
+    fetchDeferredIndicators(sceneT)
       .then((result) => {
-        kpiThermalCache.set(kpiThermalKey, result);
-        if (kpiThermalCache.size > KPI_THERMAL_CACHE_SIZE) kpiThermalCache.delete(kpiThermalCache.keys().next().value!);
-        if (!cancelled) setKpiThermalFetched((n) => n + 1);
+        kpiDeferredCache.set(kpiDeferredKey, result);
+        if (kpiDeferredCache.size > KPI_DEFERRED_CACHE_SIZE) kpiDeferredCache.delete(kpiDeferredCache.keys().next().value!);
+        if (!cancelled) setKpiDeferredFetched((n) => n + 1);
       })
       .catch((err) => console.error(err))
       .finally(() => timeline.end("kpi"));
     return () => {
       cancelled = true;
     };
-  }, [kpiThermalKey, sceneT]);
+  }, [kpiDeferredKey, sceneT]);
   // Bumped when a fetch lands, to render again with the cache's new entry.
   const [, setFieldsFetched] = useState(0);
   const thermalField = thermalOn || thermalPanelOpen ? fieldCache.get(keyFor(thermalAsIs)) ?? null : null;
@@ -870,10 +881,11 @@ function App() {
           )}
           {view !== "indicators" && (
             <div className="right-rail">
-              {scene && <KpiPanel
+              {scene && indicatorDescriptors && <KpiPanel
+                  descriptors={indicatorDescriptors}
                   indicators={scene.indicators}
                   baselineIndicators={scene.baseline_indicators}
-                  thermal={kpiThermal}
+                  deferred={kpiDeferred}
                   asIs={interventionMode === "hidden"}
                   initiallyCollapsed={initialDebugParams.panelsClosed}
                 />}
@@ -923,8 +935,13 @@ function App() {
               )}
             </div>
           )}
-          {view === "indicators" && scene && (
-            <IndicatorsView interventions={scene.interventions} t={t} onTimeChange={handleTimeChange} />
+          {view === "indicators" && scene && indicatorDescriptors && (
+            <IndicatorsView
+              descriptors={indicatorDescriptors}
+              interventions={scene.interventions}
+              t={t}
+              onTimeChange={handleTimeChange}
+            />
           )}
           {/* In the 3D view the year is part of its own time panel, together
               with day and hour. */}

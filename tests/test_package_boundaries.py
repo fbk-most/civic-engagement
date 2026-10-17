@@ -21,6 +21,7 @@ TEMPORARY_IMPORTS: dict[str, set[str]] = {
     "civic_engagement/scene.py": {
         "bologna_civic_dt.encode",
         "bologna_civic_dt.field_grid",
+        "bologna_civic_dt.indicators",
         "bologna_civic_dt.layout",
         "bologna_civic_dt.model",
         "bologna_civic_dt.parameters",

@@ -48,70 +48,76 @@ export interface BaselineScene {
   covers: CoverPolygon[];
 }
 
-export interface CO2Indicator {
-  annual_rate_kg: number;
-  cumulative_kg: number;
+/** An indicator's value: a number (null where it can't be computed),
+ * `{part: number}` for a breakdown, `{part: boolean}` for flags. */
+export type IndicatorValue = number | null | Record<string, number> | Record<string, boolean>;
+
+/** Indicator values keyed by descriptor id (see IndicatorDescriptor). */
+export type IndicatorValues = Record<string, IndicatorValue>;
+
+/** A section of indicators, in display order; a null label shows it
+ * without a heading. */
+export interface IndicatorGroup {
+  id: string;
+  label: string | null;
+  label_en: string | null;
 }
 
-/** Felt temperature over the site's open space at a fixed reference moment
- * (a midsummer late morning, see THERMAL_REFERENCE in
- * packs/bologna-civic-dt/bologna_civic_dt/parameters.py), whatever the 3D view's clock says. */
-/** The thermal indicators at year t, with and without the interventions. */
-export interface ThermalIndicators {
+export interface IndicatorPart {
+  id: string;
+  label: string;
+  label_en: string;
+}
+
+/** How to show one indicator, as the domain declares it — see GET
+ * /api/indicators/descriptors and civic_engagement/models/schema.py. */
+export interface IndicatorDescriptor {
+  id: string;
+  group: string;
+  label: string;
+  label_en: string;
+  /** For the key indicators panel; label if null. */
+  short_label: string | null;
+  short_label_en: string | null;
+  kind: "number" | "breakdown" | "flags";
+  /** Appended to the value as is (e.g. " °C", "%"). */
+  unit: string;
+  /** unit if null. */
+  unit_en: string | null;
+  decimals: number;
+  /** Which way a change counts as an improvement; null: neither. */
+  better: "higher" | "lower" | null;
+  /** Only meaningful with interventions (e.g. their cost): no "current" value. */
+  scenario_only: boolean;
+  /** Shown in the key indicators panel. */
+  key: boolean;
+  /** Shown in the "Indicators" tab. */
+  chart: boolean;
+  /** Too slow for the scene: fetched apart (fetchDeferredIndicators). */
+  deferred: boolean;
+  /** The parts of a breakdown or flags indicator, in display order (none
+   * for the space use breakdown, whose parts are the cover types). */
+  parts: IndicatorPart[];
+}
+
+export interface IndicatorDescriptors {
+  groups: IndicatorGroup[];
+  indicators: IndicatorDescriptor[];
+}
+
+/** The deferred indicators at year t, with and without the interventions. */
+export interface DeferredIndicators {
   t: number;
-  scenario: ThermalComfort;
-  baseline: ThermalComfort;
-}
-
-export interface ThermalComfort {
-  felt_temperature_c: number;
-  /** % of the open space at or above the heat-stress threshold. */
-  heat_stress_pct: number;
-  /** % of the open space in the sun. */
-  sunlit_pct: number;
-}
-
-export interface Accessibility {
-  walkability_score: number | null;
-  fragile_path_pct: number | null;
-}
-
-export interface AgeInclusivity {
-  bambini: boolean;
-  giovani: boolean;
-  generale: boolean;
-}
-
-export interface SocialIndicators {
-  safety_score: number;
-  evening_winter_score: number;
-  age_inclusivity: AgeInclusivity;
-}
-
-export interface Indicators {
-  space_use_pct: Record<string, number>;
-  co2: CO2Indicator;
-  /** Null in a scene: the thermal indicators come apart (fetchThermalIndicators). */
-  thermal_comfort: ThermalComfort | null;
-  accessibility: Accessibility;
-  social: SocialIndicators;
-  cost_eur: number;
-  maintenance: MaintenanceIndicator;
-}
-
-/** The upkeep the interventions add (the existing square's isn't counted). */
-export interface MaintenanceIndicator {
-  annual_eur: number;
-  /** Paid from now up to (not including) the year shown. */
-  cumulative_eur: number;
+  scenario: IndicatorValues;
+  baseline: IndicatorValues;
 }
 
 /** Every indicator for every year of the horizon (`years`), with and
  * without the session's interventions — see GET /api/indicators/series. */
 export interface IndicatorSeries {
   years: number[];
-  baseline: Indicators[];
-  scenario: Indicators[];
+  baseline: IndicatorValues[];
+  scenario: IndicatorValues[];
 }
 
 export interface SceneResponse extends BaselineScene {
@@ -125,8 +131,9 @@ export interface SceneResponse extends BaselineScene {
    * a surveyed boundary is drawn on the map (see map/layers.ts). */
   boundary_status: "surveyed" | "provisional";
   t: number;
-  indicators: Indicators;
-  baseline_indicators: Indicators;
+  /** Every indicator but the deferred ones. */
+  indicators: IndicatorValues;
+  baseline_indicators: IndicatorValues;
   interventions: Intervention[];
   /** The session's revision this scene reflects (see fetchSessionRevision). */
   revision: string;

@@ -2,20 +2,22 @@ from fastapi import APIRouter, HTTPException
 
 from civic_engagement.models.schema import (
     BaselineScene,
+    DeferredIndicators,
+    IndicatorDescriptors,
     IndicatorSeries,
     SceneResponse,
     ThermalFieldResponse,
-    ThermalIndicators,
 )
 from civic_engagement.scene import (
     MAX_T,
     MIN_T,
     calendar_date,
     current_scene,
+    deferred_indicators,
+    indicator_descriptors,
     indicator_series,
     load_baseline,
     thermal_field,
-    thermal_indicators,
 )
 
 from civic_engagement.store.state import store
@@ -42,12 +44,18 @@ def get_session_revision() -> dict[str, str]:
     return {"revision": store.revision}
 
 
-@router.get("/indicators/thermal", response_model=ThermalIndicators)
-def get_thermal_indicators(t: int = 0) -> ThermalIndicators:
-    """Apart from the scene: two fields, which the scene needn't wait for."""
+@router.get("/indicators/descriptors", response_model=IndicatorDescriptors)
+def get_indicator_descriptors() -> IndicatorDescriptors:
+    return indicator_descriptors()
+
+
+@router.get("/indicators/deferred", response_model=DeferredIndicators)
+def get_deferred_indicators(t: int = 0) -> DeferredIndicators:
+    """The indicators too slow for the scene (two fields, for the thermal
+    ones), which the scene needn't wait for."""
     if not MIN_T <= t <= MAX_T:
         raise HTTPException(status_code=422, detail=f"t must be between {MIN_T} and {MAX_T}")
-    return thermal_indicators(t)
+    return deferred_indicators(t)
 
 
 @router.get("/indicators/series", response_model=IndicatorSeries)
