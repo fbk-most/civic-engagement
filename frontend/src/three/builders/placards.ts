@@ -12,7 +12,7 @@
 import * as THREE from "three";
 import type { CardSpec, Intervention } from "../../api/types";
 import { drawCardIcon } from "../../map/cardMarkerIcons";
-import { CATEGORY_COLORS } from "../../ui/categoryColors";
+import { categoryColor } from "../../ui/categoryColors";
 import { cardLabel, yearLabel } from "../../i18n/labels";
 import { representativePoint, toLocal, type GeoAnchor } from "../geo";
 
@@ -62,7 +62,7 @@ export function buildPlacards(
     // placed while previewing a later year doesn't exist yet at this t.
     if (t < iv.planted_year) continue;
     const card = cards.find((c) => c.card_type === iv.card_type);
-    const color = card ? CATEGORY_COLORS[card.category] : "#5b6472";
+    const color = card ? categoryColor(card.category, "#5b6472") : "#5b6472";
 
     const [lng, lat] = representativePoint(iv.geometry);
     const [x, z] = toLocal(anchor, lng, lat);

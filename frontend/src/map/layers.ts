@@ -3,12 +3,13 @@ import {
   type MapLibreMap,
   type LngLatBoundsLike,
   type ExpressionSpecification,
+  type LayerSpecification,
 } from "maplibre-gl";
 import type { CardSpec, DiscreteElement, InterventionDisplayMode, SceneResponse } from "../api/types";
-import { CATEGORY_COLORS } from "../ui/categoryColors";
+import { activePack } from "../pack";
 import { anchorFromPolygon, representativePoint, toLocal, toLngLat, type GeoAnchor } from "../three/geo";
 import { hashString } from "../three/hash";
-import { ALL_CARD_TYPES, buildCardMarkerImage } from "./cardMarkerIcons";
+import { buildCardMarkerImage } from "./cardMarkerIcons";
 import { OCCLUDED_OPACITY, refreshOcclusion, setOcclusionInputs } from "./occlusion";
 
 // How often occlusion re-evaluates while the camera is actively being
@@ -16,6 +17,44 @@ import { OCCLUDED_OPACITY, refreshOcclusion, setOcclusionInputs } from "./occlus
 // read as live, not so frequent that a long drag/rotate is doing real work
 // (`markers x buildings`) every single animation frame for no visible gain.
 const OCCLUSION_MOVE_REFRESH_MS = 150;
+
+/** One layer of the domain's elements on the 2D map, as the pack declares it
+ * (`FrontendPack.map.layers`); the core makes the sources and layers, in the
+ * pack's order, and wires occlusion and clicks. */
+export interface MapElementLayer {
+  /** The layer's id. */
+  id: string;
+  /** The source the layer draws, holding the elements of `types`: several
+   * layers may share one. */
+  source: string;
+  types: string[];
+  /** A point layer of physical things a building can hide from the camera
+   * (see `occlusion.ts`): its style should dim them with `dimIfOccluded`. */
+  occludable?: boolean;
+  /** "select": clicking a placed intervention's feature selects it.
+   * "tree": a tree, opening its identity card (or its intervention). */
+  interaction?: "select" | "tree";
+  /** The MapLibre layer, but for its id and source. */
+  style: (helpers: MapLayerHelpers) => LayerStyle;
+}
+
+type LayerStyle = LayerSpecification extends infer L
+  ? L extends LayerSpecification
+    ? Omit<L, "id" | "source">
+    : never
+  : never;
+
+export interface MapLayerHelpers {
+  /** A `line-width` (or `circle-radius`) for a real-world width in metres,
+   * the feature's `width` property or `defaultWidthM`, at every zoom (see
+   * `realWidthLineWidth`). */
+  realWidth: (defaultWidthM: number, exaggeration?: number, minPx?: number) => ExpressionSpecification;
+  /** How much real-world line widths are exaggerated by default. */
+  lineWidthExaggeration: number;
+  /** An opacity, dimmed while a building hides the feature (see
+   * `occlusion.ts`). */
+  dimIfOccluded: (baseOpacity: number) => ExpressionSpecification;
+}
 
 /** Building occlusion (see `occlusion.ts`) dims a marker instead of hiding
  * it; every point layer that represents a real, physical piece of site
@@ -33,40 +72,6 @@ function dimIfOccluded(baseOpacity: number): ExpressionSpecification {
  * small enough to read as a token placed on the map, not a footprint. */
 const CARD_MARKER_WIDTH_M = 3;
 const CARD_MARKER_HEIGHT_M = 4.2;
-
-/** Also the colour key of the "Uso dello spazio" chart in the Indicatori tab. */
-export const COVER_COLORS: Record<string, string> = {
-  paving: "#c9c6bd",
-  gravel: "#bdb6a8",
-  permeable_paving: "#b7c2b0",
-  lawn: "#9bc27c",
-  meadow: "#c3cf6e",
-  wood: "#4f7942",
-  water: "#7fb3d5",
-  playground_surface: "#e3a0b5",
-  sport_surface: "#8fc4c4",
-};
-
-// Must stay in sync with `ui/MapLegend.tsx`'s swatch colors.
-const SOCIAL_ELEMENT_COLORS: Record<string, string> = {
-  streetlight: "#e8b93d",
-  pergola: "#9c6b3e",
-  kiosk: "#b5482f",
-  playground: "#d94f70",
-  fitness_area: "#3f8f8f",
-  traffic_signal: "#c0392b",
-};
-
-// Flat, class-agnostic for now — see the plan's "explicitly out of scope"
-// note on road-class-based street styling.
-const STREET_COLOR = "#4a4a4a";
-
-const PATH_COLORS: Record<string, string> = {
-  paving: "#9a9186",
-  gravel: "#a89f8f",
-  wood: "#8a6d3b",
-  permeable_paving: "#a3ab97",
-};
 
 function featureCollection(features: GeoJSON.Feature[]): GeoJSON.FeatureCollection {
   return { type: "FeatureCollection", features };
@@ -180,7 +185,6 @@ export function renderScene(
   const showFull = mode === "simulated";
   const elements = showFull ? scene.elements : scene.elements.filter((e) => e.source === "baseline");
   const covers = showFull ? scene.covers : scene.covers.filter((c) => c.source === "baseline");
-  const byType = (type: string) => elementsToFeatures(elements.filter((e) => e.type === type));
   const anchor = anchorFromPolygon(scene.site_boundary);
 
   setOrCreateSource(map, "covers", featureCollection(
@@ -191,23 +195,21 @@ export function renderScene(
       properties: { cover_type: c.cover_type, source: c.source, interventionId: c.intervention_id },
     }))
   ));
-  setOrCreateSource(map, "buildings", featureCollection(byType("building")));
-  setOrCreateSource(map, "paths", featureCollection(byType("path")));
-  setOrCreateSource(map, "streets", featureCollection(byType("street")));
-  setOrCreateSource(map, "trees", featureCollection(byType("tree")), "elementId");
-  setOrCreateSource(map, "benches", featureCollection(byType("bench")), "elementId");
-  setOrCreateSource(map, "water_features", featureCollection(byType("water_feature")), "elementId");
-  setOrCreateSource(map, "streetlights", featureCollection(byType("streetlight")), "elementId");
-  setOrCreateSource(map, "pergolas", featureCollection(byType("pergola")), "elementId");
-  setOrCreateSource(map, "kiosks", featureCollection(byType("kiosk")), "elementId");
-  setOrCreateSource(map, "playgrounds", featureCollection(byType("playground")), "elementId");
-  setOrCreateSource(map, "fitness_areas", featureCollection(byType("fitness_area")), "elementId");
-  // No `promoteId`: unlike the other social-element sources, a flat road
-  // marking isn't a plausible occlusion target (same precedent as paths and
-  // streets), so nothing ever calls `setFeatureState` on these.
-  setOrCreateSource(map, "crossings", featureCollection(byType("crossing")));
-  setOrCreateSource(map, "lane_dividers", featureCollection(byType("lane_divider")));
-  setOrCreateSource(map, "traffic_signals", featureCollection(byType("traffic_signal")), "elementId");
+  const { layers } = activePack().map;
+  const sources = new Map<string, { types: Set<string>; occludable: boolean }>();
+  for (const layer of layers) {
+    const source = sources.get(layer.source) ?? { types: new Set<string>(), occludable: false };
+    layer.types.forEach((type) => source.types.add(type));
+    source.occludable ||= !!layer.occludable;
+    sources.set(layer.source, source);
+  }
+  const elementsOf = (types: Set<string>) => elements.filter((e) => types.has(e.type));
+  // Only occludable sources get a `promoteId` (see `setOrCreateSource`): a
+  // flat path or road marking isn't a plausible occlusion target, so
+  // nothing ever calls `setFeatureState` on the others.
+  for (const [id, { types, occludable }] of sources) {
+    setOrCreateSource(map, id, featureCollection(elementsToFeatures(elementsOf(types))), occludable ? "elementId" : undefined);
+  }
   // Only a surveyed boundary is real digitized data worth outlining — a
   // provisional one (e.g. Bologna's placeholder circle) isn't a real shape
   // of the square, so it's left undrawn rather than shown as if it were.
@@ -238,7 +240,7 @@ export function renderScene(
         type: "Feature",
         geometry: cardShapePolygon(anchor, point, rotationDeg),
         properties: {
-          category: card?.category ?? "elementi_architettonici",
+          category: card?.category ?? "",
           interventionId: iv.id,
           cardType: iv.card_type,
           rotationDeg,
@@ -254,7 +256,7 @@ export function renderScene(
   // re-runs this function too, and re-fitting the camera on each of those
   // would yank the view away from wherever the facilitator had navigated to.
   const isFirstBuild = !map.getLayer("covers-fill");
-  ensureLayers(map, anchor.lat0, scene.boundary_status === "surveyed");
+  ensureLayers(map, anchor.lat0, scene.boundary_status === "surveyed", layers);
   if (isFirstBuild) {
     map.fitBounds(boundaryToBounds(scene.site_boundary), { ...framing, duration: 0 });
     // Camera pose (pitch/bearing/zoom drag, not just data changes) also
@@ -272,17 +274,16 @@ export function renderScene(
     map.on("moveend", () => refreshOcclusion(map));
   }
 
-  setOcclusionInputs(map, anchor, elements.filter((e) => e.type === "building"), {
-    trees: elements.filter((e) => e.type === "tree"),
-    benches: elements.filter((e) => e.type === "bench"),
-    water_features: elements.filter((e) => e.type === "water_feature"),
-    streetlights: elements.filter((e) => e.type === "streetlight"),
-    pergolas: elements.filter((e) => e.type === "pergola"),
-    kiosks: elements.filter((e) => e.type === "kiosk"),
-    playgrounds: elements.filter((e) => e.type === "playground"),
-    fitness_areas: elements.filter((e) => e.type === "fitness_area"),
-    traffic_signals: elements.filter((e) => e.type === "traffic_signal"),
-  });
+  // Buildings hide what's behind them: "building" is the element type the
+  // core knows them by, whatever the domain.
+  setOcclusionInputs(
+    map,
+    anchor,
+    elements.filter((e) => e.type === "building"),
+    Object.fromEntries(
+      [...sources].filter(([, { occludable }]) => occludable).map(([id, { types }]) => [id, elementsOf(types)])
+    )
+  );
 }
 
 /** Shows/clears a highlight outline around a single intervention's geometry
@@ -364,20 +365,8 @@ function metersToPixelsAtZoom(zoom: number, latDeg: number): number {
 // lines read as too thin to notice on a flat top-down map at true scale.
 const LINE_WIDTH_EXAGGERATION = 3;
 
-// Streets specifically were reading as too thick at the default exaggeration
-// (wide enough to visibly overlap building footprints) — scaled down to 80%
-// of it. Still provably >1, which is what actually matters for the bridged
-// divided-road pairs (see ingestion/osm.py's street_widths): each bridged
-// way's real-metre width is already >= (gap + margin), so for any
-// exaggeration factor k > 1, k * (widthA + widthB) > k * (2*gap) > 2*gap —
-// the two ribbons keep overlapping regardless of k, only *how much* spare
-// overlap they have shrinks. k <= 1 is the actual danger zone (it can erase
-// that spare margin entirely for a wide, near-threshold gap), which is why
-// this is a haircut off the exaggeration, not a fraction of the true width.
-const STREET_LINE_WIDTH_EXAGGERATION = LINE_WIDTH_EXAGGERATION * 0.8;
-
-// Road markings (0.12m lane lines) come out well under a pixel at true scale
-// on the default view, i.e. invisible. `minPx` floors the width; it's
+// Thin lines (e.g. 0.12m lane lines) come out well under a pixel at true
+// scale on the default view, i.e. invisible. `minPx` floors the width; it's
 // applied per stop, so stops are every 2 zoom levels — between two unclamped
 // stops the exponential interpolation is still exact, only near the clamp
 // does it approximate.
@@ -395,13 +384,14 @@ function realWidthLineWidth(
   return ["interpolate", ["exponential", 2], ["zoom"], ...stops] as unknown as ExpressionSpecification;
 }
 
-function ensureLayers(map: MapLibreMap, latDeg: number, showBoundary: boolean): void {
+function ensureLayers(map: MapLibreMap, latDeg: number, showBoundary: boolean, layers: MapElementLayer[]): void {
   if (map.getLayer("covers-fill")) return; // already built, sources were just refreshed above
 
   // One raster icon per card type, registered once — see cardMarkerIcons.ts.
   // Plain white so a single image reads against any category color, rather
   // than pre-rendering a tinted variant per category.
-  for (const cardType of ALL_CARD_TYPES) {
+  const pack = activePack();
+  for (const cardType of Object.keys(pack.cardIcons)) {
     if (!map.hasImage(cardType)) {
       map.addImage(cardType, buildCardMarkerImage(cardType));
     }
@@ -415,147 +405,21 @@ function ensureLayers(map: MapLibreMap, latDeg: number, showBoundary: boolean): 
       "fill-color": [
         "match",
         ["get", "cover_type"],
-        ...Object.entries(COVER_COLORS).flat(),
+        ...Object.entries(pack.coverTypes).flatMap(([type, cover]) => [type, cover.color]),
         "#c9c6bd",
       ] as unknown as ExpressionSpecification,
     },
   });
 
-  map.addLayer({
-    id: "streets-line",
-    type: "line",
-    source: "streets",
-    paint: {
-      "line-color": STREET_COLOR,
-      "line-width": realWidthLineWidth(6, latDeg, STREET_LINE_WIDTH_EXAGGERATION),
-    },
-  });
-
-  // Registered after streets-line, so these paint on top of the asphalt
-  // rather than under it — flat white, the same read as `materials.ts`'s
-  // `crossing_marking`/`lane_divider` 3D surfaces.
-  map.addLayer({
-    id: "crossings-line",
-    type: "line",
-    source: "crossings",
-    paint: { "line-color": "#ffffff", "line-width": realWidthLineWidth(0.5, latDeg) },
-  });
-  map.addLayer({
-    id: "lane-dividers-line",
-    type: "line",
-    source: "lane_dividers",
-    paint: { "line-color": "#ffffff", "line-width": realWidthLineWidth(0.12, latDeg, LINE_WIDTH_EXAGGERATION, 1) },
-  });
-
-  map.addLayer({
-    id: "paths-line",
-    type: "line",
-    source: "paths",
-    paint: {
-      "line-color": [
-        "match",
-        ["get", "material"],
-        ...Object.entries(PATH_COLORS).flat(),
-        "#9a9186",
-      ] as unknown as ExpressionSpecification,
-      "line-width": realWidthLineWidth(2, latDeg),
-    },
-  });
-
-  map.addLayer({
-    id: "buildings-extrusion",
-    type: "fill-extrusion",
-    source: "buildings",
-    paint: {
-      "fill-extrusion-color": "#9c9c9c",
-      "fill-extrusion-height": ["coalesce", ["get", "height"], 10],
-      "fill-extrusion-opacity": 0.9,
-    },
-  });
-
-  map.addLayer({
-    id: "trees-circle",
-    type: "circle",
-    source: "trees",
-    paint: {
-      // Stumps render as a larger pale ring (fill + brown outline) rather
-      // than a small solid dot: it needs to read clearly as a distinct marker
-      // (not a bench) and be an easy click target, not just a visual detail.
-      "circle-color": ["case", ["==", ["get", "status"], "stump"], "#e4d7bf", "#2e6b1f"],
-      "circle-opacity": dimIfOccluded(0.85),
-      "circle-stroke-opacity": dimIfOccluded(1),
-      "circle-stroke-color": "#7a4a24",
-      "circle-stroke-width": ["case", ["==", ["get", "status"], "stump"], 2, 0],
-      // `zoom` may only be used as the top-level interpolate input (not nested
-      // inside a `case`), so the stump/alive branch has to live in each stop's
-      // output value instead of wrapping the whole expression. Stumps use the
-      // same size formula as a live tree, fixed at a 6m canopy diameter — big
-      // enough to click comfortably without exaggerating what's actually a
-      // felled trunk into looking like a full tree.
-      "circle-radius": [
-        "interpolate",
-        ["linear"],
-        ["zoom"],
-        15,
-        3,
-        20,
-        ["case", ["==", ["get", "status"], "stump"], 2 * 6, ["*", 2, ["coalesce", ["get", "canopy_diameter"], 4]]],
-      ],
-    },
-  });
-
-  map.addLayer({
-    id: "benches-circle",
-    type: "circle",
-    source: "benches",
-    // Deliberately not brown/tan: that reads as a stump or a tree trunk at a
-    // glance. Slate gray keeps it identifiable as street furniture instead.
-    paint: { "circle-color": "#6b7280", "circle-radius": 2.5, "circle-opacity": dimIfOccluded(1) },
-  });
-
-  map.addLayer({
-    id: "water-features-circle",
-    type: "circle",
-    source: "water_features",
-    paint: { "circle-color": "#2f7fb3", "circle-radius": 5, "circle-opacity": dimIfOccluded(1) },
-  });
-
-  map.addLayer({
-    id: "streetlights-circle",
-    type: "circle",
-    source: "streetlights",
-    paint: { "circle-color": SOCIAL_ELEMENT_COLORS.streetlight, "circle-radius": 3, "circle-opacity": dimIfOccluded(1) },
-  });
-  map.addLayer({
-    id: "pergolas-circle",
-    type: "circle",
-    source: "pergolas",
-    paint: { "circle-color": SOCIAL_ELEMENT_COLORS.pergola, "circle-radius": 5, "circle-opacity": dimIfOccluded(1) },
-  });
-  map.addLayer({
-    id: "kiosks-circle",
-    type: "circle",
-    source: "kiosks",
-    paint: { "circle-color": SOCIAL_ELEMENT_COLORS.kiosk, "circle-radius": 6, "circle-opacity": dimIfOccluded(1) },
-  });
-  map.addLayer({
-    id: "playgrounds-circle",
-    type: "circle",
-    source: "playgrounds",
-    paint: { "circle-color": SOCIAL_ELEMENT_COLORS.playground, "circle-radius": 6, "circle-opacity": dimIfOccluded(1) },
-  });
-  map.addLayer({
-    id: "fitness-areas-circle",
-    type: "circle",
-    source: "fitness_areas",
-    paint: { "circle-color": SOCIAL_ELEMENT_COLORS.fitness_area, "circle-radius": 6, "circle-opacity": dimIfOccluded(1) },
-  });
-  map.addLayer({
-    id: "traffic-signals-circle",
-    type: "circle",
-    source: "traffic_signals",
-    paint: { "circle-color": SOCIAL_ELEMENT_COLORS.traffic_signal, "circle-radius": 3, "circle-opacity": dimIfOccluded(1) },
-  });
+  const helpers: MapLayerHelpers = {
+    realWidth: (defaultWidthM, exaggeration = LINE_WIDTH_EXAGGERATION, minPx = 0) =>
+      realWidthLineWidth(defaultWidthM, latDeg, exaggeration, minPx),
+    lineWidthExaggeration: LINE_WIDTH_EXAGGERATION,
+    dimIfOccluded,
+  };
+  for (const layer of layers) {
+    map.addLayer({ ...layer.style(helpers), id: layer.id, source: layer.source } as LayerSpecification);
+  }
 
   // Rendered as small card-shaped rectangles (see `cardShapePolygon`), not
   // circles — the point is to look like a physical card placed on the map.
@@ -576,7 +440,7 @@ function ensureLayers(map: MapLibreMap, latDeg: number, showBoundary: boolean): 
       "fill-color": [
         "match",
         ["get", "category"],
-        ...Object.entries(CATEGORY_COLORS).flat(),
+        ...pack.cardCategories.flatMap((category) => [category.id, category.color]),
         "#999",
       ] as unknown as ExpressionSpecification,
       "fill-opacity": 0.92,

@@ -3,7 +3,7 @@ import type { IndicatorDescriptor, IndicatorDescriptors, IndicatorSeries, Indica
 import { fetchIndicatorSeries } from "../api/client";
 import { tr } from "../i18n/lang";
 import { coverTypeLabel, yearLabel } from "../i18n/labels";
-import { COVER_COLORS } from "../map/layers";
+import { activePack } from "../pack";
 import { LineChart, StackedAreaChart } from "./charts";
 import {
   deltaClass,
@@ -92,7 +92,7 @@ function partsOf(values: IndicatorValues | undefined, id: string): Record<string
 }
 
 /** A breakdown over the cover types (the space use): their labels and
- * colours are still the frontend's (see IndicatorDescriptor's `parts`). */
+ * colours are the frontend pack's (see IndicatorDescriptor's `parts`). */
 function BreakdownCard({
   descriptor,
   series,
@@ -106,14 +106,17 @@ function BreakdownCard({
 }) {
   const parts = (values: IndicatorValues | undefined) => partsOf(values, descriptor.id);
   // One shared stacking order for both charts, so the same cover sits at the
-  // same height in each and the two can be compared at a glance.
+  // same height in each and the two can be compared at a glance: the pack's.
+  const covers = activePack().coverTypes;
+  const order = Object.keys(covers);
+  const coverColor = (type: string) => covers[type]?.color ?? "#c9c6bd";
   const coverTypes = Array.from(
     new Set([...series.baseline, ...series.scenario].flatMap((i) => Object.keys(parts(i))))
-  ).sort((a, b) => Object.keys(COVER_COLORS).indexOf(a) - Object.keys(COVER_COLORS).indexOf(b));
+  ).sort((a, b) => order.indexOf(a) - order.indexOf(b));
   const layersFor = (list: IndicatorValues[]) =>
     coverTypes.map((type) => ({
       key: type,
-      color: COVER_COLORS[type] ?? "#c9c6bd",
+      color: coverColor(type),
       values: list.map((i) => parts(i)[type] ?? 0),
     }));
   const index = series.years.indexOf(t);
@@ -134,7 +137,7 @@ function BreakdownCard({
       <div className="indicator-card__legend">
         {coverTypes.map((type) => (
           <span key={type} className="indicator-card__legend-item">
-            <span className="indicator-card__swatch" style={{ background: COVER_COLORS[type] ?? "#c9c6bd" }} />
+            <span className="indicator-card__swatch" style={{ background: coverColor(type) }} />
             {coverTypeLabel(type)}{" "}
             <span className="indicator-card__legend-values">
               {parts(series.baseline[index])[type] ?? 0}

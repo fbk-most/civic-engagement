@@ -3,7 +3,7 @@ import type { CardSpec, Intervention } from "../api/types";
 import { tr } from "../i18n/lang";
 import { cardLabel, summarizeParams, yearLabel } from "../i18n/labels";
 import { CardIcon } from "./cardIcons";
-import { CATEGORY_COLORS } from "./categoryColors";
+import { categoryColor } from "./categoryColors";
 
 interface Props {
   intervention: Intervention;
@@ -15,7 +15,7 @@ interface Props {
 /** Read-only details of a placard picked in the 3D view. Editing stays on
  * the 2D map, so this only offers the way there. */
 export function InterventionInfoCard({ intervention, card, onEdit, onClose }: Props) {
-  const color = card ? CATEGORY_COLORS[card.category] : "#999";
+  const color = card ? categoryColor(card.category) : "#999";
   return (
     <div className="param-form intervention-info" style={{ "--card-color": color } as CSSProperties}>
       <div className="intervention-info__title">

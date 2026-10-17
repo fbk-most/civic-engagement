@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { tr } from "../i18n/lang";
+import { activePack } from "../pack";
 
-// Colors here must stay in sync with the paint expressions in map/layers.ts.
+/** The 2D map's legend: the pack's (`FrontendPack.map.legend`). */
 export function MapLegend() {
   // Collapsed by default: it's a reference to look up now and then, not
   // something to keep covering the map.
@@ -21,50 +22,12 @@ export function MapLegend() {
         <h4>{tr("Legenda", "Legend")}</h4>
         <span className="panel-header__chevron">▾</span>
       </button>
-      <div className="map-legend__item">
-        <span className="map-legend__swatch map-legend__swatch--tree" />
-        {tr("Albero", "Tree")}
-      </div>
-      <div className="map-legend__item">
-        <span className="map-legend__swatch map-legend__swatch--stump" />
-        {tr("Ceppo (abbattuto)", "Stump (felled)")}
-      </div>
-      <div className="map-legend__item">
-        <span className="map-legend__swatch map-legend__swatch--bench" />
-        {tr("Panchina", "Bench")}
-      </div>
-      <div className="map-legend__item">
-        <span className="map-legend__swatch map-legend__swatch--water" />
-        {tr("Fontana", "Fountain")}
-      </div>
-      <div className="map-legend__item">
-        <span className="map-legend__swatch map-legend__swatch--streetlight" />
-        {tr("Illuminazione", "Lighting")}
-      </div>
-      <div className="map-legend__item">
-        <span className="map-legend__swatch map-legend__swatch--pergola" />
-        {tr("Pergola", "Pergola")}
-      </div>
-      <div className="map-legend__item">
-        <span className="map-legend__swatch map-legend__swatch--kiosk" />
-        {tr("Chiosco", "Kiosk")}
-      </div>
-      <div className="map-legend__item">
-        <span className="map-legend__swatch map-legend__swatch--playground" />
-        {tr("Area giochi", "Playground")}
-      </div>
-      <div className="map-legend__item">
-        <span className="map-legend__swatch map-legend__swatch--fitness" />
-        {tr("Area fitness", "Fitness area")}
-      </div>
-      <div className="map-legend__item">
-        <span className="map-legend__swatch map-legend__swatch--crossing" />
-        {tr("Attraversamento pedonale", "Pedestrian crossing")}
-      </div>
-      <div className="map-legend__item">
-        <span className="map-legend__swatch map-legend__swatch--traffic-signal" />
-        {tr("Semaforo", "Traffic light")}
-      </div>
+      {activePack().map.legend.map(({ label, swatch }) => (
+        <div key={label[0]} className="map-legend__item">
+          <span className="map-legend__swatch" style={swatch} />
+          {tr(...label)}
+        </div>
+      ))}
     </div>
   );
 }

@@ -6,8 +6,7 @@
  * so there's no need to pre-render a colored variant per category.
  */
 
-import type { CardType } from "../api/types";
-import { CARD_ICON_SHAPES } from "../ui/cardIconShapes";
+import { cardIconShapes } from "../ui/cardIconShapes";
 
 /** Canvas size in px. The shapes are on a 24x24 grid; the margin keeps
  * 1.6px-wide strokes near the edge (e.g. the tree canopy circle) from being
@@ -16,22 +15,7 @@ const ICON_PX = 32;
 const MARGIN_PX = 4;
 const VIEWBOX = 24;
 
-export const ALL_CARD_TYPES: CardType[] = [
-  "plant_tree",
-  "plant_grove",
-  "new_path",
-  "change_ground_cover",
-  "add_streetlight",
-  "add_bench",
-  "add_pergola",
-  "add_kiosk",
-  "add_playground",
-  "add_fitness_area",
-  "add_streetlight_path",
-  "plant_tree_row",
-];
-
-export function buildCardMarkerImage(cardType: CardType): ImageData {
+export function buildCardMarkerImage(cardType: string): ImageData {
   const canvas = document.createElement("canvas");
   canvas.width = ICON_PX;
   canvas.height = ICON_PX;
@@ -44,7 +28,7 @@ export function buildCardMarkerImage(cardType: CardType): ImageData {
  * 3D view's standing placards (`three/builders/placards.ts`). */
 export function drawCardIcon(
   ctx: CanvasRenderingContext2D,
-  cardType: CardType,
+  cardType: string,
   color: string,
   x: number,
   y: number,
@@ -58,7 +42,7 @@ export function drawCardIcon(
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
-  for (const shape of CARD_ICON_SHAPES[cardType]) {
+  for (const shape of cardIconShapes(cardType)) {
     ctx.setLineDash(shape.kind !== "circle" && shape.kind !== "rect" && shape.dash ? shape.dash : []);
     if (shape.kind === "path") {
       ctx.stroke(new Path2D(shape.d));

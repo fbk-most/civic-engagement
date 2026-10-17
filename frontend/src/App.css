@@ -494,52 +494,16 @@
   flex-shrink: 0;
 }
 
-.map-legend__swatch--tree {
-  background: #2e6b1f;
-}
 
-.map-legend__swatch--stump {
-  background: #e4d7bf;
-  border: 2px solid #7a4a24;
-  width: 8px;
-  height: 8px;
-}
 
-.map-legend__swatch--bench {
-  background: #6b7280;
-}
 
-.map-legend__swatch--water {
-  background: #2f7fb3;
-}
 
-.map-legend__swatch--streetlight {
-  background: #e8b93d;
-}
 
-.map-legend__swatch--pergola {
-  background: #9c6b3e;
-}
 
-.map-legend__swatch--kiosk {
-  background: #b5482f;
-}
 
-.map-legend__swatch--playground {
-  background: #d94f70;
-}
 
-.map-legend__swatch--fitness {
-  background: #3f8f8f;
-}
 
-.map-legend__swatch--crossing {
-  background: #2f6690;
-}
 
-.map-legend__swatch--traffic-signal {
-  background: #c0392b;
-}
 
 /* A "physical" card face: fixed proportions, a category-colored top band,
    an icon and a label — deliberately card-shaped rather than a toolbar

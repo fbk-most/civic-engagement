@@ -1,5 +1,4 @@
-import type { CardType } from "../api/types";
-import { CARD_ICON_SHAPES, type IconShape } from "./cardIconShapes";
+import { cardIconShapes, type IconShape } from "./cardIconShapes";
 
 /** Renders `cardIconShapes.ts`'s shared shape data as an SVG, 24x24, stroked
  * in `currentColor` so the category color (set via CSS) tints it for free.
@@ -8,7 +7,7 @@ import { CARD_ICON_SHAPES, type IconShape } from "./cardIconShapes";
  * raster icons drawn onto the map's markers (`map/cardMarkerIcons.ts`). */
 
 interface Props {
-  cardType: CardType;
+  cardType: string;
   className?: string;
 }
 
@@ -47,7 +46,7 @@ export function CardIcon({ cardType, className }: Props) {
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      {CARD_ICON_SHAPES[cardType].map((shape, i) => renderShape(shape, i))}
+      {cardIconShapes(cardType).map((shape, i) => renderShape(shape, i))}
     </svg>
   );
 }

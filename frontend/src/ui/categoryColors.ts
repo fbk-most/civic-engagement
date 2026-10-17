@@ -1,10 +1,8 @@
-import type { CardCategory } from "../api/types";
+import { activePack } from "../pack";
 
-// Colors double as the category's visual identity across the palette, the
-// placed-intervention list and the map legend — keep them in one place.
-export const CATEGORY_COLORS: Record<CardCategory, string> = {
-  vegetazione: "#2e6b1f",
-  copertura_suolo: "#8a6d3b",
-  elementi_architettonici: "#5b6472",
-  sociale: "#c9752f",
-};
+/** A card category's colour, the category's visual identity across the
+ * palette, the placed-intervention list, the map markers and the 3D
+ * placards — the pack's (`FrontendPack.cardCategories`). */
+export function categoryColor(category: string, fallback = "#999"): string {
+  return activePack().cardCategories.find((c) => c.id === category)?.color ?? fallback;
+}

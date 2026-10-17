@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { MapLibreMap } from "maplibre-gl";
+import type { MapLayerMouseEvent, MapLibreMap } from "maplibre-gl";
 import type { TerraDraw } from "terra-draw";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./App.css";
@@ -226,12 +226,16 @@ function App() {
       // Makes every tree (baseline or placed) clickable: baseline trees open
       // a read-only identity card, placed trees jump to their existing
       // intervention edit flow (selected via the InterventionList already).
-      map.on("mouseenter", "trees-circle", () => {
-        map.getCanvas().style.cursor = "pointer";
-      });
-      map.on("mouseleave", "trees-circle", () => {
-        map.getCanvas().style.cursor = "";
-      });
+      const mapLayers = activePack().map.layers;
+      const TREE_LAYERS = mapLayers.filter((layer) => layer.interaction === "tree").map((layer) => layer.id);
+      for (const layerId of TREE_LAYERS) {
+        map.on("mouseenter", layerId, () => {
+          map.getCanvas().style.cursor = "pointer";
+        });
+        map.on("mouseleave", layerId, () => {
+          map.getCanvas().style.cursor = "";
+        });
+      }
       // In "cards" mode a placed intervention is only a marker, not its full
       // geometry — clicking it still opens the same edit/delete form as
       // selecting it from the intervention list, so picking a card back up
@@ -257,13 +261,7 @@ function App() {
       // same layers (existing OSM benches/streetlights) are click-through —
       // there's nothing to select, only placed interventions are editable.
       const SELECTABLE_LAYERS = [
-        "benches-circle",
-        "streetlights-circle",
-        "pergolas-circle",
-        "kiosks-circle",
-        "playgrounds-circle",
-        "fitness-areas-circle",
-        "paths-line",
+        ...mapLayers.filter((layer) => layer.interaction === "select").map((layer) => layer.id),
         "covers-fill",
       ];
       for (const layerId of SELECTABLE_LAYERS) {
@@ -284,7 +282,7 @@ function App() {
           setSelectedInterventionId(props.interventionId);
         });
       }
-      map.on("click", "trees-circle", (e) => {
+      const openTree = (e: MapLayerMouseEvent) => {
         // Ignore tree clicks while a card is armed for drawing/placement —
         // otherwise a click that happens to land on a tree hijacks it into
         // opening that tree's identity card instead, silently derailing
@@ -301,7 +299,8 @@ function App() {
           setSelectedInterventionId(null);
           setSelectedTreeElementId(props.elementId);
         }
-      });
+      };
+      for (const layerId of TREE_LAYERS) map.on("click", layerId, openTree);
 
       // The felt temperature under the pointer, while the layer is shown.
       map.on("mousemove", (e) => {

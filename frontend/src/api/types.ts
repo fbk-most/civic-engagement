@@ -1,28 +1,7 @@
-export type ElementType =
-  | "building"
-  | "tree"
-  | "bench"
-  | "water_feature"
-  | "path"
-  | "streetlight"
-  | "playground"
-  | "fitness_area"
-  | "pergola"
-  | "kiosk"
-  | "street"
-  | "crossing"
-  | "traffic_signal"
-  | "lane_divider";
-export type CoverType =
-  | "paving"
-  | "lawn"
-  | "meadow"
-  | "wood"
-  | "water"
-  | "gravel"
-  | "permeable_paving"
-  | "playground_surface"
-  | "sport_surface";
+// Element, cover and card types, and card categories, are the domain
+// pack's: plain strings to the core, as in the backend's schema.
+export type ElementType = string;
+export type CoverType = string;
 export type Source = "baseline" | "intervention";
 
 export interface DiscreteElement {
@@ -150,20 +129,8 @@ export interface ScenarioInfo {
   interventions: number;
 }
 
-export type CardType =
-  | "plant_tree"
-  | "new_path"
-  | "change_ground_cover"
-  | "plant_grove"
-  | "add_streetlight"
-  | "add_bench"
-  | "add_pergola"
-  | "add_kiosk"
-  | "add_playground"
-  | "add_fitness_area"
-  | "add_streetlight_path"
-  | "plant_tree_row";
-export type CardCategory = "vegetazione" | "copertura_suolo" | "elementi_architettonici" | "sociale";
+export type CardType = string;
+export type CardCategory = string;
 export type PlacementType = "point" | "polyline" | "area";
 
 /** How placed interventions render on the 2D map: `hidden` shows only the

@@ -3,7 +3,7 @@ import type { CardSpec, Intervention } from "../api/types";
 import { tr } from "../i18n/lang";
 import { cardLabel, summarizeParams, yearLabel } from "../i18n/labels";
 import { CardIcon } from "./cardIcons";
-import { CATEGORY_COLORS } from "./categoryColors";
+import { categoryColor } from "./categoryColors";
 
 interface Props {
   interventions: Intervention[];
@@ -30,7 +30,7 @@ export function InterventionList({ interventions, cards, onSelect, initiallyColl
           )}
           {interventions.map((iv) => {
             const card = cards.find((c) => c.card_type === iv.card_type);
-            const color = card ? CATEGORY_COLORS[card.category] : "#999";
+            const color = card ? categoryColor(card.category) : "#999";
             return (
               <div key={iv.id} className="intervention-card" style={{ "--card-color": color } as CSSProperties}>
                 <button type="button" className="intervention-card__header" onClick={() => onSelect(iv.id)}>
