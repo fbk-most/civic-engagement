@@ -27,8 +27,11 @@ class OrtofotoModel:
 
     @classmethod
     def load(
-        cls, png_path: str = SITE.ortofoto_png_path, sidecar_path: str = SITE.ortofoto_sidecar_path
+        cls, png_path: str | None = None, sidecar_path: str | None = None
     ) -> "OrtofotoModel | None":
+        """From the given files, the active site's by default."""
+        png_path = png_path or SITE.ortofoto_png_path
+        sidecar_path = sidecar_path or SITE.ortofoto_sidecar_path
         try:
             with open(sidecar_path) as f:
                 sidecar = json.load(f)

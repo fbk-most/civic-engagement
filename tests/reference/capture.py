@@ -3,7 +3,7 @@ the model can be checked against it ("same numbers", see the README). Remove tog
 tests/fixtures/reference/ once that reference is no longer needed.
 
 One site per process, since the active site is fixed at import time
-(`CIVIC_TWIN_SITE`, see config.py):
+(`CIVIC_TWIN_SITE`, see civic_engagement/config.py):
 
     CIVIC_TWIN_SITE=piazza_dante uv run python -m tests.reference.capture
     CIVIC_TWIN_SITE=piazza_dante uv run python -m tests.reference.capture --out /tmp/x
@@ -25,11 +25,17 @@ from pathlib import Path
 
 from shapely.geometry import LineString, Point, box, mapping
 
-from civic_engagement import scene
-from civic_engagement.config import SITE
-from civic_engagement.geo_utils import to_projected
-from civic_engagement.models.schema import Intervention
-from civic_engagement.scene import MAX_T, MIN_T, current_scene, deferred_indicators, indicator_series, load_baseline
+from bologna_civic_dt.pack import UrbanPack
+from civic_engagement.domain import register
+
+# Before the core's scene and store, which read the pack when imported.
+register(UrbanPack())
+
+from civic_engagement import scene  # noqa: E402
+from civic_engagement.config import SITE  # noqa: E402
+from civic_engagement.geo_utils import to_projected  # noqa: E402
+from civic_engagement.models.schema import Intervention  # noqa: E402
+from civic_engagement.scene import MAX_T, MIN_T, current_scene, deferred_indicators, indicator_series, load_baseline  # noqa: E402
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "reference"
 CREATED_AT = "2026-09-30T00:00:00+00:00"

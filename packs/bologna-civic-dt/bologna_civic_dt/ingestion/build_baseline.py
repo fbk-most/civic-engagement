@@ -1,9 +1,9 @@
-"""One-off script: fetch OSM data for the active site (see config.SITE /
-config.ACTIVE_SITE_ID) and write its baseline JSON. Re-run whenever the site
+"""One-off script: fetch OSM data for the active site (see sites.py;
+CIVIC_TWIN_SITE selects it) and write its baseline JSON. Re-run whenever the site
 or fetch logic changes.
 
-    uv run python -m civic_engagement.ingestion.build_baseline
-    CIVIC_TWIN_SITE=piazza_xx_settembre uv run python -m civic_engagement.ingestion.build_baseline
+    uv run python -m bologna_civic_dt.ingestion.build_baseline
+    CIVIC_TWIN_SITE=piazza_xx_settembre uv run python -m bologna_civic_dt.ingestion.build_baseline
 """
 
 import json
@@ -14,7 +14,8 @@ import pandas as pd
 from shapely.geometry import LineString, MultiLineString, Point
 from shapely.ops import substring, unary_union
 
-from civic_engagement.config import PROJECTED_CRS, SITE, WGS84_CRS
+from bologna_civic_dt.sites import SITE
+from civic_engagement.config import PROJECTED_CRS, WGS84_CRS
 from bologna_civic_dt.trees import (
     assign_baseline_species,
     assign_baseline_tree_identity,
@@ -24,7 +25,7 @@ from bologna_civic_dt.trees import (
 from civic_engagement.geo_utils import to_projected
 from civic_engagement.ingestion.lidar import LidarHeightModel
 from civic_engagement.ingestion.ortofoto import OrtofotoModel
-from civic_engagement.ingestion.osm import (
+from bologna_civic_dt.ingestion.osm import (
     _carriageway_pairs,
     buffer_polygon_m,
     fetch_buildings,
@@ -36,7 +37,7 @@ from civic_engagement.ingestion.osm import (
     geojson_to_geometry,
     geometry_to_geojson,
 )
-from civic_engagement.ingestion.road_markings import (
+from bologna_civic_dt.ingestion.road_markings import (
     CROSSING_STRIPE_DASH_M,
     CROSSING_STRIPE_GAP_M,
     CROSSING_STRIPE_LEN_M,
@@ -559,8 +560,12 @@ def build() -> BaselineScene:
 
 
 def main() -> None:
+    from bologna_civic_dt.pack import UrbanPack
+    from civic_engagement.domain import register
+
+    register(UrbanPack())
     if SITE.boundary_status == "provisional":
-        print(f"WARNING: {SITE.name}'s site boundary is PROVISIONAL, not real digitized data — see config.py.")
+        print(f"WARNING: {SITE.name}'s site boundary is PROVISIONAL, not real digitized data — see sites.py.")
     scene = build()
     Path(SITE.baseline_json_path).parent.mkdir(parents=True, exist_ok=True)
     with open(SITE.baseline_json_path, "w") as f:

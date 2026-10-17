@@ -35,7 +35,7 @@ from bologna_civic_dt.parameters import (
 def species_traits(species: str) -> dict:
     """foliage_type/crown_form for a species, falling back to the generic
     'unknown' entry — the single lookup used everywhere a tree
-    `DiscreteElement` is built (ingestion, `scene.py`), so baseline and
+    `DiscreteElement` is built (ingestion, `pack.py`), so baseline and
     citizen-placed trees always carry these two fields the same way."""
     growth = SPECIES_GROWTH.get(species, SPECIES_GROWTH["unknown"])
     return {"foliage_type": growth["foliage_type"], "crown_form": growth["crown_form"]}

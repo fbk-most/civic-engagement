@@ -7,7 +7,7 @@ printed map — as a 3D digital twin: a facilitator places the same intervention
 live 3D view of a real site, and the scene plus a set of indicators (CO2, thermal
 comfort, accessibility, cost, space use) update immediately.
 
-See `civic_engagement/config.py` for the available pilot sites (Piazza Dante, Utopia
+See `packs/bologna-civic-dt/bologna_civic_dt/sites.py` for the available pilot sites (Piazza Dante, Utopia
 — an imaginary city, built on the data of Piazza Dante in Trento — and Piazza
 XX Settembre, Bologna) and how the active one is selected. The app
 supports one active site per process — switch sites by relaunching with
@@ -25,15 +25,15 @@ Python 3.12, managed with [uv](https://docs.astral.sh/uv/).
 ```bash
 # One-off: fetch OSM data for the active site and build the baseline fixture
 # (CIVIC_TWIN_SITE selects the site; defaults to piazza_dante)
-uv run python -m civic_engagement.ingestion.build_baseline
+uv run python -m bologna_civic_dt.ingestion.build_baseline
 
 # Run the API
-uv run uvicorn civic_engagement.main:app --reload
+uv run uvicorn bologna_civic_dt.main:app --reload
 # Or, for the other site:
-CIVIC_TWIN_SITE=piazza_xx_settembre uv run uvicorn civic_engagement.main:app --reload
+CIVIC_TWIN_SITE=piazza_xx_settembre uv run uvicorn bologna_civic_dt.main:app --reload
 
 # Start from a saved scenario instead of the last session (see below)
-CIVIC_TWIN_SCENARIO=demo uv run uvicorn civic_engagement.main:app
+CIVIC_TWIN_SCENARIO=demo uv run uvicorn bologna_civic_dt.main:app
 
 # Tests
 uv run pytest

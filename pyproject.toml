@@ -8,12 +8,9 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.139.2",
     "geopandas>=1.1.4",
-    "osmnx>=2.1.0",
+    "pillow>=12.3.0",
     "pydantic>=2.13.4",
-    "pydeck>=0.9.3",
-    "pyvista>=0.48.4",
     "shapely>=2.1.2",
-    "tqdm>=4.69.0",
     "uvicorn[standard]>=0.51.0",
 ]
 

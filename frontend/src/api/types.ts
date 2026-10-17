@@ -121,7 +121,7 @@ export interface IndicatorSeries {
 }
 
 export interface SceneResponse extends BaselineScene {
-  /** Which site this is (config.py's SITES key), e.g. for naming exports. */
+  /** Which site this is (its key in the pack's sites), e.g. for naming exports. */
   site_id: string;
   /** The site's display name, e.g. "Piazza Dante, Utopia". */
   site_name: string;

@@ -134,8 +134,10 @@ OpenStreetMap rarely records tree species or ages, and road markings may be miss
 gaps explicitly, for example with seeded plausible values, and record which values are invented.
 These gaps matter later: a tree-disease scenario is meaningless if the species are made up.
 
-*In the reference implementation:* the site registry is `civic_engagement/config.py`, with one active
-site per process. Ingestion lives in `civic_engagement/ingestion/`. It combines OSM (buildings, streets,
+*In the reference implementation:* the sites are the urban pack's (`packs/bologna-civic-dt/bologna_civic_dt/sites.py`,
+on `civic_engagement/config.py`'s `SiteConfig`), with one active site per process. Ingestion lives in
+`packs/bologna-civic-dt/bologna_civic_dt/ingestion/`, with the generic LiDAR and orthophoto readers in
+`civic_engagement/ingestion/`. It combines OSM (buildings, streets,
 paths, trees, furniture, covers), LiDAR building heights and roof shapes and orthophoto roof
 colours (Piazza Dante only), and road markings inferred from OSM. The result is `data/<site>/baseline.json`
 with 14 element types and 9 cover types (`civic_engagement/models/schema.py`). Baseline trees get a
@@ -398,14 +400,15 @@ ingestion, view builders and a social layer.
 
 | Concept | Files |
 | --- | --- |
-| Site registry | `civic_engagement/config.py` |
-| Ingestion | `civic_engagement/ingestion/` |
+| Domain pack interface, app | `civic_engagement/domain.py`, `app.py`; the urban pack: `packs/bologna-civic-dt/bologna_civic_dt/pack.py`, `main.py` |
+| Sites | `civic_engagement/config.py`, `packs/bologna-civic-dt/bologna_civic_dt/sites.py` |
+| Ingestion | `packs/bologna-civic-dt/bologna_civic_dt/ingestion/`, `civic_engagement/ingestion/` |
 | Data schema and API contract | `civic_engagement/models/schema.py`, `frontend/src/api/types.ts` |
-| Cards | `civic_engagement/api/routes_cards.py` |
+| Cards | `packs/bologna-civic-dt/bologna_civic_dt/cards.py` |
 | Session store | `civic_engagement/store/state.py` |
 | Scenario layout and encoding | `packs/bologna-civic-dt/bologna_civic_dt/layout.py`, `encode.py`, `shapes.py` |
 | Physical model (yearly) | `packs/bologna-civic-dt/bologna_civic_dt/model.py`, `geometry.py`, `parameters.py` |
-| Felt-temperature field | `packs/bologna-civic-dt/bologna_civic_dt/thermal_field.py`, `field_grid.py`, `solar.py` |
+| Felt-temperature field | `packs/bologna-civic-dt/bologna_civic_dt/thermal_field.py`, `field_grid.py`, `solar.py`, `felt_field.py`; `civic_engagement/fields.py` |
 | Framework workarounds | `packs/bologna-civic-dt/bologna_civic_dt/cdt_compat.py` |
 | Scene assembly, caching, "as is" pairing | `civic_engagement/scene.py` |
 | App shell and state | `frontend/src/App.tsx` |

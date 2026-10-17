@@ -8,7 +8,7 @@ import { OVERVIEW_FOV_DEG } from "../three/camera";
 // module it imports), and its URL handed over.
 setWorkerUrl(maplibreWorkerUrl);
 
-// Approximate centroid of the Piazza Dante site boundary (civic_engagement/config.py).
+// Approximate centroid of the Piazza Dante site boundary (packs/bologna-civic-dt/bologna_civic_dt/sites.py).
 // The camera re-fits to the real boundary once the baseline scene loads.
 export const DEFAULT_CENTER: [number, number] = [11.1205, 46.0712];
 

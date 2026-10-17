@@ -11,7 +11,7 @@ import math
 from shapely.geometry import LineString, MultiLineString
 from shapely.geometry.base import BaseGeometry
 
-from civic_engagement.ingestion.osm import LANE_WIDTH_M
+from bologna_civic_dt.ingestion.osm import LANE_WIDTH_M
 
 # PoC-level constants, same spirit as osm.py's DEFAULT_WIDTH_M/
 # PATH_WIDTH_DEFAULTS_M: a per-crossing "which street am I crossing, how wide

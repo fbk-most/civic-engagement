@@ -25,7 +25,7 @@ import shapely
 from shapely.geometry import Point, shape
 from shapely.geometry.base import BaseGeometry
 
-from civic_engagement.config import SITE
+from bologna_civic_dt.sites import SITE
 from bologna_civic_dt.parameters import (
     COVER_SURFACE,
     CROWN_BASE_FRACTION,

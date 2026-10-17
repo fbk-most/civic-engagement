@@ -12,7 +12,8 @@ import pandas as pd
 from shapely.geometry import mapping, shape
 from shapely.geometry.base import BaseGeometry
 
-from civic_engagement.config import PROJECTED_CRS, SITE, WGS84_CRS
+from bologna_civic_dt.sites import SITE
+from civic_engagement.config import PROJECTED_CRS, WGS84_CRS
 
 COVER_TAG_TO_TYPE = {
     ("natural", "wood"): "wood",

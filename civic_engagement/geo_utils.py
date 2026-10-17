@@ -11,7 +11,7 @@ from shapely.geometry import Point, mapping, shape
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
 
-from civic_engagement.config import PROJECTED_CRS, SITE, WGS84_CRS
+from civic_engagement.config import PROJECTED_CRS, WGS84_CRS
 
 
 def to_projected(geojson: dict) -> BaseGeometry:
@@ -95,13 +95,12 @@ def jittered_grid_points_within(geojson: dict, spacing_m: float, seed: str) -> l
     return [mapping(p) for p in wgs84_points]
 
 
-def grove_points_within(geojson: dict, spacing_m: float, seed: str) -> list[dict]:
-    """Scatters a grove's trees using whichever algorithm
-    `SITE.grove_placement_algorithm` selects. The single entry point for a
-    grove's trees (`bologna_civic_dt/layout.py`), which both rendering and the
-    model's CO2/cost use — see `jittered_grid_points_within`'s docstring.
+def grove_points_within(geojson: dict, spacing_m: float, seed: str, algorithm: str = "jittered") -> list[dict]:
+    """Scatters a grove's trees with `algorithm`: "jittered" (see
+    `jittered_grid_points_within`'s docstring) or "grid". The urban pack
+    takes it from the site (`grove_placement_algorithm`).
     """
-    if SITE.grove_placement_algorithm == "jittered":
+    if algorithm == "jittered":
         return jittered_grid_points_within(geojson, spacing_m, seed)
     return grid_points_within(geojson, spacing_m)
 

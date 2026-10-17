@@ -1,17 +1,11 @@
 from fastapi import APIRouter, HTTPException
 
 from civic_engagement.models.schema import ScenarioInfo, ScenarioSave, SceneResponse
-from civic_engagement.scene import MAX_T, MIN_T, current_scene
+from civic_engagement.scene import current_scene, validated_t
 from civic_engagement.store.scenarios import ScenarioError, delete_scenario, list_scenarios, read_scenario, save_scenario
 from civic_engagement.store.state import store
 
 router = APIRouter()
-
-
-def _validated_t(t: int) -> int:
-    if not MIN_T <= t <= MAX_T:
-        raise HTTPException(status_code=422, detail=f"t must be between {MIN_T} and {MAX_T}")
-    return t
 
 
 @router.get("/scenarios", response_model=list[ScenarioInfo])
@@ -35,7 +29,7 @@ def post_scenario(data: ScenarioSave) -> ScenarioInfo:
 def load_scenario(scenario: str, t: int = 0) -> SceneResponse:
     """The session becomes the scenario's interventions (the session as it
     was is set aside on disk); every open window follows within seconds."""
-    validated_t = _validated_t(t)
+    year = validated_t(t)
     try:
         _, interventions = read_scenario(scenario)
     except FileNotFoundError as error:
@@ -43,7 +37,7 @@ def load_scenario(scenario: str, t: int = 0) -> SceneResponse:
     except ScenarioError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     store.replace(interventions)
-    return current_scene(validated_t)
+    return current_scene(year)
 
 
 @router.delete("/scenarios/{scenario}", status_code=204)
@@ -59,6 +53,6 @@ def remove_scenario(scenario: str) -> None:
 @router.post("/session/clear", response_model=SceneResponse)
 def clear_session(t: int = 0) -> SceneResponse:
     """No interventions: a fresh start (the session as it was is set aside)."""
-    validated_t = _validated_t(t)
+    year = validated_t(t)
     store.replace([])
-    return current_scene(validated_t)
+    return current_scene(year)

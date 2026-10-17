@@ -11,7 +11,7 @@ once the replant is in place too.
 
 How big each tree is at a given year (and so whether it is alive or a
 stump) is the model's business — see `model.py`. The layout only records
-what the model needs to know about each tree (`TreeSlot`), and `scene.py`
+what the model needs to know about each tree (`TreeSlot`), and `pack.py`
 puts the two together for a given year.
 """
 
@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from bologna_civic_dt.parameters import GROVE_PLANTING_DIAMETER
+from bologna_civic_dt.sites import SITE
 from shapely.ops import unary_union
 
 from civic_engagement.geo_utils import centroid_point, grove_points_within, points_along, to_projected_many
@@ -170,7 +171,10 @@ def _add_intervention(layout: Layout, intervention: Intervention) -> None:
     elif card == "plant_grove":
         # The area always converts to lawn, with small trees scattered in it.
         cover("lawn")
-        points = grove_points_within(intervention.geometry, params.get("spacing", 5.0), seed=intervention.id)
+        points = grove_points_within(
+            intervention.geometry, params.get("spacing", 5.0), seed=intervention.id,
+            algorithm=SITE.grove_placement_algorithm,
+        )
         for i, point in enumerate(points):
             layout.add_tree(_planted_tree(intervention, "grove", point, GROVE_PLANTING_DIAMETER, suffix=f"-{i}"))
     elif card == "add_playground":

@@ -46,8 +46,11 @@ class LidarHeightModel:
 
     @classmethod
     def load(
-        cls, dbm_path: str = SITE.lidar_dbm_path, dtm_path: str = SITE.lidar_dtm_path
+        cls, dbm_path: str | None = None, dtm_path: str | None = None
     ) -> "LidarHeightModel | None":
+        """From the given files, the active site's by default."""
+        dbm_path = dbm_path or SITE.lidar_dbm_path
+        dtm_path = dtm_path or SITE.lidar_dtm_path
         try:
             return cls(load_asc(dbm_path), load_asc(dtm_path))
         except FileNotFoundError:

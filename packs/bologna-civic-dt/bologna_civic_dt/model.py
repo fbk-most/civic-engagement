@@ -18,7 +18,7 @@ and coefficients of `parameters.py` are model parameters (`Index` values a
 scenario can override too).
 
 Rounding is not done here: it is for display, and stays with the caller
-(see `scene.py`).
+(see `pack.py`).
 """
 
 from dataclasses import dataclass
@@ -96,7 +96,7 @@ from bologna_civic_dt.shapes import (
     TreeIndex,
     TreeTimeseriesIndex,
 )
-from civic_engagement.models.schema import CoverType
+from bologna_civic_dt.types import CoverType
 
 # --- categories: the order of every one-hot encoding and table ---------------
 

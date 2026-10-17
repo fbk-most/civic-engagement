@@ -9,6 +9,7 @@ dependencies = [
     "civic-engagement",
     "geopandas>=1.1.4",
     "numpy",
+    "osmnx>=2.1.0",
     "shapely>=2.1.2",
 ]
 
