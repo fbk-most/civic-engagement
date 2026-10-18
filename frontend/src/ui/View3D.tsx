@@ -14,6 +14,7 @@ import { MiniMap, type MiniMapHandle } from "./MiniMap";
 import { crowdActivity, type LifeMode } from "../three/people/activity";
 import { PerfPanel } from "./PerfPanel";
 import { tr } from "../i18n/lang";
+import { activePack } from "../pack";
 
 interface View3DProps {
   scene: SceneResponse | null;
@@ -102,7 +103,9 @@ export function View3D({
   viewRef,
   initialView,
 }: View3DProps) {
-  const [lifeMode, setLifeMode] = useState<LifeMode>(initialLifeMode ?? "live");
+  // People and traffic are the domain's (see FrontendPack.features).
+  const hasLife = activePack().features.life;
+  const [lifeMode, setLifeMode] = useState<LifeMode>(hasLife ? (initialLifeMode ?? "live") : "off");
   const [urlCopied, setUrlCopied] = useState(false);
   const viewerRef = useRef<ViewerHandle>(null);
   const miniMapRef = useRef<MiniMapHandle>(null);
@@ -226,7 +229,7 @@ export function View3D({
             {urlCopied ? tr("Copiato!", "Copied!") : tr("Copia URL vista", "Copy view URL")}
           </button>
         </div>
-        <div className="view-3d__life" role="group" aria-label={tr("Persone e traffico", "People and traffic")}>
+        {hasLife && <div className="view-3d__life" role="group" aria-label={tr("Persone e traffico", "People and traffic")}>
           <span>{tr("Persone e traffico", "People and traffic")}</span>
           <div>
             {(Object.keys(LIFE_LABELS) as LifeMode[]).map((mode) => (
@@ -241,7 +244,7 @@ export function View3D({
               </button>
             ))}
           </div>
-        </div>
+        </div>}
         {showPerf && (
           <PerfPanel
             viewerRef={viewerRef}

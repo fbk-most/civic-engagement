@@ -22,6 +22,7 @@ separate repositories:
 | --- | --- | --- |
 | Core, `civic-engagement` | `civic_engagement/` | `frontend/` |
 | Urban pack, `bologna-civic-dt` | `packs/bologna-civic-dt/bologna_civic_dt/` | `packs/bologna-civic-dt/frontend/` |
+| Rural pack, `rural-digital-twin` | `packs/rural-digital-twin/rural_digital_twin/` | `packs/rural-digital-twin/frontend/` |
 
 The core holds what every domain shares: the API, sessions and scenarios,
 scene assembly and caching, indicators as descriptors, the 2D map and the
@@ -29,13 +30,26 @@ scene assembly and caching, indicators as descriptors, the 2D map and the
 ingestion — and **is the app**: it builds the API with the core's
 `create_app(pack)` (`civic_engagement/app.py`) and the interface with its
 `startApp(pack)` (`frontend/src/index.ts`). The core never imports a pack
-(`tests/test_package_boundaries.py` checks it).
+(`tests/test_package_boundaries.py` checks it), nor do the packs import
+each other.
+
+The **rural pack** is a first skeleton: one site, Bocenago (a municipality
+in the Rendena valley, Trentino, with its boundary from OpenStreetMap), two
+cards (planting, felling) and a stub model whose indicators are the areas
+planted and felled.
+
+```bash
+uv run python -m rural_digital_twin.ingestion.build_baseline   # boundary and baseline, from OpenStreetMap
+uv run uvicorn rural_digital_twin.main:app --reload --port 8001
+npm run dev:rural   # http://localhost:5174; or npm run build:rural && npm run preview:rural (:4174)
+```
 
 A feature often starts in one domain and moves to the core once a second
 domain needs it: the felt-temperature field and the 3D life (people, dogs,
-traffic) are urban for now. The 3D models and textures are all still under
-`frontend/public/`, which the urban app serves; how they split between
-the core and the packs is to be decided when a second domain needs its own.
+traffic) are urban for now, and a pack without them turns them off
+(`FrontendPack.features`). The 3D models and textures are all still under
+`frontend/public/`, which both apps serve; how they split between the core
+and the packs is to be decided when a domain needs its own.
 
 ## Status
 
@@ -120,9 +134,9 @@ realistic view.
 
 ```bash
 npm install     # once, at the repository root: npm workspaces for the core
-                # (frontend/) and the urban app (packs/bologna-civic-dt/frontend/)
+                # (frontend/) and the apps (packs/*/frontend/)
 npm run dev     # the urban app on http://localhost:5173, proxies /api to the backend on :8000
-npm run typecheck && npm run lint   # both workspaces
+npm run typecheck && npm run lint   # every workspace
 ```
 
 The core's own dev server (`cd frontend && npm run dev`) serves only the
@@ -132,7 +146,7 @@ For workshops, demos and performance measurements, use the production build
 instead:
 
 ```bash
-npm run build && npm run preview   # http://localhost:4173, same proxy
+npm run build && npm run preview   # both apps built; the urban one on http://localhost:4173, same proxy
 ```
 
 The development build is much slower in the 3D view: React's development
@@ -208,7 +222,8 @@ The site baselines (`data/*/baseline.json`) are derived from third-party
 data:
 
 - **OpenStreetMap**: buildings, streets, paths, trees, street furniture and
-  ground covers for both sites. © OpenStreetMap contributors, available
+  ground covers for both urban sites, and Bocenago's municipal boundary
+  (`data/bocenago/`). © OpenStreetMap contributors, available
   under the [Open Database License](https://www.openstreetmap.org/copyright).
 - **Provincia autonoma di Trento**: the terrain, building heights and roof
   shapes for Piazza Dante from the 2014 LiDAR survey, and roof colours from the 2015

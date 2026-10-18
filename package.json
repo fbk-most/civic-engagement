@@ -3,13 +3,18 @@
   "private": true,
   "workspaces": [
     "frontend",
-    "packs/bologna-civic-dt/frontend"
+    "packs/bologna-civic-dt/frontend",
+    "packs/rural-digital-twin/frontend"
   ],
   "scripts": {
     "dev": "npm run dev -w bologna-civic-dt",
-    "build": "npm run build -w bologna-civic-dt",
+    "build": "npm run build -w bologna-civic-dt && npm run build -w rural-digital-twin",
     "preview": "npm run preview -w bologna-civic-dt",
     "lint": "npm run lint --workspaces",
-    "typecheck": "npm run typecheck --workspaces"
+    "typecheck": "npm run typecheck --workspaces",
+    "dev:rural": "npm run dev -w rural-digital-twin",
+    "build:urban": "npm run build -w bologna-civic-dt",
+    "build:rural": "npm run build -w rural-digital-twin",
+    "preview:rural": "npm run preview -w rural-digital-twin"
   }
 }

@@ -16,6 +16,7 @@ import type { SeasonState, SunPosition } from "./sun";
 import { DEFAULT_FOV_DEG, LOOK_DISTANCE_M, MIN_CAMERA_HEIGHT_M, OVERVIEW_FOV_DEG, type CameraPose } from "./camera";
 import { anchorFromPolygon, bearingToDirection, directionToBearing, toLocal, toLngLat } from "./geo";
 import { WalkController, type Footprint } from "./walk";
+import { activePack } from "../pack";
 import { FLAT_TERRAIN, intersectTerrain, type Terrain } from "./terrain";
 import * as timeline from "../perf/timeline";
 import { Crowd } from "./people/Crowd";
@@ -431,15 +432,19 @@ export function Viewer({
     materialsRef.current = new MaterialLibrary();
 
     // Outside the rebuilt scene group, so people survive (and are only
-    // incrementally updated by) rebuilds.
-    const crowd = new Crowd();
-    crowd.group.visible = lifeModeRef.current !== "off";
-    threeScene.add(crowd.group);
+    // incrementally updated by) rebuilds. Not at all in a domain without
+    // them (see FrontendPack.features): their models aren't even loaded.
+    const life = activePack().features.life;
+    const crowd = life ? new Crowd() : null;
+    const traffic = life ? new Traffic() : null;
+    if (crowd && traffic) {
+      crowd.group.visible = lifeModeRef.current !== "off";
+      threeScene.add(crowd.group);
+      traffic.group.visible = lifeModeRef.current !== "off";
+      traffic.setFrozen(lifeModeRef.current !== "live");
+      threeScene.add(traffic.group);
+    }
     crowdRef.current = crowd;
-    const traffic = new Traffic();
-    traffic.group.visible = lifeModeRef.current !== "off";
-    traffic.setFrozen(lifeModeRef.current !== "live");
-    threeScene.add(traffic.group);
     trafficRef.current = traffic;
     const thermalOverlay = new ThermalOverlay(renderer.toneMappingExposure);
     threeScene.add(thermalOverlay.mesh);
@@ -657,10 +662,10 @@ export function Viewer({
       // "still" doesn't advance anything; it only settles figures added
       // since the last frame (a replan) into their pose. "off" does neither.
       const simStart = performance.now();
-      if (lifeModeRef.current === "live") {
+      if (crowd && traffic && lifeModeRef.current === "live") {
         crowd.update(delta);
         traffic.update(delta, crowd.walkerPositions());
-      } else if (lifeModeRef.current === "still") {
+      } else if (crowd && traffic && lifeModeRef.current === "still") {
         crowd.settle();
         traffic.settle();
       }
@@ -694,9 +699,9 @@ export function Viewer({
       thermalOverlayRef.current = null;
       if (placardsRef.current) disposePlacards(placardsRef.current);
       placardsRef.current = null;
-      crowd.dispose();
+      crowd?.dispose();
       crowdRef.current = null;
-      traffic.dispose();
+      traffic?.dispose();
       trafficRef.current = null;
       crowdSceneRef.current = null;
       controls.dispose();

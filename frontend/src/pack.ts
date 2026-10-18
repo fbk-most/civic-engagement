@@ -12,6 +12,10 @@ export interface FrontendPack {
   id: string;
   /** The app's name, e.g. in the window title. */
   title: string;
+  /** The features still urban-in-core (see the README), which a domain
+   * without them turns off: the felt-temperature field (served by the
+   * pack's /api/thermal-field) and the 3D view's people, dogs and traffic. */
+  features: { thermal: boolean; life: boolean };
   /** The cards' categories, in the card palette's order. The colour is the
    * category's identity across the palette, the placed-intervention list,
    * the map markers and the 3D placards. */

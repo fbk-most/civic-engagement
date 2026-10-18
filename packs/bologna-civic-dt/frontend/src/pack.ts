@@ -8,6 +8,7 @@ import { SCENE_3D } from "./scene3d";
 export const urbanPack: FrontendPack = {
   id: "urban",
   title: "Bologna Civic Digital Twin",
+  features: { thermal: true, life: true },
   cardCategories: CARD_CATEGORIES,
   cardIcons: CARD_ICONS,
   coverTypes: COVER_TYPES,

@@ -169,8 +169,11 @@ function App() {
   // The felt-temperature field drawn on the ground, and the panel with its
   // figures: separate choices (the figures, and the daily curve, make sense
   // without the colours over the scene).
-  const [thermalOn, setThermalOn] = useState(initialDebugParams.thermal);
-  const [thermalPanelOpen, setThermalPanelOpen] = useState(initialDebugParams.thermal);
+  // The felt-temperature field is the domain's (see FrontendPack.features):
+  // without it, nothing below ever asks for one.
+  const { features } = activePack();
+  const [thermalOn, setThermalOn] = useState(initialDebugParams.thermal && features.thermal);
+  const [thermalPanelOpen, setThermalPanelOpen] = useState(initialDebugParams.thermal && features.thermal);
   const [thermalFailed, setThermalFailed] = useState(false);
   const [thermalReading, setThermalReading] = useState<ThermalReading>(null);
   // How the 3D view's crowd fares in the felt temperature (see Viewer).
@@ -428,7 +431,7 @@ function App() {
   // and again a second later when the field arrives.
   const thermalAsIs = interventionMode === "hidden";
   const crowdAsIs = interventionMode !== "simulated";
-  const comfortWanted = view3dMounted;
+  const comfortWanted = view3dMounted && features.thermal;
   // Which variants are needed, as "as is" flags: none, one, or both.
   // The panel's daily curve compares the situation with the interventions
   // and without, so it needs both — and, in a later year, today's without
@@ -921,7 +924,7 @@ function App() {
                   asIs={interventionMode === "hidden"}
                   initiallyCollapsed={initialDebugParams.panelsClosed}
                 />}
-              {(view === "2d" || view === "3d") && (
+              {features.thermal && (view === "2d" || view === "3d") && (
                 <ThermalPanel
                   open={thermalPanelOpen}
                   onOpenChange={setThermalPanelOpen}
