@@ -30,8 +30,10 @@ class Anchor:
         """As the frontend's `anchorFromPolygon`: the mean of the outer
         ring's vertices (closing vertex included)."""
         ring = boundary["coordinates"][0]
-        lng0 = sum(p[0] for p in ring) / len(ring)
-        lat0 = sum(p[1] for p in ring) / len(ring)
+        return cls.at(sum(p[0] for p in ring) / len(ring), sum(p[1] for p in ring) / len(ring))
+
+    @classmethod
+    def at(cls, lng0: float, lat0: float) -> "Anchor":
         phi = math.radians(lat0)
         return cls(
             lng0=lng0,
@@ -46,6 +48,10 @@ class Anchor:
             shape(geojson),
             lambda c: np.column_stack(((c[:, 0] - self.lng0) * self.m_per_lng, (c[:, 1] - self.lat0) * self.m_per_lat)),
         )
+
+    def east_north(self, lng: np.ndarray, lat: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Metres east and north of the anchor of points at `lng`, `lat`."""
+        return (lng - self.lng0) * self.m_per_lng, (lat - self.lat0) * self.m_per_lat
 
     def lng_lat(self, x: np.ndarray, north: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Longitudes and latitudes of points `x` metres east and `north`

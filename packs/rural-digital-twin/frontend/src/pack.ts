@@ -1,8 +1,9 @@
 import type { FrontendPack, Pair } from "civic-engagement";
 
 // The rural pack's side of the frontend (see the core's src/pack.ts): the
-// two cards (plant, fell), the covers they become, and the bare ground,
-// which is the terrain's own surface (the site has no covers of its own).
+// two cards (plant, fell), the land covers (from OpenStreetMap; the forest
+// as stands, see the backend's stands.py) and the covers the cards become.
+// Where there is no cover, the ground is the terrain's own surface.
 
 const FOREST_GREEN = "#2e6b1f";
 
@@ -13,9 +14,16 @@ const SPECIES: Record<string, Pair> = {
   mixed: ["Misto", "Mixed"],
 };
 
+// In the space use chart's stacking order.
 const COVER_TYPES: FrontendPack["coverTypes"] = {
+  forest: { label: ["Bosco", "Forest"], color: "#3f7a35" },
   planting: { label: ["Rimboschimento", "Planting"], color: "#6fae57" },
   felling: { label: ["Taglio", "Felling"], color: "#b08a5a" },
+  scrub: { label: ["Arbusteto", "Scrub"], color: "#8a9a4e" },
+  meadow: { label: ["Prato", "Meadow"], color: "#b9cc7a" },
+  grassland: { label: ["Pascolo", "Grassland"], color: "#cdd59a" },
+  rock: { label: ["Roccia", "Rock"], color: "#a8a49c" },
+  residential: { label: ["Abitato", "Village"], color: "#c9b8a6" },
 };
 
 export const ruralPack: FrontendPack = {
@@ -49,9 +57,16 @@ export const ruralPack: FrontendPack = {
   },
   map: { layers: [], legend: [] },
   scene3d: {
+    // Ground colours: the stands' trees will stand on the forest floor.
     coverSurfaces: {
+      forest: { color: 0x6f7f4a, roughness: 1, texture: "lawn" },
       planting: { color: 0x9cc27e, roughness: 0.95, texture: "lawn" },
       felling: { color: 0xb59a76, roughness: 1, texture: "gravel" },
+      scrub: { color: 0x98a463, roughness: 1, texture: "lawn" },
+      meadow: { color: 0xc4d38e, roughness: 0.95, texture: "lawn" },
+      grassland: { color: 0xd0d6a0, roughness: 0.95, texture: "lawn" },
+      rock: { color: 0xb0aca4, roughness: 1, texture: "gravel" },
+      residential: { color: 0xc8beb2, roughness: 0.9, texture: "paving" },
     },
     pathSurfaces: {},
     ribbonTypes: [],

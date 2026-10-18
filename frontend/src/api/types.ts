@@ -17,6 +17,9 @@ export interface CoverPolygon {
   id: string;
   geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon;
   cover_type: CoverType;
+  /** The domain's own attributes of the area (a forest stand's species,
+   * density, age...); empty for most covers. */
+  properties: Record<string, unknown>;
   source: Source;
   intervention_id: string | null;
 }

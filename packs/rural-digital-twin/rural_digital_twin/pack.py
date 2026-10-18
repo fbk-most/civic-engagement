@@ -23,7 +23,7 @@ class RuralPack(DomainPack):
     cards = CARDS
     # "building": the core's occluder type, for the village (none yet).
     element_types = frozenset({"building"})
-    cover_types = frozenset(COVER_OF_CARD.values())
+    cover_types = frozenset({"forest", "meadow", "grassland", "scrub", "rock", "residential", *COVER_OF_CARD.values()})
     indicators = DESCRIPTORS
 
     def evaluate(self, baseline: BaselineScene, interventions: list[Intervention]) -> model.Evaluated:

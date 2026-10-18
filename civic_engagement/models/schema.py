@@ -25,6 +25,9 @@ class CoverPolygon(BaseModel):
     id: str
     geometry: dict[str, Any]
     cover_type: CoverType
+    # The domain's own attributes of the area (a forest stand's species,
+    # density, age...); none for most covers.
+    properties: dict[str, Any] = Field(default_factory=dict)
     source: Source
     intervention_id: str | None = None
 
