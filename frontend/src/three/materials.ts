@@ -183,6 +183,10 @@ export class MaterialLibrary {
   terrain(): THREE.MeshStandardMaterial {
     return this.get("terrain", () => {
       const material = this.surfaceMaterial(activePack().scene3d.terrainSurface ?? DEFAULT_TERRAIN);
+      // Both sides: seen from below (at the grid's edges, or from under a
+      // slope) the ground is dark, lit from the wrong side, rather than
+      // see-through to the sky. The same triangles, each still drawn once.
+      material.side = THREE.DoubleSide;
       material.polygonOffset = true;
       material.polygonOffsetFactor = 3;
       material.polygonOffsetUnits = 3;

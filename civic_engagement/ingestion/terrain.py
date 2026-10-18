@@ -9,7 +9,8 @@ A pack runs it for its own sites (`main`, with the pack registered).
 
 The margin should cover what the scene draws past the boundary (the urban
 pack's buildings, up to its building fetch buffer). Past the DTM's edge,
-heights repeat the edge's.
+heights repeat the edge's; where it has no data, they're the nearest
+known ones.
 """
 
 import argparse
@@ -47,6 +48,31 @@ def sample_bilinear(grid: Grid, x: np.ndarray, y: np.ndarray) -> np.ndarray:
     return top * (1 - ty) + bottom * ty
 
 
+def fill_from_neighbours(heights: np.ndarray, smoothing: int = 400) -> np.ndarray:
+    """`heights` with each NaN replaced: first, ring by ring from the known
+    points inwards, by the mean of its known neighbours; then relaxed,
+    `smoothing` times, to the mean of its four neighbours (the known points
+    staying put). A smooth continuation of the ground rather than a cliff,
+    without the streaks the rings alone leave."""
+    heights = heights.copy()
+    unknown = np.isnan(heights)
+    while np.isnan(heights).any():
+        missing = np.isnan(heights)
+        padded = np.pad(heights, 1, constant_values=np.nan)
+        neighbours = np.stack([
+            padded[1 + dr : 1 + dr + heights.shape[0], 1 + dc : 1 + dc + heights.shape[1]]
+            for dr in (-1, 0, 1) for dc in (-1, 0, 1) if (dr, dc) != (0, 0)
+        ])
+        count = np.isfinite(neighbours).sum(axis=0)
+        reached = missing & (count > 0)
+        heights[reached] = (np.nansum(neighbours, axis=0) / np.maximum(count, 1))[reached]
+    for _ in range(smoothing if unknown.any() else 0):
+        padded = np.pad(heights, 1, mode="edge")
+        mean = (padded[:-2, 1:-1] + padded[2:, 1:-1] + padded[1:-1, :-2] + padded[1:-1, 2:]) / 4
+        heights[unknown] = mean[unknown]
+    return heights
+
+
 def build_terrain_grid(site: SiteConfig, dtm: Grid, cell_m: float, margin_m: float) -> TerrainGrid:
     anchor = Anchor.of(site.site_boundary_geojson)
     minx, min_north, maxx, max_north = anchor.local(site.site_boundary_geojson).bounds
@@ -62,14 +88,15 @@ def build_terrain_grid(site: SiteConfig, dtm: Grid, cell_m: float, margin_m: flo
     px, py = pyproj.Transformer.from_crs(WGS84_CRS, PROJECTED_CRS, always_xy=True).transform(lng, lat)
     heights = sample_bilinear(dtm, np.asarray(px), np.asarray(py))
 
-    finite = np.isfinite(heights)
-    if not finite.any():
+    heights = heights.reshape(rows, cols)
+    if not np.isfinite(heights).any():
         raise RuntimeError("The DTM has no data over the site")
-    missing = int((~finite).sum())
+    missing = int((~np.isfinite(heights)).sum())
     if missing:
-        print(f"WARNING: {missing} of {heights.size} points fall on DTM nodata: set to the lowest height")
-    base = float(heights[finite].min())
-    levels = np.round((np.where(finite, heights, base) - base) / HEIGHT_SCALE_M)
+        print(f"Note: {missing} of {heights.size} points fall where the DTM has no data: filled from the nearest")
+        heights = fill_from_neighbours(heights)
+    base = float(heights.min())
+    levels = np.round((heights.ravel() - base) / HEIGHT_SCALE_M)
     if levels.max() > _MAX_LEVEL:
         raise RuntimeError(f"Height range {levels.max() * HEIGHT_SCALE_M:.0f} m doesn't fit the grid's encoding")
 

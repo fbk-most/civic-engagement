@@ -1,4 +1,5 @@
 import base64
+import gzip
 import json
 import math
 
@@ -9,8 +10,8 @@ from fastapi import HTTPException
 from civic_engagement import site_assets
 from civic_engagement.config import SITE
 from civic_engagement.geo_utils import to_projected
-from civic_engagement.ingestion.raster import Grid
-from civic_engagement.ingestion.terrain import build_terrain_grid, sample_bilinear
+from civic_engagement.ingestion.raster import Grid, load_asc
+from civic_engagement.ingestion.terrain import build_terrain_grid, fill_from_neighbours, sample_bilinear
 from civic_engagement.local_frame import Anchor
 
 
@@ -36,6 +37,25 @@ def test_sample_bilinear_between_cell_centres() -> None:
     assert math.isclose(sample_bilinear(grid, np.array([1.0]), np.array([0.0]))[0], 25.0)
     # Past the edge: the edge's value.
     assert math.isclose(sample_bilinear(grid, np.array([-5.0]), np.array([5.0]))[0], 10.0)
+
+
+def test_load_asc_reads_gz(tmp_path) -> None:
+    text = "ncols 3\nnrows 2\nxllcorner 100\nyllcorner 200\ncellsize 0.5\nNODATA_value -9999\n1 2 3\n4 -9999 6\n"
+    plain, packed = tmp_path / "dtm.asc", tmp_path / "dtm.asc.gz"
+    plain.write_text(text)
+    with gzip.open(packed, "wt") as f:
+        f.write(text)
+    a, b = load_asc(str(plain)), load_asc(str(packed))
+    assert np.array_equal(a.array, b.array, equal_nan=True)
+    assert np.isnan(b.array[1, 1]) and b.origin_y == 201.0
+
+
+def test_missing_heights_continue_the_ground() -> None:
+    heights = np.array([[1.0, 2.0, np.nan], [1.0, 2.0, np.nan], [np.nan, np.nan, np.nan]])
+    filled = fill_from_neighbours(heights)
+    assert np.isfinite(filled).all()
+    assert filled[0, 0] == 1.0 and filled[1, 1] == 2.0
+    assert 1.0 <= filled.min() and filled.max() <= 2.0
 
 
 def test_terrain_grid_follows_the_dtm() -> None:

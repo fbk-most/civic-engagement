@@ -55,6 +55,14 @@ const ROAD_NETWORK_TYPES = new Set<DiscreteElement["type"]>(["street", "crossing
 // The camera's far plane: this, or more on a site large enough to need it
 // (see `applyBuilt`).
 const MIN_CAMERA_FAR_M = 3000;
+// How far the orbit camera can zoom out from what it looks at: this many
+// times the site's diagonal, and never less than MIN_ZOOM_OUT_M.
+const ZOOM_OUT_DIAGONALS = 2.5;
+const MIN_ZOOM_OUT_M = 1500;
+// How far past the site's edges panning can go: this share of the site's
+// size, and never less than MIN_PAN_MARGIN_M.
+const PAN_MARGIN_SHARE = 0.25;
+const MIN_PAN_MARGIN_M = 200;
 
 export interface ViewerHandle {
   /** Downloads the current frame as a PNG. */
@@ -649,6 +657,7 @@ export function Viewer({
         // zoom, damping overshoot and a target dragged downhill can each still
         // put the camera under the pavement, and there is no combination of
         // OrbitControls settings that rules all of them out.
+        if (builtRef.current) keepNearSite(builtRef.current, camera, controls);
         clampToGround(builtRef.current?.terrain ?? FLAT_TERRAIN, camera, controls);
       }
       lighting.update(clock.elapsedTime);
@@ -810,12 +819,17 @@ export function Viewer({
     // fitTo moves the shadow camera's centre, so the sun has to be re-placed
     // relative to it afterwards.
     lighting.fitTo(built.bounds, [built.terrain.minHeight, built.terrain.maxHeight]);
-    // Far enough to see the whole site from anywhere around it, however
-    // large: Piazza Dante's is a few hundred metres across, a valley's
-    // kilometres.
-    if (cameraRef.current) {
+    // Zooming out stops where the whole site is still comfortably in view,
+    // and the far plane lies beyond that: the site is never cut off, however
+    // large (Piazza Dante is a few hundred metres across, a valley
+    // kilometres).
+    if (cameraRef.current && controlsRef.current) {
       const { minX, maxX, minZ, maxZ } = built.bounds;
-      const far = Math.max(MIN_CAMERA_FAR_M, 2 * Math.hypot(maxX - minX, maxZ - minZ, built.terrain.maxHeight));
+      const diagonal = Math.hypot(maxX - minX, maxZ - minZ, built.terrain.maxHeight);
+      controlsRef.current.maxDistance = Math.max(MIN_ZOOM_OUT_M, ZOOM_OUT_DIAGONALS * diagonal);
+      // What the camera looks at stays within the site and its pan margin
+      // (see `keepNearSite`).
+      const far = Math.max(MIN_CAMERA_FAR_M, controlsRef.current.maxDistance + diagonal + 2 * panMargin(built));
       if (cameraRef.current.far !== far) {
         cameraRef.current.far = far;
         cameraRef.current.updateProjectionMatrix();
@@ -1040,6 +1054,31 @@ export function Viewer({
       )}
     </div>
   );
+}
+
+/** How far past the site's edges panning can take what the camera looks
+ * at: a quarter of the site's size, and never less than MIN_PAN_MARGIN_M. */
+function panMargin(built: BuiltScene): number {
+  const { minX, maxX, minZ, maxZ } = built.bounds;
+  return Math.max(MIN_PAN_MARGIN_M, PAN_MARGIN_SHARE * Math.max(maxX - minX, maxZ - minZ));
+}
+
+/** Stops panning at the site's edges, plus a margin: what the camera looks
+ * at stays there, and the camera moves with it, so a drag at the edge stops
+ * rather than turning the view. Without it, the site can be dragged out of
+ * sight and past the far plane. */
+function keepNearSite(built: BuiltScene, camera: THREE.PerspectiveCamera, controls: OrbitControls): void {
+  const { minX, maxX, minZ, maxZ } = built.bounds;
+  const margin = panMargin(built);
+  const x = THREE.MathUtils.clamp(controls.target.x, minX - margin, maxX + margin);
+  const z = THREE.MathUtils.clamp(controls.target.z, minZ - margin, maxZ + margin);
+  const dx = x - controls.target.x;
+  const dz = z - controls.target.z;
+  if (dx === 0 && dz === 0) return;
+  controls.target.x += dx;
+  controls.target.z += dz;
+  camera.position.x += dx;
+  camera.position.z += dz;
 }
 
 /** Keeps the orbit camera and its target off the ground. Belt and braces

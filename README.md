@@ -36,10 +36,13 @@ each other.
 The **rural pack** is a first skeleton: one site, Bocenago (a municipality
 in the Rendena valley, Trentino, with its boundary from OpenStreetMap), two
 cards (planting, felling) and a stub model whose indicators are the areas
-planted and felled.
+planted and felled. Its terrain comes from PAT's LiDAR DTM, downloaded by
+hand (see `data/bocenago/lidar/SOURCE.txt`, not in the repository); the
+terrain grid built from it is.
 
 ```bash
 uv run python -m rural_digital_twin.ingestion.build_baseline   # boundary and baseline, from OpenStreetMap
+uv run python -m rural_digital_twin.ingestion.build_terrain    # terrain grid, every 5 m, from data/bocenago/lidar/dtm.asc.gz
 uv run uvicorn rural_digital_twin.main:app --reload --port 8001
 npm run dev:rural   # http://localhost:5174; or npm run build:rural && npm run preview:rural (:4174)
 ```

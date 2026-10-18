@@ -7,6 +7,7 @@ Both raster kinds reduce to the same shape once loaded: a north-up array
 polygon-to-pixel-mask routine serves both.
 """
 
+import gzip
 from dataclasses import dataclass
 
 import numpy as np
@@ -25,9 +26,10 @@ class Grid:
 def load_asc(path: str) -> Grid:
     """Parses an ESRI ASCII grid (the format PAT's LiDAR portal exports as).
     Six header lines, then whitespace-separated values, row-major from the
-    north-west corner — already exactly the `Grid` convention above.
+    north-west corner — already exactly the `Grid` convention above. A
+    `.gz` file is read compressed.
     """
-    with open(path) as f:
+    with (gzip.open(path, "rt") if path.endswith(".gz") else open(path)) as f:
         header = {}
         for _ in range(6):
             key, value = f.readline().split()
