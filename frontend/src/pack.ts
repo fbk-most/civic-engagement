@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import type { MapElementLayer } from "./map/layers";
 import type { Surface } from "./three/materials";
+import type { TreeSource } from "./three/builders/forest";
 import type { PartBuilder } from "./three/parts";
 import type { IconShape } from "./ui/cardIconShapes";
 
@@ -55,6 +56,10 @@ export interface FrontendPack {
      * valley's forest and meadows; not a square's paving. See
      * three/builders/coverPaint.ts. */
     paintCovers?: boolean;
+    /** Grows a forest from the covers (the rural pack's stands): trees by
+     * the thousand, drawn plainly (see three/builders/forest.ts), beside the
+     * scene's own trees, which are elements. */
+    treeSource?: TreeSource;
     /** Cover types drawn as animated water rather than flat ground. */
     waterCoverTypes: string[];
     /** The pack's own parts of the scene, built after the core's ground,

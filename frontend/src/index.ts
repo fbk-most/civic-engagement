@@ -23,6 +23,8 @@ export { MaterialLibrary, type Surface } from "./three/materials";
 export { instanced } from "./three/instancing";
 export { toLocal, type GeoAnchor } from "./three/geo";
 export { FLAT_TERRAIN, type Terrain } from "./three/terrain";
+export type { ForestTree, TreeKind, TreeSource } from "./three/builders/forest";
+export { polygonRings } from "./three/geo";
 export { elementYaw } from "./three/hash";
 export { daylightFraction, type SunPosition } from "./three/sun";
 export { setLampIntensity, setLampLayout, setRealLamps } from "./three/lampLighting";

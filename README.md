@@ -35,8 +35,11 @@ each other.
 
 The **rural pack** is a first skeleton: one site, Bocenago (a municipality
 in the Rendena valley, Trentino, with its boundary from OpenStreetMap), two
-cards (planting, felling) and a stub model whose indicators are the areas
-planted and felled. Its terrain comes from PAT's LiDAR DTM, downloaded by
+cards (planting, felling) and a stub model whose indicators are the forest's
+area and the areas planted and felled. The land covers come from
+OpenStreetMap, the forest as stands with placeholder attributes (species by
+altitude, see `stands.py`); the browser grows the stands' trees, a share of
+them for now (`?treeShare=`). Its terrain comes from PAT's LiDAR DTM, downloaded by
 hand (see `data/bocenago/lidar/SOURCE.txt`, not in the repository); the
 terrain grid built from it is.
 
@@ -212,6 +215,7 @@ The frontend reads a few optional parameters from its URL (see
 | `comfort` | `off` | Comparison only: people ignore the felt temperature (by default they stop less, and walk less, where it's very hot or cold). |
 | `terrain` | `off` | Comparison only: draw the site flat, even if it has a terrain grid. |
 | `terrainScale` | e.g. `3` | Testing only: the terrain's heights multiplied by this, to see it on gentle ground. |
+| `treeShare` | `0`–`1` | Rural pack, testing only: the share of the stands' trees drawn (default `0.1`, about 34,000 trees in Bocenago). |
 
 The active site is not a URL parameter: it's chosen when starting the backend
 (`CIVIC_TWIN_SITE`, see above).

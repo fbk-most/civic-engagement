@@ -19,6 +19,7 @@ import type { DiscreteElement, SceneResponse } from "../api/types";
 import { buildGround } from "./builders/ground";
 import { buildPaths } from "./builders/paths";
 import { buildVegetation } from "./builders/vegetation";
+import { buildForest } from "./builders/forest";
 import { buildWater } from "./builders/water";
 import { buildTerrainSurface } from "./builders/terrainSurface";
 import { paintCovers } from "./builders/coverPaint";
@@ -143,6 +144,9 @@ export async function buildScene(
   group.add(await ACTIVE_PROVIDER.build(buildings, { anchor, materials, terrain }));
   const vegetation = await buildVegetation(elements, anchor, materials, terrain);
   group.add(vegetation.group);
+  // The forest the pack grows from the covers, if it does (see forest.ts).
+  const forest = scene3d.treeSource ? buildForest(scene3d.treeSource, covers, anchor, materials, terrain) : null;
+  if (forest) parts.push(forest.part);
 
   for (const build of scene3d.parts) parts.push(await build({ elements, covers, anchor, materials, terrain }));
   parts.push(buildWater(covers, anchor, terrain));
@@ -155,7 +159,10 @@ export async function buildScene(
     bounds: localBounds(anchor, [scene.site_boundary]),
     footprints: buildingFootprints(buildings, anchor),
     parts,
-    applySeason: vegetation.applySeason,
+    applySeason: (season) => {
+      vegetation.applySeason(season);
+      forest?.applySeason(season);
+    },
     release: vegetation.release,
   };
 }

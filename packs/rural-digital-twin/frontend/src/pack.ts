@@ -1,4 +1,5 @@
 import type { FrontendPack, Pair } from "civic-engagement";
+import { standTrees } from "./trees";
 
 // The rural pack's side of the frontend (see the core's src/pack.ts): the
 // two cards (plant, fell), the land covers (from OpenStreetMap; the forest
@@ -57,7 +58,7 @@ export const ruralPack: FrontendPack = {
   },
   map: { layers: [], legend: [] },
   scene3d: {
-    // Ground colours: the stands' trees will stand on the forest floor.
+    // Ground colours: the stands' trees stand on the forest floor.
     coverSurfaces: {
       forest: { color: 0x6f7f4a, roughness: 1, texture: "lawn" },
       planting: { color: 0x9cc27e, roughness: 0.95, texture: "lawn" },
@@ -73,8 +74,10 @@ export const ruralPack: FrontendPack = {
     waterCoverTypes: [],
     // A valley's covers are large: painted on the terrain, not meshes.
     paintCovers: true,
+    // The stands' trees.
+    treeSource: standTrees,
     parts: [],
-    // Mountain meadow, until the stands and the land cover come.
+    // Mountain meadow, where no land cover is.
     terrainSurface: { color: 0xa3b77f, roughness: 1, texture: "lawn" },
   },
 };
