@@ -8,6 +8,7 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.139.2",
     "geopandas>=1.1.4",
+    "numpy",
     "pillow>=12.3.0",
     "pydantic>=2.13.4",
     "pyproj>=3.7.2",
@@ -17,17 +18,12 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    # The domain packs, installed alongside the core while they live in this
-    # repository (packs/). The core must not import them: see
-    # tests/test_package_boundaries.py.
-    "bologna-civic-dt",
-    "rural-digital-twin",
     "pytest>=9.1.1",
 ]
 
 [tool.pytest.ini_options]
-# The core's tests, on a toy pack (tests/toy_pack). Each pack's tests run on
-# their own, with their pack: `uv run pytest packs/<pack>/tests`.
+# On a toy pack (tests/toy_pack): the domain packs, in their own
+# repositories, have their own tests.
 testpaths = ["tests"]
 
 [build-system]
@@ -37,10 +33,3 @@ build-backend = "uv_build"
 [tool.uv.build-backend]
 module-name = "civic_engagement"
 module-root = ""
-
-[tool.uv.workspace]
-members = ["packs/*"]
-
-[tool.uv.sources]
-bologna-civic-dt = { workspace = true }
-rural-digital-twin = { workspace = true }

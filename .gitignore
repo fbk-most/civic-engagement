@@ -9,26 +9,8 @@ wheels/
 # Virtual environments
 .venv
 
-# osmnx overpass cache
-cache/
-
-# Runtime session state (not the baseline fixture, which is committed) — one
-# per site, see civic_engagement/config.py's SiteConfig.session_json_path.
-data/*/session.json
-# Sessions set aside when a scenario replaces them (store/state.py's replace).
-data/*/session.*.json
-
-# Raw LiDAR/orthophoto inputs for build_baseline.py, one per-site directory
-# under data/ (see civic_engagement/ingestion/lidar.py and ortofoto.py). Re-derived
-# height/roof-shape data lands in the committed baseline JSON; these source
-# rasters are too large and too easily re-fetched to be worth committing.
-data/*/lidar/
-data/*/ortofoto/
-
 # Frontend
 node_modules/
-frontend/node_modules/
-frontend/dist/
 
 # The toy pack's session, written by the tests (tests/toy_pack).
 tests/toy_pack/data/session*.json

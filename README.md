@@ -1,104 +1,80 @@
-# Civic Digital Twin (CDT) — PoC
+# civic-engagement — the core of the Civic Digital Twin (CDT)
 
-A proof-of-concept tool for citizen co-design workshops on urban space transformation
-with nature-based solutions. It reimplements a paper-based method — citizens place
-intervention cards (add trees, change ground cover, add water features, ...) on a
-printed map — as a 3D digital twin: a facilitator places the same interventions on a
-live 3D view of a real site, and the scene plus a set of indicators (CO2, thermal
-comfort, accessibility, cost, space use) update immediately.
+A proof-of-concept tool for citizen co-design workshops. It reimplements a
+paper-based method — citizens place intervention cards (add trees, change
+ground cover, plant a forest, ...) on a printed map — as a digital twin: a
+facilitator places the same interventions on a live 2D map and 3D view of a
+real site, and the scene and a set of indicators update immediately, over
+the years of a scenario.
 
-See `packs/bologna-civic-dt/bologna_civic_dt/sites.py` for the available pilot sites (Piazza Dante, Utopia
-— an imaginary city, built on the data of Piazza Dante in Trento — and Piazza
-XX Settembre, Bologna) and how the active one is selected. The app
-supports one active site per process — switch sites by relaunching with
-`CIVIC_ENGAGEMENT_SITE=<site_id>` (defaults to `piazza_dante`), not live in-session.
+This repository is the **core**: what every domain shares. Each domain is a
+**pack** in its own repository, and **is the app**:
+
+| Repository | Domain |
+| --- | --- |
+| `civic-engagement` (this one) | the core |
+| `bologna-civic-dt` | urban squares: Piazza Dante (Utopia, an imaginary city built on Trento's data) and Piazza XX Settembre (Bologna) |
+| `rural-digital-twin` | a mountain valley's forest: Bocenago (Trentino) |
 
 ## Structure: core and domain packs
 
-The code is split into a **core** and **domain packs**, which will move to
-separate repositories:
-
 | | Backend (Python) | Frontend (TypeScript) |
 | --- | --- | --- |
-| Core, `civic-engagement` | `civic_engagement/` | `frontend/` |
-| Urban pack, `bologna-civic-dt` | `packs/bologna-civic-dt/bologna_civic_dt/` | `packs/bologna-civic-dt/frontend/` |
-| Rural pack, `rural-digital-twin` | `packs/rural-digital-twin/rural_digital_twin/` | `packs/rural-digital-twin/frontend/` |
+| The core | `civic_engagement/` | `frontend/` |
 
-The core holds what every domain shares: the API, sessions and scenarios,
-scene assembly and caching, indicators as descriptors, the 2D map and the
-3D view. A pack holds its domain — sites, cards, model, indicators,
-ingestion — and **is the app**: it builds the API with the core's
-`create_app(pack)` (`civic_engagement/app.py`) and the interface with its
-`startApp(pack)` (`frontend/src/index.ts`). The core never imports a pack
-(`tests/test_package_boundaries.py` checks it), nor do the packs import
-each other.
+The core holds the API, sessions and scenarios, scene assembly and caching,
+indicators as descriptors, the terrain, the 2D map and the 3D view. A pack
+holds its domain — sites, cards, model, indicators, ingestion, data — and
+builds its app on the core: the API with `create_app(pack)`
+(`civic_engagement/app.py`, the pack implementing `DomainPack`,
+`civic_engagement/domain.py`) and the interface with `startApp(pack)`
+(`frontend/src/index.ts`, the pack implementing `FrontendPack`,
+`frontend/src/pack.ts`). The core never imports a pack
+(`tests/test_package_boundaries.py` checks it).
 
-The **rural pack** is a first skeleton: one site, Bocenago (a municipality
-in the Rendena valley, Trentino, with its boundary from OpenStreetMap), two
-cards (planting, felling) and a stub model whose indicators are the forest's
-area and the areas planted and felled. The land covers come from
-OpenStreetMap, the forest as stands with placeholder attributes (species by
-altitude, see `stands.py`); the browser grows the stands' trees, and draws
-fewer of them from afar. Its terrain comes from PAT's LiDAR DTM, downloaded by
-hand (see `data/bocenago/lidar/SOURCE.txt`, not in the repository); the
-terrain grid built from it is.
+A pack depends on a specific commit of the core, for both sides:
 
-```bash
-uv run python -m rural_digital_twin.ingestion.build_baseline   # boundary and baseline, from OpenStreetMap
-uv run python -m rural_digital_twin.ingestion.build_terrain    # terrain grid, every 5 m, from data/bocenago/lidar/dtm.asc.gz
-uv run uvicorn rural_digital_twin.main:app --reload --port 8001
-npm run dev:rural   # http://localhost:5174; or npm run build:rural && npm run preview:rural (:4174)
+```toml
+# pyproject.toml
+[tool.uv.sources]
+civic-engagement = { git = "https://github.com/fbk-most/civic-engagement", rev = "<commit>" }
 ```
 
+```jsonc
+// frontend/package.json
+"civic-engagement": "git+https://github.com/fbk-most/civic-engagement.git#<commit>"
+```
+
+The npm package is this repository's root `package.json`: the TypeScript
+sources (`frontend/src`, compiled by the pack's app) and the static files
+(`frontend/public`, served by it). Each pack has a script to move the pin,
+or to point it at a local checkout of the core while developing both (see
+its README).
+
 A feature often starts in one domain and moves to the core once a second
-domain needs it: the felt-temperature field and the 3D life (people, dogs,
-traffic) are urban for now, and a pack without them turns them off
-(`FrontendPack.features`). The 3D models and textures are all still under
-`frontend/public/`, which both apps serve; how they split between the core
-and the packs is to be decided when a domain needs its own.
+domain needs it, or the other way round: the felt-temperature field and the
+3D life (people, dogs, traffic) are in the core but only the urban pack uses
+them; a pack without them turns them off (`FrontendPack.features`).
 
 ## Status
 
-Early PoC, in active development. Milestone build order and design rationale live in
-the project's planning notes.
+Early PoC, in active development. What's still to do is in `TODO.md`, and
+in each pack's.
 
 ## Backend
 
 Python 3.12, managed with [uv](https://docs.astral.sh/uv/).
 
 ```bash
-# One-off: fetch OSM data for the active site and build the baseline fixture
-# (CIVIC_ENGAGEMENT_SITE selects the site; defaults to piazza_dante)
-uv run python -m bologna_civic_dt.ingestion.build_baseline
-
-# Run the API
-uv run uvicorn bologna_civic_dt.main:app --reload
-# Or, for the other site:
-CIVIC_ENGAGEMENT_SITE=piazza_xx_settembre uv run uvicorn bologna_civic_dt.main:app --reload
-
-# Start from a saved scenario instead of the last session (see below)
-CIVIC_ENGAGEMENT_SCENARIO=demo uv run uvicorn bologna_civic_dt.main:app
-
-# Tests: the core's (on a toy pack, tests/toy_pack), then each pack's
-uv run pytest
-uv run pytest packs/bologna-civic-dt/tests
-uv run pytest packs/rural-digital-twin/tests
+uv sync
+uv run pytest      # on a toy pack (tests/toy_pack): the core alone
 ```
 
-A site can have **terrain**: a height grid built from its LiDAR DTM
-(`civic_engagement/ingestion/terrain.py`), in `data/<site>/terrain/terrain_grid.json`.
-The 3D view then lays the ground covers, paths, buildings, trees, furniture,
-people, cars and the felt-temperature sheet on it, and the camera and walk
-mode follow it; a site without the file is flat (Piazza XX Settembre, for
-now). `?terrain=off` shows a site flat, for comparison. Piazza Dante's comes
-from the 2014 LiDAR DTM:
-
-```bash
-uv run python -m bologna_civic_dt.ingestion.build_terrain --dtm data/piazza_dante/lidar/dtm_2014.asc
-```
-
-The models behind the indicators and the felt temperature still take the
-ground as flat: the terrain only changes what the 3D view shows.
+The core runs only as part of a pack's app, one site per process: the pack
+lists its sites, and `CIVIC_ENGAGEMENT_SITE=<site_id>` chooses one when the
+backend starts (the pack's default otherwise). Each site's files live under
+`data/<site>/`, relative to where the backend runs: the baseline, the
+session, the scenarios, the terrain grid.
 
 The workshop's cards (the session) live in the backend, shared by every open
 window, and are mirrored to `data/<site>/session.json`. A set of cards can be
@@ -112,29 +88,15 @@ replaces is kept as `data/<site>/session.<timestamp>.json`.
 every start, `--reload` restarts included, so leave it out once a workshop
 is under way.
 
-The model — tree growth, and the indicators computed over the 30-year
-horizon — is a [civic-digital-twins](https://github.com/fbk-most/civic-digital-twins)
-model (a dependency installed by uv), in `packs/bologna-civic-dt/bologna_civic_dt/`. The
-backend evaluates it once per set of interventions, for every year at once,
-and serves the scene and the indicators for the year asked.
+The pack's model is evaluated once per set of interventions, for every year
+of the horizon at once; the backend serves the scene and the indicators for
+the year asked.
 
-Felt temperature is a second model (`packs/bologna-civic-dt/bologna_civic_dt/thermal_field.py`):
-a 1 m grid over the site, hour by hour through one day, from the shade of
-buildings, trees and pergolas (real sun position for the date), the ground's
-surface and a typical day's air temperature for Trento, warming over the
-years by a climate assumption (a summer like 2022 becomes the usual one in
-ten years, see `CLIMATE_WARMING_C`). It is evaluated on
-demand — `GET /api/thermal-field?t=&month=&day=` — and its values at a
-reference moment (21 June, 11:00) are the thermal indicators. A cheap,
-uncalibrated proxy: see `parameters.py`.
-
-The urban pack's `tests/test_reference.py` checks that what the backend
-serves is unchanged against outputs recorded in its `tests/fixtures/reference/`,
-for both sites. It
-is temporary: it guards the restructuring of the model and goes once that is
-over. When a change is meant to alter the numbers, re-record the reference
-with `CIVIC_ENGAGEMENT_SITE=<site_id> uv run python packs/bologna-civic-dt/tests/reference/capture.py`
-(once per site) and review the differences before committing.
+A site can have **terrain**: a height grid built from a LiDAR DTM
+(`civic_engagement/ingestion/terrain.py`), in `data/<site>/terrain/terrain_grid.json`,
+served as a site asset (`/api/site-assets`). The 3D view then lays
+everything on it, and the camera and walk mode follow it; a site without
+the file is flat. `?terrain=off` shows a site flat, for comparison.
 
 ## Frontend
 
@@ -142,27 +104,18 @@ Vite + React + TypeScript. MapLibre GL JS for the plan view, three.js for the
 realistic view.
 
 ```bash
-npm install     # once, at the repository root: npm workspaces for the core
-                # (frontend/) and the apps (packs/*/frontend/)
-npm run dev     # the urban app on http://localhost:5173, proxies /api to the backend on :8000
-npm run typecheck && npm run lint   # every workspace
+npm install
+npm run typecheck && npm run lint
+npm run dev     # the tree lab only, http://localhost:5173/tree-lab.html: the apps are the packs'
 ```
 
-The core's own dev server (`cd frontend && npm run dev`) serves only the
-tree lab, `/tree-lab.html`.
-
-For workshops, demos and performance measurements, use the production build
-instead:
-
-```bash
-npm run build && npm run preview   # both apps built; the urban one on http://localhost:4173, same proxy
-```
-
-The development build is much slower in the 3D view: React's development
-mode records every component render for the browser's performance panel,
-diffing their props, and the 3D view's props are large (the scene, the
-felt-temperature fields). A date change measured about 2.5 s in development,
-almost all of it that bookkeeping.
+For workshops, demos and performance measurements, use a pack's production
+build (`npm run build && npm run preview` in its `frontend/`), not its
+development server: the development build is much slower in the 3D view.
+React's development mode records every component render for the browser's
+performance panel, diffing their props, and the 3D view's props are large
+(the scene, the felt-temperature fields): a date change measured about
+2.5 s in development, almost all of it that bookkeeping.
 
 ### Realistic 3D view
 
@@ -189,22 +142,27 @@ Building geometry sits behind a `BuildingGeometryProvider` interface
 LiDAR-derived LOD2 solids or streamed photogrammetry tiles can replace that one
 implementation without touching ground, paths, vegetation or lighting.
 
+A forest — trees by the hundred thousand — comes from a pack's tree source
+(`FrontendPack.scene3d.treeSource`, `frontend/src/three/builders/forest.ts`),
+drawn in tiles, with shadows near the camera.
+
 All 3D assets are CC0 and vendored under `frontend/public/assets/3d/` (see the
 `CREDITS.md` there), so the tool needs no network at workshop time. The scripts
-that regenerate them live in `scripts/`.
+that regenerate them live in `scripts/` and `frontend/scripts/`.
 
 ### URL parameters
 
 The frontend reads a few optional parameters from its URL (see
 `frontend/src/debugParams.ts`), e.g.
 `http://localhost:5173/?viewer=1&month=6&day=21&hour=22.5&life=still&perf=1`.
-"Copia URL vista" in the 3D view builds such a link for the current view.
+"Copia URL vista" in the 3D view builds such a link for the current view. A
+pack may read its own: see its README.
 
 | Parameter | Values | Effect |
 | --- | --- | --- |
 | `lang` | `it`, `en` | Interface language (default: the last one chosen with the IT/EN switch, else English). |
 | `viewer` | `1` | Open on the 3D view. |
-| `t` | years, `0`–`30` | Scenario year (as the "Anno" slider). |
+| `t` | years | Scenario year (as the "Anno" slider). |
 | `month`, `day`, `hour` | e.g. `6`, `21`, `22.5` | Date and time for the sun; all three are needed. |
 | `lng`, `lat`, `eyeHeight`, `bearing`, `pitch` | degrees / metres | A placed viewpoint (all five needed); opens the 3D view there. |
 | `fov` | degrees | Field of view for that viewpoint (optional). |
@@ -220,25 +178,13 @@ The frontend reads a few optional parameters from its URL (see
 | `terrainScale` | e.g. `3` | Testing only: the terrain's heights multiplied by this, to see it on gentle ground. |
 | `treeFar` | metres | Testing only: beyond this distance from the camera, a forest's trees are thinned out to a tenth, with wider crowns (default: never). |
 | `treeShadows` | metres, or `off` | Testing only: how far from the camera a forest's trees cast shadows (default `1200`); `off`, nowhere. |
-| `depth` | `reversed`, `log` | Testing only: the depth buffer, whatever the pack's choice (rural: reversed, urban: logarithmic). Reversed needs the browser's `EXT_clip_control` (the console says which one is used) and breaks the urban pond's reflection. |
-| `treeShare` | `0`–`1` | Rural pack, testing only: the share of the stands' trees drawn (default `1`, about 340,000 trees in Bocenago). |
+| `depth` | `reversed`, `log` | Testing only: the depth buffer, whatever the pack's choice (`scene3d.reversedDepth`). Reversed needs the browser's `EXT_clip_control` (the console says which one is used) and breaks the reflection of water (three's `Water.js`). |
 
 The active site is not a URL parameter: it's chosen when starting the backend
 (`CIVIC_ENGAGEMENT_SITE`, see above).
 
-## Licence and data sources
+## Licence
 
 The code is released under the [Apache License 2.0](LICENSE). The vendored
-3D assets are CC0; see `frontend/public/assets/3d/CREDITS.md`.
-
-The site baselines (`data/*/baseline.json`) are derived from third-party
-data:
-
-- **OpenStreetMap**: buildings, streets, paths, trees, street furniture and
-  ground covers for both urban sites, and Bocenago's municipal boundary
-  (`data/bocenago/`). © OpenStreetMap contributors, available
-  under the [Open Database License](https://www.openstreetmap.org/copyright).
-- **Provincia autonoma di Trento**: the terrain, building heights and roof
-  shapes for Piazza Dante from the 2014 LiDAR survey, and roof colours from the 2015
-  orthophoto. The source rasters are not in the repository (see
-  `civic_engagement/ingestion/lidar.py` and `ortofoto.py`).
+3D assets are CC0; see `frontend/public/assets/3d/CREDITS.md`. The sites'
+data, and its sources, are the packs'.

@@ -1,20 +1,47 @@
 {
-  "name": "civic-engagement-workspace",
+  "name": "civic-engagement",
   "private": true,
-  "workspaces": [
-    "frontend",
-    "packs/bologna-civic-dt/frontend",
-    "packs/rural-digital-twin/frontend"
+  "version": "0.1.0",
+  "type": "module",
+  "description": "The core of the civic co-design demonstrator's frontend; each domain pack's app is built on it (startApp). Installed from its git repository, as TypeScript sources: the packs' apps compile it",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./frontend/src/index.ts"
+  },
+  "files": [
+    "frontend/src",
+    "frontend/public"
   ],
   "scripts": {
-    "dev": "npm run dev -w bologna-civic-dt",
-    "build": "npm run build -w bologna-civic-dt && npm run build -w rural-digital-twin",
-    "preview": "npm run preview -w bologna-civic-dt",
-    "lint": "npm run lint --workspaces",
-    "typecheck": "npm run typecheck --workspaces",
-    "dev:rural": "npm run dev -w rural-digital-twin",
-    "build:urban": "npm run build -w bologna-civic-dt",
-    "build:rural": "npm run build -w rural-digital-twin",
-    "preview:rural": "npm run preview -w rural-digital-twin"
+    "dev": "vite frontend",
+    "lint": "oxlint -c frontend/.oxlintrc.json frontend",
+    "typecheck": "tsc -p frontend/tsconfig.app.json --noEmit"
+  },
+  "dependencies": {
+    "@types/geojson": "^7946.0.16",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@types/three": "^0.185.1",
+    "maplibre-gl": "^6.0.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "suncalc": "^2.0.1",
+    "terra-draw": "^1.32.1",
+    "terra-draw-maplibre-gl-adapter": "^1.4.1",
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@gltf-transform/core": "^4.5.0",
+    "@gltf-transform/extensions": "^4.5.0",
+    "@gltf-transform/functions": "^4.5.0",
+    "@types/node": "^24.13.2",
+    "@vitejs/plugin-react": "^6.0.3",
+    "jpeg-js": "^0.4.4",
+    "meshoptimizer": "^1.3.0",
+    "oxlint": "^1.71.0",
+    "pngjs": "^7.0.0",
+    "puppeteer-core": "^25.10.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.1.1"
   }
 }

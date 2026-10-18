@@ -24,7 +24,7 @@ const CROSSING_SNAP_M = 8;
 const CROSSING_OVERRUN_M = 1.5;
 const MIN_COMPONENT_M = 100;
 // Same radius the safety indicator counts as lit
-// (packs/bologna-civic-dt/bologna_civic_dt/parameters.py).
+// (bologna-civic-dt's bologna_civic_dt/parameters.py).
 const LIT_RADIUS_M = 12;
 // A path end this close to (or beyond) the site boundary is where people
 // come in from, and leave to, the rest of the city.

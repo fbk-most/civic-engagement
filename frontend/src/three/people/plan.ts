@@ -76,7 +76,7 @@ const COMFORT_SELECTIVITY = 3;
 
 const PATH_SPOT_SPACING_M = 6;
 // At night people only linger where it's lit — the same radius the safety
-// indicator counts as illuminated (packs/bologna-civic-dt/bologna_civic_dt/parameters.py).
+// indicator counts as illuminated (bologna-civic-dt's bologna_civic_dt/parameters.py).
 const LIT_RADIUS_M = 12;
 
 // Bench seat slots, along the bench (see buildBenchGeometry: 1.8 m long).

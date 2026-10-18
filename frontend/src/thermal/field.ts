@@ -2,7 +2,7 @@
  * hour (blending the two hourly layers around it), coloured on one scale
  * shared by the 2D map and the 3D view.
  *
- * The backend computes it (packs/bologna-civic-dt/bologna_civic_dt/thermal_field.py): felt
+ * The backend computes it (bologna-civic-dt's bologna_civic_dt/thermal_field.py): felt
  * temperature 1.1 m above the ground, per 1 m cell, for each hour of one
  * day. Like the 3D view, it is an indication, not a measurement.
  */

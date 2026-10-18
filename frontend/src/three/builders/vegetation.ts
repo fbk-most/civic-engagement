@@ -28,7 +28,7 @@ import { buildTreesInWorkers, treeJobKey } from "../workers/treeWorkerPool";
  * crown genuinely starts a third of the way up; real conical/columnar
  * evergreens (pine, cypress) branch almost to the ground and use a much
  * smaller fraction below. The felt-temperature field puts crown bases at
- * the same heights (packs/bologna-civic-dt/bologna_civic_dt/parameters.py): keep them equal. */
+ * the same heights (bologna-civic-dt's bologna_civic_dt/parameters.py): keep them equal. */
 const CROWN_BASE_FRACTION = 0.3;
 const CROWN_BASE_FRACTION_EVERGREEN = 0.08;
 const MIN_TRUNK_RADIUS_M = 0.06;

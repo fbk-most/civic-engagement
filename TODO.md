@@ -3,27 +3,23 @@
 Ideas and improvements discussed but not (yet) implemented, grouped by area.
 Items marked *waiting* depend on something outside the code (feedback, data).
 
-This is the core's list. Each domain pack keeps its own:
-`packs/bologna-civic-dt/TODO.md` (urban) and `packs/rural-digital-twin/TODO.md`
-(rural).
+This is the core's list. Each domain pack keeps its own, in its repository
+(`bologna-civic-dt`, `rural-digital-twin`).
 
-## Package split (next)
+## After the package split
 
-The core and the two packs move to separate repositories (see the README).
-Still to decide or do:
-
-- **Data** moves into the packs (`data/<site>/`); the tests already have
-  (`packs/<pack>/tests/`; the core's run on a toy pack, `tests/toy_pack/`).
-- **The 3D assets** (`frontend/public/`): which are the core's and which a
-  pack's.
-- **How the core is distributed** to the packs (Python package, npm
-  package).
-- **The README**: one per repository.
-- **The packs' docs** refer to files by their path in this repository
-  (`packs/bologna-civic-dt/docs/model.md` above all): update them.
+- **Access for the packs' users**: the packs install the core from its
+  GitHub repository, pinned to a commit; whoever installs a pack needs read
+  access to the core (or the core public).
+- **Releases**: once the core settles, versioned releases (tags, or a
+  registry) rather than commit pins.
 - **Features urban-in-core**: the felt-temperature field and the 3D life
-  (people, dogs, traffic) live in the core's code but only the urban pack
-  uses them (`FrontendPack.features`); decide where they go.
+  (people, dogs, traffic) live in the core's code, with their 3D assets,
+  but only the urban pack uses them (`FrontendPack.features`); decide
+  whether they move to the pack (which would need a way for a pack to bring
+  3D life into the core's viewer).
+- **The map's opening centre** (`frontend/src/map/mapSetup.ts`) is Piazza
+  Dante's: take it from the site.
 
 ## Interface
 
@@ -45,7 +41,7 @@ Still to decide or do:
 ## Forest rendering
 
 The forest the rural pack grows (`frontend/src/three/builders/forest.ts`;
-see `packs/rural-digital-twin/docs/plan-terrain-forest-rendering.md`).
+see `docs/plan-terrain-forest-rendering.md` in `rural-digital-twin`).
 
 - **Near detail**: the procedural trees (as the urban ones) within about
   90 m of the camera, built on demand in the worker pool within a budget,
