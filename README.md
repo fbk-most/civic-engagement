@@ -12,9 +12,9 @@ This repository is the **core**: what every domain shares. Each domain is a
 
 | Repository | Domain |
 | --- | --- |
-| `civic-engagement` (this one) | the core |
-| `bologna-civic-dt` | urban squares: Piazza Dante (Utopia, an imaginary city built on Trento's data) and Piazza XX Settembre (Bologna) |
-| `rural-digital-twin` | a mountain valley's forest: Bocenago (Trentino) |
+| [civic-engagement](https://github.com/fbk-most/civic-engagement) (this one) | the core |
+| [bologna-civic-dt](https://github.com/Gemello-Digitale-Bologna/bologna-civic-dt) | urban squares: Piazza Dante (Utopia, an imaginary city built on Trento's data) and Piazza XX Settembre (Bologna) |
+| [rural-digital-twin](https://github.com/fbk-most/rural-digital-twin) (private, for now) | a mountain valley's forest: Bocenago (Trentino) |
 
 ## Structure: core and domain packs
 

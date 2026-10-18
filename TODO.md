@@ -8,9 +8,6 @@ This is the core's list. Each domain pack keeps its own, in its repository
 
 ## After the package split
 
-- **Access for the packs' users**: the packs install the core from its
-  GitHub repository, pinned to a commit; whoever installs a pack needs read
-  access to the core (or the core public).
 - **Releases**: once the core settles, versioned releases (tags, or a
   registry) rather than commit pins.
 - **Features urban-in-core**: the felt-temperature field and the 3D life
