@@ -1,27 +1,27 @@
 import * as THREE from "three";
-import type { MaterialLibrary } from "../materials";
 import type { Terrain } from "../terrain";
 
 /** Grid cells per side of one mesh: the surface comes in tiles, so that
  * the renderer can leave out the ones out of view. */
 const TILE_CELLS = 64;
 
-/** Below the ground's real height (`Terrain.heightAt`), which is where the
- * covers and paths lie: they win over the bare ground they're on without
- * relying on depth offsets alone. Unnoticeable, since nothing stands on
- * the bare surface itself but at `heightAt`. */
-const SURFACE_DROP_M = 0.05;
+/** With the covers laid on it as meshes, the bare ground goes this far below
+ * its real height (`Terrain.heightAt`), which is where the covers and paths
+ * lie: they win over it without relying on depth offsets alone.
+ * Unnoticeable, since nothing stands on the bare surface itself. With the
+ * covers painted on it, it's the ground itself, at its real height. */
+export const SURFACE_DROP_M = 0.05;
 
-/** The bare ground of a site with terrain: the grid's own triangles (see
- * three/terrain.ts), split in tiles. Covers are drawn over it, where there
- * are any. Nothing on a flat site — the covers are the ground. */
-export function buildTerrainSurface(terrain: Terrain, materials: MaterialLibrary): THREE.Group {
+/** The ground of a site with terrain: the grid's own triangles (see
+ * three/terrain.ts), split in tiles, in `material` — the bare ground, with
+ * the covers drawn over it as meshes, or the covers painted on it (see
+ * coverPaint.ts). Nothing on a flat site — the covers are the ground. */
+export function buildTerrainSurface(terrain: Terrain, material: THREE.Material, drop = SURFACE_DROP_M): THREE.Group {
   const group = new THREE.Group();
   group.name = "terrain";
   const grid = terrain.grid;
   if (!grid) return group;
 
-  const material = materials.terrain();
   for (let row0 = 0; row0 < grid.rows - 1; row0 += TILE_CELLS) {
     for (let col0 = 0; col0 < grid.cols - 1; col0 += TILE_CELLS) {
       const cols = Math.min(TILE_CELLS, grid.cols - 1 - col0) + 1;
@@ -34,7 +34,7 @@ export function buildTerrainSurface(terrain: Terrain, materials: MaterialLibrary
           const i = r * cols + c;
           const x = grid.x0 + (col0 + c) * grid.cellM;
           const z = grid.z0 + (row0 + r) * grid.cellM;
-          positions.set([x, grid.heights[(row0 + r) * grid.cols + col0 + c] - SURFACE_DROP_M, z], i * 3);
+          positions.set([x, grid.heights[(row0 + r) * grid.cols + col0 + c] - drop, z], i * 3);
           normals.set(terrain.normalAt(x, z), i * 3);
           // In metres, as the covers' (see shapes.ts).
           uvs.set([x, -z], i * 2);

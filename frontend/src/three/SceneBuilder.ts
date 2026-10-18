@@ -21,6 +21,7 @@ import { buildPaths } from "./builders/paths";
 import { buildVegetation } from "./builders/vegetation";
 import { buildWater } from "./builders/water";
 import { buildTerrainSurface } from "./builders/terrainSurface";
+import { paintCovers } from "./builders/coverPaint";
 import { ACTIVE_PROVIDER } from "./builders/buildings";
 import { anchorFromPolygon, localBounds, polygonRings, toLocal, type GeoAnchor } from "./geo";
 import { MaterialLibrary } from "./materials";
@@ -107,8 +108,32 @@ export async function buildScene(
   group.name = "civic-scene";
 
   const { scene3d } = activePack();
-  if (!terrain.flat) group.add(buildTerrainSurface(terrain, materials));
-  group.add(buildGround(covers, anchor, materials, terrain));
+  const parts: ScenePart[] = [];
+  // On terrain, the covers are painted on it if the pack says so (where
+  // there's a canvas to paint them on), laid on it as meshes otherwise.
+  const paint =
+    terrain.grid && scene3d.paintCovers
+      ? paintCovers(
+          covers,
+          anchor,
+          terrain.grid,
+          (type) => (scene3d.coverSurfaces[type] ? materials.averageColor(scene3d.coverSurfaces[type]) : null),
+          materials.averageColor(scene3d.terrainSurface ?? { color: 0x7d8a5c, roughness: 1 })
+        )
+      : null;
+  if (paint) {
+    const material = materials.paintedTerrain(paint);
+    parts.push({
+      object: buildTerrainSurface(terrain, material, 0),
+      dispose: () => {
+        material.dispose();
+        paint.texture.dispose();
+      },
+    });
+  } else {
+    if (!terrain.flat) group.add(buildTerrainSurface(terrain, materials.terrain()));
+    group.add(buildGround(covers, anchor, materials, terrain));
+  }
   // `buildPaths` is generic on `properties.width`/`properties.material`:
   // whatever the pack draws as ribbons (for the urban one, streets,
   // crossing stripes and lane dividers as well as paths) renders through
@@ -119,7 +144,6 @@ export async function buildScene(
   const vegetation = await buildVegetation(elements, anchor, materials, terrain);
   group.add(vegetation.group);
 
-  const parts: ScenePart[] = [];
   for (const build of scene3d.parts) parts.push(await build({ elements, covers, anchor, materials, terrain }));
   parts.push(buildWater(covers, anchor, terrain));
   for (const part of parts) group.add(part.object);

@@ -18,6 +18,7 @@ import { facadeEmissiveTexture, facadeNormalTexture, facadePatternTexture, facad
 import { hashString } from "./hash";
 import { daylightFraction } from "./sun";
 import { activePack } from "../pack";
+import type { CoverPaint } from "./builders/coverPaint";
 
 export interface Surface {
   color: number;
@@ -29,6 +30,38 @@ export interface Surface {
   /** A path material painted on top of another ribbon (road markings): drawn
    * in front of it, lifted a little and not widened (see builders/paths.ts). */
   painted?: boolean;
+}
+
+const meanColors = new WeakMap<THREE.Texture, THREE.Color>();
+
+/** The mean (linear) colour of a colour texture's image, measured once on
+ * a small copy of it; mid grey if it can't be read (no texture, no
+ * canvas). */
+function meanColor(texture: THREE.Texture | null | undefined): THREE.Color {
+  const known = texture ? meanColors.get(texture) : undefined;
+  if (known) return known;
+  const image = texture?.image as CanvasImageSource | undefined;
+  const canvas = typeof document !== "undefined" ? document.createElement("canvas") : null;
+  const ctx = canvas?.getContext("2d", { willReadFrequently: true });
+  if (!texture || !image || !canvas || !ctx) return new THREE.Color(0.5, 0.5, 0.5);
+  canvas.width = canvas.height = 32;
+  ctx.drawImage(image, 0, 0, 32, 32);
+  const data = ctx.getImageData(0, 0, 32, 32).data;
+  const linear = (c: number) => {
+    const v = c / 255;
+    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  const sum = [0, 0, 0];
+  for (let i = 0; i < data.length; i += 4) for (let k = 0; k < 3; k++) sum[k] += linear(data[i + k]);
+  const n = data.length / 4;
+  const color = new THREE.Color(sum[0] / n, sum[1] / n, sum[2] / n);
+  meanColors.set(texture, color);
+  return color;
+}
+
+/** Linear luminance (Rec. 709). */
+function luminance(color: THREE.Color): number {
+  return Math.max(0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b, 1e-3);
 }
 
 /** Whether a path material is painted on another ribbon (`Surface.painted`). */
@@ -192,6 +225,62 @@ export class MaterialLibrary {
       material.polygonOffsetUnits = 3;
       return material;
     });
+  }
+
+  /** How a surface looks on average, from afar: its colour times its
+   * texture's mean colour — the colour a cover is painted with (see
+   * builders/coverPaint.ts), so that it reads as its mesh did. */
+  averageColor(surface: Surface): THREE.Color {
+    const map = surface.texture ? this.ground.get(surface.texture)?.map : undefined;
+    const color = new THREE.Color(surface.color);
+    return map ? color.multiply(meanColor(map)) : color;
+  }
+
+  /** The terrain with the covers painted on it (see builders/coverPaint.ts):
+   * the colour from the covers' texture, the grain from the ground detail
+   * texture's brightness (at its real scale), its relief and roughness as
+   * the bare ground's. A material of its own, for one scene: the caller
+   * disposes of it. */
+  paintedTerrain(paint: CoverPaint): THREE.MeshStandardMaterial {
+    const surface = activePack().scene3d.terrainSurface ?? DEFAULT_TERRAIN;
+    const material = this.surfaceMaterial({ ...surface, color: 0xffffff });
+    material.side = THREE.DoubleSide;
+    material.polygonOffset = true;
+    material.polygonOffsetFactor = 3;
+    material.polygonOffsetUnits = 3;
+    const uniforms = {
+      coverMap: { value: paint.texture },
+      coverOrigin: { value: new THREE.Vector2(...paint.origin) },
+      coverSize: { value: new THREE.Vector2(...paint.size) },
+      // The detail texture's mean brightness: grain only, not its colour.
+      detailMean: { value: luminance(meanColor(material.map)) },
+    };
+    const previous = material.onBeforeCompile.bind(material);
+    const previousKey = material.customProgramCacheKey.bind(material);
+    material.onBeforeCompile = (shader, renderer) => {
+      previous(shader, renderer);
+      Object.assign(shader.uniforms, uniforms);
+      shader.vertexShader = shader.vertexShader
+        .replace("#include <common>", "#include <common>\nuniform vec2 coverOrigin;\nuniform vec2 coverSize;\nvarying vec2 vCoverUv;")
+        .replace(
+          "#include <begin_vertex>",
+          "#include <begin_vertex>\n  vCoverUv = ((modelMatrix * vec4(transformed, 1.0)).xz - coverOrigin) / coverSize;"
+        );
+      shader.fragmentShader = shader.fragmentShader
+        .replace("#include <common>", "#include <common>\nuniform sampler2D coverMap;\nuniform float detailMean;\nvarying vec2 vCoverUv;")
+        .replace(
+          "#include <map_fragment>",
+          [
+            "  float grain = 1.0;",
+            "  #ifdef USE_MAP",
+            "    grain = dot(texture2D(map, vMapUv).rgb, vec3(0.2126, 0.7152, 0.0722)) / detailMean;",
+            "  #endif",
+            "  diffuseColor.rgb *= texture2D(coverMap, vCoverUv).rgb * grain;",
+          ].join("\n")
+        );
+    };
+    material.customProgramCacheKey = () => `${previousKey()}|painted-terrain`;
+    return material;
   }
 
   path(material: string): THREE.MeshStandardMaterial {

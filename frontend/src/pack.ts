@@ -49,6 +49,12 @@ export interface FrontendPack {
     /** The bare ground, on a site with terrain (see three/terrain.ts),
      * where no cover is; a default grass otherwise. */
     terrainSurface?: Surface;
+    /** On a site with terrain, paint the covers onto it (one texture, soft
+     * edges, no triangles of their own) rather than lay them on it as meshes
+     * (sharp edges, as many triangles as the terrain): for large covers, a
+     * valley's forest and meadows; not a square's paving. See
+     * three/builders/coverPaint.ts. */
+    paintCovers?: boolean;
     /** Cover types drawn as animated water rather than flat ground. */
     waterCoverTypes: string[];
     /** The pack's own parts of the scene, built after the core's ground,

@@ -71,6 +71,8 @@ export const ruralPack: FrontendPack = {
     pathSurfaces: {},
     ribbonTypes: [],
     waterCoverTypes: [],
+    // A valley's covers are large: painted on the terrain, not meshes.
+    paintCovers: true,
     parts: [],
     // Mountain meadow, until the stands and the land cover come.
     terrainSurface: { color: 0xa3b77f, roughness: 1, texture: "lawn" },
