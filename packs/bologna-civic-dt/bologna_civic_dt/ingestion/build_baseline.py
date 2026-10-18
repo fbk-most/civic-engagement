@@ -1,9 +1,9 @@
 """One-off script: fetch OSM data for the active site (see sites.py;
-CIVIC_TWIN_SITE selects it) and write its baseline JSON. Re-run whenever the site
+CIVIC_ENGAGEMENT_SITE selects it) and write its baseline JSON. Re-run whenever the site
 or fetch logic changes.
 
     uv run python -m bologna_civic_dt.ingestion.build_baseline
-    CIVIC_TWIN_SITE=piazza_xx_settembre uv run python -m bologna_civic_dt.ingestion.build_baseline
+    CIVIC_ENGAGEMENT_SITE=piazza_xx_settembre uv run python -m bologna_civic_dt.ingestion.build_baseline
 """
 
 import json

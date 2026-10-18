@@ -47,10 +47,11 @@ def _differences(expected, actual, path: str = "") -> list[str]:
 def captured(tmp_path_factory) -> Path:
     out = tmp_path_factory.mktemp("reference")
     for site in SITES:
+        # By path: one site per process (see capture.py), from the
+        # directory the tests run in, which holds data/.
         subprocess.run(
-            [sys.executable, "-m", "tests.reference.capture", "--out", str(out)],
-            cwd=ROOT,
-            env={**os.environ, "CIVIC_TWIN_SITE": site},
+            [sys.executable, str(ROOT / "tests" / "reference" / "capture.py"), "--out", str(out)],
+            env={**os.environ, "CIVIC_ENGAGEMENT_SITE": site},
             check=True,
             capture_output=True,
         )

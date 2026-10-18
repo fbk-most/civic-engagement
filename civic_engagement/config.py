@@ -6,7 +6,7 @@ reads the *active* site off `SITE` rather than importing constants
 directly.
 
 The app supports exactly one active site per process — switching sites
-means relaunching with a different `CIVIC_TWIN_SITE` env var (the pack's
+means relaunching with a different `CIVIC_ENGAGEMENT_SITE` env var (the pack's
 default site if unset), not a live in-app switcher.
 """
 
@@ -83,9 +83,9 @@ def active_site() -> SiteConfig:
     from civic_engagement.domain import active_pack
 
     pack = active_pack()
-    site_id = os.environ.get("CIVIC_TWIN_SITE", pack.default_site)
+    site_id = os.environ.get("CIVIC_ENGAGEMENT_SITE", pack.default_site)
     if site_id not in pack.sites:
-        raise KeyError(f"Unknown CIVIC_TWIN_SITE {site_id!r}; the {pack.id!r} pack has: {', '.join(pack.sites)}")
+        raise KeyError(f"Unknown CIVIC_ENGAGEMENT_SITE {site_id!r}; the {pack.id!r} pack has: {', '.join(pack.sites)}")
     return pack.sites[site_id]
 
 

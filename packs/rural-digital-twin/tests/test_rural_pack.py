@@ -1,5 +1,4 @@
-# The rural pack, called directly: the tests run with the urban pack
-# registered (see conftest.py), and one process has one pack.
+# The rural pack, its model called directly.
 import json
 
 import pytest

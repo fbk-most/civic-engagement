@@ -28,7 +28,7 @@ story, not for deciding.
 1. Start the backend on the preset (the session it replaces is set aside,
    not lost), and the production build (the dev build is much slower):
 
-       CIVIC_TWIN_SCENARIO=demo uv run uvicorn bologna_civic_dt.main:app
+       CIVIC_ENGAGEMENT_SCENARIO=demo uv run uvicorn bologna_civic_dt.main:app
        cd frontend && npm run build && npm run preview
 
    Or, with the backend already running: "Scenarios" → "Demo Piazza Dante"

@@ -3,10 +3,10 @@ the model can be checked against it ("same numbers", see the README). Remove tog
 tests/fixtures/reference/ once that reference is no longer needed.
 
 One site per process, since the active site is fixed at import time
-(`CIVIC_TWIN_SITE`, see civic_engagement/config.py):
+(`CIVIC_ENGAGEMENT_SITE`, see civic_engagement/config.py):
 
-    CIVIC_TWIN_SITE=piazza_dante uv run python -m tests.reference.capture
-    CIVIC_TWIN_SITE=piazza_dante uv run python -m tests.reference.capture --out /tmp/x
+    CIVIC_ENGAGEMENT_SITE=piazza_dante uv run python packs/bologna-civic-dt/tests/reference/capture.py
+    CIVIC_ENGAGEMENT_SITE=piazza_dante uv run python packs/bologna-civic-dt/tests/reference/capture.py --out /tmp/x
 
 Sessions recorded per site:
 - `empty`: no interventions;

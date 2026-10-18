@@ -29,3 +29,6 @@ data/*/ortofoto/
 node_modules/
 frontend/node_modules/
 frontend/dist/
+
+# The toy pack's session, written by the tests (tests/toy_pack).
+tests/toy_pack/data/session*.json

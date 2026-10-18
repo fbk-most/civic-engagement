@@ -12,12 +12,12 @@ This is the core's list. Each domain pack keeps its own:
 The core and the two packs move to separate repositories (see the README).
 Still to decide or do:
 
-- **Data and tests** move into the packs (`data/<site>/`, `tests/`).
+- **Data** moves into the packs (`data/<site>/`); the tests already have
+  (`packs/<pack>/tests/`; the core's run on a toy pack, `tests/toy_pack/`).
 - **The 3D assets** (`frontend/public/`): which are the core's and which a
   pack's.
 - **How the core is distributed** to the packs (Python package, npm
   package).
-- **Environment variables**: possibly renamed (`CIVIC_TWIN_SITE`...).
 - **The README**: one per repository.
 - **The packs' docs** refer to files by their path in this repository
   (`packs/bologna-civic-dt/docs/model.md` above all): update them.

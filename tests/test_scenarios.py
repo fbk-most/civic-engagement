@@ -78,7 +78,7 @@ def test_replace_sets_the_old_session_aside(tmp_path, monkeypatch):
     from civic_engagement.store import state
 
     monkeypatch.setattr(state, "SESSION_JSON_PATH", tmp_path / "session.json")
-    monkeypatch.delenv("CIVIC_TWIN_SCENARIO", raising=False)
+    monkeypatch.delenv("CIVIC_ENGAGEMENT_SCENARIO", raising=False)
     store = state.SessionStore()
     store.replace([_intervention("a")])
     assert not list(tmp_path.glob("session.*.json"))  # nothing to set aside yet

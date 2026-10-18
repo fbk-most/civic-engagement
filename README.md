@@ -11,7 +11,7 @@ See `packs/bologna-civic-dt/bologna_civic_dt/sites.py` for the available pilot s
 — an imaginary city, built on the data of Piazza Dante in Trento — and Piazza
 XX Settembre, Bologna) and how the active one is selected. The app
 supports one active site per process — switch sites by relaunching with
-`CIVIC_TWIN_SITE=<site_id>` (defaults to `piazza_dante`), not live in-session.
+`CIVIC_ENGAGEMENT_SITE=<site_id>` (defaults to `piazza_dante`), not live in-session.
 
 ## Structure: core and domain packs
 
@@ -68,19 +68,21 @@ Python 3.12, managed with [uv](https://docs.astral.sh/uv/).
 
 ```bash
 # One-off: fetch OSM data for the active site and build the baseline fixture
-# (CIVIC_TWIN_SITE selects the site; defaults to piazza_dante)
+# (CIVIC_ENGAGEMENT_SITE selects the site; defaults to piazza_dante)
 uv run python -m bologna_civic_dt.ingestion.build_baseline
 
 # Run the API
 uv run uvicorn bologna_civic_dt.main:app --reload
 # Or, for the other site:
-CIVIC_TWIN_SITE=piazza_xx_settembre uv run uvicorn bologna_civic_dt.main:app --reload
+CIVIC_ENGAGEMENT_SITE=piazza_xx_settembre uv run uvicorn bologna_civic_dt.main:app --reload
 
 # Start from a saved scenario instead of the last session (see below)
-CIVIC_TWIN_SCENARIO=demo uv run uvicorn bologna_civic_dt.main:app
+CIVIC_ENGAGEMENT_SCENARIO=demo uv run uvicorn bologna_civic_dt.main:app
 
-# Tests
+# Tests: the core's (on a toy pack, tests/toy_pack), then each pack's
 uv run pytest
+uv run pytest packs/bologna-civic-dt/tests
+uv run pytest packs/rural-digital-twin/tests
 ```
 
 A site can have **terrain**: a height grid built from its LiDAR DTM
@@ -106,7 +108,7 @@ through the API (`GET /api/scenarios`, `POST /api/scenarios`,
 `POST /api/scenarios/{id}/load`, `DELETE /api/scenarios/{id}`;
 `POST /api/session/clear` starts again with no cards). Whatever a load
 replaces is kept as `data/<site>/session.<timestamp>.json`.
-`CIVIC_TWIN_SCENARIO=<id>` loads a scenario when the backend starts — at
+`CIVIC_ENGAGEMENT_SCENARIO=<id>` loads a scenario when the backend starts — at
 every start, `--reload` restarts included, so leave it out once a workshop
 is under way.
 
@@ -126,11 +128,12 @@ demand — `GET /api/thermal-field?t=&month=&day=` — and its values at a
 reference moment (21 June, 11:00) are the thermal indicators. A cheap,
 uncalibrated proxy: see `parameters.py`.
 
-`tests/test_reference.py` checks that what the backend serves is unchanged
-against outputs recorded in `tests/fixtures/reference/`, for both sites. It
+The urban pack's `tests/test_reference.py` checks that what the backend
+serves is unchanged against outputs recorded in its `tests/fixtures/reference/`,
+for both sites. It
 is temporary: it guards the restructuring of the model and goes once that is
 over. When a change is meant to alter the numbers, re-record the reference
-with `CIVIC_TWIN_SITE=<site_id> uv run python -m tests.reference.capture`
+with `CIVIC_ENGAGEMENT_SITE=<site_id> uv run python packs/bologna-civic-dt/tests/reference/capture.py`
 (once per site) and review the differences before committing.
 
 ## Frontend
@@ -221,7 +224,7 @@ The frontend reads a few optional parameters from its URL (see
 | `treeShare` | `0`–`1` | Rural pack, testing only: the share of the stands' trees drawn (default `1`, about 340,000 trees in Bocenago). |
 
 The active site is not a URL parameter: it's chosen when starting the backend
-(`CIVIC_TWIN_SITE`, see above).
+(`CIVIC_ENGAGEMENT_SITE`, see above).
 
 ## Licence and data sources
 

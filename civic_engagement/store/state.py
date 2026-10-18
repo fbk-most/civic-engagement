@@ -29,10 +29,10 @@ class SessionStore:
         self._boot = uuid.uuid4().hex[:8]
         self._changes = 0
         self._load()
-        # CIVIC_TWIN_SCENARIO=<id>: start from that saved scenario (see
+        # CIVIC_ENGAGEMENT_SCENARIO=<id>: start from that saved scenario (see
         # store/scenarios.py) instead of the last session — at every start,
         # a --reload restart included; the session it replaces is set aside.
-        startup = os.environ.get("CIVIC_TWIN_SCENARIO")
+        startup = os.environ.get("CIVIC_ENGAGEMENT_SCENARIO")
         if startup:
             from civic_engagement.store.scenarios import read_scenario
 
