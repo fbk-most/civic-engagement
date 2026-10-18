@@ -39,10 +39,13 @@ terrain was brought into the core/domain split (branch `feat/core-split`).
 |---|---|---|
 | Area | ~1–4 ha | several km² in view (Bocenago: 8.45 km²); up to 500 km² for the territorial assessment |
 | Ground | flat, or nearly (Piazza Dante has a terrain grid) | terrain with hundreds of metres of relief (Bocenago: 664–2058 m) |
-| Trees | ~160–300, each one generated individually | 10⁵–10⁶, described by stands (Bocenago: ~340,000) |
+| Trees | ~160–300, each one generated individually | 10⁵–10⁶, described by stands (Bocenago: ~233,000) |
 | Camera | orbit over a square, walk at eye level | valley overview, walk on slopes, views across the valley |
 
 ## Where we are (18 October 2026)
+
+Paused here for the package split (the core and the two packs moving to
+separate repositories); the rest resumes after it.
 
 - **Core/domain split** done: the core (`civic_engagement/`, `frontend/`)
   and two domain packs, urban (`packs/bologna-civic-dt/`) and rural
@@ -50,11 +53,15 @@ terrain was brought into the core/domain split (branch `feat/core-split`).
 - **Terrain in the core** (work item 2) and **camera on terrain** (work
   item 4): done.
 - **Rural pack**: the Bocenago site, its terrain, land covers and stands,
-  two cards (planting, felling), a stub model, and a first plain tree
-  generator (work item 3, first half).
-- **Next**: trees with tiles and detail levels (work item 3, second half),
-  then the measurements (work item 6). The 2D hillshade (work item 5) is
-  not started.
+  two cards (planting, felling), a stub model.
+- **Forest** (work item 3): every tree of the stands drawn (~233,000), in
+  192 m tiles with culling, shadows near the camera, a reversed depth
+  buffer: 60 fps in the overview and in the close-ups. Near detail (the
+  procedural trees) is still to do.
+- **Still to do**, after the split: near detail and the rest of work item 3,
+  the 2D hillshade (work item 5), the measurements and the 500 km²
+  assessment (work item 6). The lists are the rural pack's `TODO.md` and,
+  for the forest's rendering (core code), the core's.
 
 ## Decisions
 
@@ -120,6 +127,17 @@ The three time controls are kept apart:
 - **Switchable per site or domain**: tiles and detail levels are off for
   Piazza Dante (except for tests), and "off" means exactly today's code
   path.
+- **Every tree drawn, at every distance.** Thinning the far tiles to a
+  tenth, with wider crowns, was tried and showed too much (in the overview,
+  and on the slopes across the valley); it stays as a test switch
+  (`?treeFar=N`).
+- **Shadows** only from the tiles within 1200 m of the camera
+  (`?treeShadows=N|off`).
+- **A reversed depth buffer**, a pack's choice (`scene3d.reversedDepth`, on
+  for rural): the logarithmic one turns off the GPU's early depth test, so
+  every hidden crown was shaded; reversed, with a float depth buffer, the
+  close-ups went from 45 to 60 fps. Not for urban yet: three's `Water.js`
+  reflection assumes the usual depth.
 - **Tree positions** come from one fixed pattern over the site (a jittered
   lattice, seeded per point), kept where a stand is and by the stand's
   density: they don't depend on a stand's shape, so a felling removes the
@@ -156,8 +174,9 @@ MapLibre, to estimate.
 - **Land covers**: OpenStreetMap, all of them (forest, meadow, grassland,
   scrub, rock, residential), without overlaps.
 - **Stands**: the forest cut by altitude belts (beech up to 1000 m, spruce up
-  to 1600 m, larch above), each with a placeholder species mix, 500 trees
-  per hectare, mature. Seven stands, 678 ha.
+  to 1600 m, larch above), each with a placeholder species mix and density
+  (beech 300, spruce 400, larch 250 trees per hectare), mature. Seven
+  stands, 678 ha.
 - **Later, optional**: PAT forest management plans (compartments with
   species and age); a LiDAR DSM for canopy height (DSM − DTM); a coarse
   DEM backdrop around the site (TINITALY or Copernicus); the village's
@@ -170,16 +189,17 @@ MapLibre, to estimate.
 1. Terrain and vegetation in tiles: no single forest object.
 2. Work split by clock: camera, hour, day and month, year.
 3. Detail levels: near, the procedural trees (`treeStructure.ts`,
-   `foliageCards.ts`, worker pool); middle, instanced low-poly trees; far,
-   impostors or a canopy representation.
+   `foliageCards.ts`, worker pool); beyond, instanced low-poly trees. (A
+   far level with fewer trees was tried and rejected, see "Trees".)
 
-### Tuning knobs, with their first values
+### Tuning knobs, with their values so far
 
 - tile size: **192 m**;
-- detail bands: near 0–90 m, middle 90–350 m, far 350–1500 m;
+- shadows: tiles within **1200 m** cast, farther ones only receive;
 - hysteresis: **15%** around the thresholds;
-- shadows: near and the first middle ring cast, farther bands only receive;
-- build budget: at most 1 heavy tile update per frame (2 when idle).
+- still to set, with near detail: its distance (first guess 90 m) and the
+  build budget (first guess at most 1 heavy tile update per frame, 2 when
+  idle).
 
 ## Work items
 
@@ -198,18 +218,18 @@ MapLibre, to estimate.
 - Known limits: ponds on slopes float; covers draped as meshes on a site
   with terrain cost as many triangles as the terrain under them.
 
-### 3. Forest at valley scale — first half done
+### 3. Forest at valley scale — mostly done
 
-- Done: a plain generator (`packs/rural-digital-twin/frontend/src/trees.ts`)
-  and a plain core renderer (`frontend/src/three/builders/forest.ts`): a
-  trunk and a crown per tree, a few draw calls for the whole forest, seasons
-  by colour, no tiles, no detail levels. Only a share of the trees is drawn
-  (`?treeShare=`, default 0.1: about 34,000).
-- Next (2b): tiles, detail levels, per-tile culling, detail on demand
-  within a budget, as decided above; detail-level counts in the performance
-  readout.
-- Also: the grove guardrails of the first branch (planting only on suitable
-  covers, at least one tree, a cap) move to the rural pack.
+- Done: the generator (`packs/rural-digital-twin/frontend/src/trees.ts`)
+  and the core renderer (`frontend/src/three/builders/forest.ts`): a trunk
+  and a crown per tree, instanced, in 192 m tiles with culling, seasons by
+  colour, shadows within 1200 m. Every tree is drawn (`?treeShare=` draws a
+  share, for testing).
+- To do (the core's `TODO.md`, "Forest rendering"): near detail; reusing
+  the tiles that didn't change across year and card changes (every change
+  rebuilds the whole forest, ~2 s); counts in the performance readout.
+- Also (the rural pack's `TODO.md`): the trees' look; the grove guardrails
+  of the first branch.
 
 ### 4. Camera and navigation on terrain — done
 
@@ -236,8 +256,9 @@ On the Radeon 860M:
 - fps against the number of trees (10⁴, 10⁵, 10⁶).
 
 To do first: make the "Measure" benchmark fit rural (it uses fixed hours,
-and rows for people and traffic, which rural doesn't have), and remove the
-temporary 3-view benchmark (`frontend/src/ui/ViewsBenchmark.tsx`).
+and rows for people and traffic, which rural doesn't have). The temporary
+3-view benchmark used for the references below has been removed; its views
+can be opened by URL (see below).
 
 The 500 km² assessment must say:
 
@@ -253,13 +274,16 @@ Bocenago, Radeon 860M, 1920 × 1081, Chrome, preview build. The frame rate
 is capped at 60 by vsync, so 60 fps means "at least 60". Draw calls and
 triangles include the shadow pass.
 
-The views:
+The views, at eye level (1.65 m, field of view 60°):
 
 - overview: the whole site;
 - valley floor, looking east (lng 10.759621, lat 46.118331, bearing 90,
   pitch 5);
 - mid-slope, looking west (lng 10.775029, lat 46.118542, bearing 270,
   pitch −5).
+
+For instance:
+`?perf=1&month=6&day=21&hour=11&lng=10.759621&lat=46.118331&eyeHeight=1.65&bearing=90&pitch=5&fov=60`.
 
 | Moment | Overview | Valley floor | Mid-slope |
 |---|---|---|---|
@@ -269,11 +293,24 @@ The views:
 | Trees, a tenth (~34,000) | 60 · 342 · 4.02 M | 60 · 269 · 3.46 M | 60 · 236 · 3.29 M |
 | Trees, all (~340,000) | 49 (p95 33 ms) · 342 · 18.2 M | 28.5 (p95 50 ms) · 269 · 17.6 M | 30 (p95 33 ms) · 236 · 17.5 M |
 
-CPU render time stays at 0.6–1.6 ms throughout: the limit is the GPU. With
-all the trees, every view draws nearly the same triangles, because nothing is
-culled yet; the close-ups are the slowest, which points at the screen area
-the crowns cover and at the shadows near the camera. This is the starting
-point for the tiles and detail levels.
+CPU render time stays at 0.6–1.6 ms in these: the limit is the GPU. With
+all the trees, every view draws nearly the same triangles, because nothing
+is culled; the close-ups are the slowest.
+
+Then with tiles and culling (CPU render time 2–10 ms: the tiles' draw
+calls):
+
+| Moment | Overview | Valley floor | Mid-slope |
+|---|---|---|---|
+| ~340,000 trees, a tenth beyond 350 m, shadows within 350 m | 60 · 1021 · 2.97 M | 60 · 719 · 2.56 M | 53 (p95 33 ms) · 538 · 2.75 M |
+| ~340,000 trees, a tenth beyond 800 m | 60 · 1011 · 2.81 M | 59.5 · 856 · 3.24 M | 60 · 724 · 4.36 M |
+| ~340,000 trees, all, shadows from every tile | 60 · 2232 · 13.3 M | 38 (p95 33 ms) · 1803 · 11.2 M | 42 (p95 33 ms) · 1523 · 8.9 M |
+| ~233,000 trees (new densities), shadows within 250 m | 60 · 1283 · 7.85 M | 45 (p95 33 ms) · 878 · 5.88 M | 51 (p95 33 ms) · 610 · 3.78 M |
+| the same, shadows within 1200 m | 60 · 1283 · 7.85 M | 46 (p95 33 ms) · 1144 · 7.27 M | 46 (p95 34 ms) · 1032 · 6.66 M |
+| the same, reversed depth buffer (today's default) | 60 · 1283 · 7.85 M | 60 · 1144 · 7.27 M | 60 · 1032 · 6.66 M |
+
+The shadows barely matter; what did was shading the crowns hidden behind
+the nearest ones, which the logarithmic depth buffer forced (see "Trees").
 
 ## Deliverables
 

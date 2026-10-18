@@ -6,7 +6,7 @@ above all) bring it back, and light makes it usable at night; and the twin shows
 felt-temperature map and in the indicators.
 
 The numbers below come from the model with the demo preset loaded; they're
-placeholders of a cheap model (see `docs/model.md`), good for telling the
+placeholders of a cheap model (see `model.md`, beside this file), good for telling the
 story, not for deciding.
 
 ## The assumptions behind it

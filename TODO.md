@@ -3,6 +3,28 @@
 Ideas and improvements discussed but not (yet) implemented, grouped by area.
 Items marked *waiting* depend on something outside the code (feedback, data).
 
+This is the core's list. Each domain pack keeps its own:
+`packs/bologna-civic-dt/TODO.md` (urban) and `packs/rural-digital-twin/TODO.md`
+(rural).
+
+## Package split (next)
+
+The core and the two packs move to separate repositories (see the README).
+Still to decide or do:
+
+- **Data and tests** move into the packs (`data/<site>/`, `tests/`).
+- **The 3D assets** (`frontend/public/`): which are the core's and which a
+  pack's.
+- **How the core is distributed** to the packs (Python package, npm
+  package).
+- **Environment variables**: possibly renamed (`CIVIC_TWIN_SITE`...).
+- **The README**: one per repository.
+- **The packs' docs** refer to files by their path in this repository
+  (`packs/bologna-civic-dt/docs/model.md` above all): update them.
+- **Features urban-in-core**: the felt-temperature field and the 3D life
+  (people, dogs, traffic) live in the core's code but only the urban pack
+  uses them (`FrontendPack.features`); decide where they go.
+
 ## Interface
 
 - *Waiting for end-user feedback* — **3D mini-map content**: simplify what the
@@ -20,60 +42,37 @@ Items marked *waiting* depend on something outside the code (feedback, data).
   covering the map; the 3D overview ("Torna alla vista d'insieme") uses a
   fixed angle and distance.
 
-## Data and sites
+## Forest rendering
 
-- *Waiting for data* — **Bologna orthophoto** (roof colours), once provided.
-- *Waiting for data* — **Real Bologna site boundary**, replacing the
-  provisional circle.
-- **Crossings in the walkability indicator**: zebra crossings don't count
-  towards accessibility yet.
+The forest the rural pack grows (`frontend/src/three/builders/forest.ts`;
+see `packs/rural-digital-twin/docs/plan-terrain-forest-rendering.md`).
 
-## 3D life: people and dogs
-
-- **Cheaper figures**: the crowd now peaks at 500 people (half standing or
-  sitting, half walking) and 90 cars, and holds above 20 fps by day on the
-  Radeon laptop. If weaker machines struggle: GPU-instanced crowds with
-  animation baked into textures, simplified or flat figures and no shadows
-  beyond ~40 m.
-- **Path groups look repetitive**: with a spot every 6 m along the paths,
-  groups of 2-3 can line up; vary the spacing or cluster them near benches,
-  corners and shade.
-- **People standing alone where it makes sense**: at a crossing, next to a
-  kiosk, a parent near a playground, beside a full bench (single standers
-  along paths were removed as they looked purposeless).
-- **Missing figures**: children (a scaled adult looks wrong), wheelchair users,
-  walking aids; a second dog breed (Quaternius Shiba Inu — the download was
-  blocked by a Google Drive quota).
-- **Sitting poses**: variety (legs crossed, leaning forward, arm on the
-  backrest); hands currently rest palms up.
-- **More movement**: occasional gestures ("Wave"/"Interact" clips), switching
-  between idles, posture changes.
-- **Walkers**: avoiding each other (step aside, slow down) instead of only
-  keeping right; sitting down on a free bench and leaving again.
-- **Reproducible walkers**: a shared link in "Fermi" reproduces the scene, but
-  in "In movimento" walker positions depend on how long the view has been open.
-- *Long term* — **Indicator-driven crowds**: attendance derived from the
-  indicators rather than from time of day and season only.
-
-## 3D life: traffic
-
-- **Junctions**: cars don't negotiate with each other, so cars on crossing
-  streets can briefly pass through each other.
-- **Traffic-light orientation**: phases are assigned by compass axis
-  (north-south vs east-west) because signal housings aren't rotated; at
-  diagonal junctions both roads can get green together. Needs each signal
-  rotated to the streets meeting there.
-- **Pedestrianised streets**: no cars on them — needs a card to pedestrianise
-  a street first.
-- **Details**: spinning wheels; brighter headlights and car bodies at night.
+- **Near detail**: the procedural trees (as the urban ones) within about
+  90 m of the camera, built on demand in the worker pool within a budget,
+  with cancellation; needs a much lighter tree than today's (a mature
+  spruce is ~150,000 vertices).
+- **Year and card changes**: every scene change regenerates and rebuilds the
+  whole forest (~2 s for 233,000 trees); reuse the tiles whose covers
+  didn't change, as the scene's own trees reuse their batches.
+- **Counts in the performance readout**: trees drawn, tiles in view, tiles
+  casting shadows, near trees built.
+- **Fewer draw calls**, if they become the limit: one crown mesh per crown
+  shape in a tile (the kinds' colours in the shader); far tiles in blocks.
+- **Element trees on tiles**: the scene's own trees (`vegetation.ts`) in the
+  same tiles, switchable per site (off for Piazza Dante).
 
 ## Performance
 
-- **Trees by day**: the scene is GPU-bound mainly on vegetation (~23 M
-  triangles per frame, sun shadow pass included). Simpler distant trees and
-  fewer trees in the sun's shadow would help.
 - *Waiting for a measurement* — **"Measure" on the Nvidia machine**, to know
   whether performance matters only on laptops.
+- **"Measure" for sites without 3D life**: one row per moment instead of the
+  people and traffic rows, and the URL's hour rather than fixed ones; plus
+  first-view time and memory.
+- **Reversed depth buffer for every site** (`scene3d.reversedDepth`, on for
+  rural): it keeps the GPU's early depth test (45 → 60 fps in Bocenago's
+  close-ups), but three's `Water.js` reflection assumes the usual depth
+  (the urban pond shows white, its bridge disappears). Needs a reflection
+  of our own.
 - **`?lights=all` switch**: remove once the simplified lamp lighting has been
   confirmed in workshops.
 - **Server-side rendering** (streaming video to the browser): only if workshop

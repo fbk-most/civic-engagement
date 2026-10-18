@@ -17,7 +17,6 @@ import type { LifeMode } from "../three/people/activity";
 import type { SunSetting } from "../three/sun";
 import { runResponsiveness, type ResultRow } from "../perf/responsiveness";
 import * as timeline from "../perf/timeline";
-import { ViewsBenchmark } from "./ViewsBenchmark";
 
 type Reading = ReturnType<ViewerHandle["readPerf"]>;
 
@@ -213,7 +212,6 @@ export function PerfPanel({
         <button type="button" onClick={runBenchmark} disabled={running !== null}>
           {running && !running.startsWith("Responsiveness") ? `Measure: ${running}…` : "Measure (day and night, ~70 s)"}
         </button>
-        <ViewsBenchmark viewerRef={viewerRef} sunSetting={sunSetting} onSunSettingChange={onSunSettingChange} />
         <button type="button" onClick={runResponsivenessBenchmark} disabled={running !== null}>
           {running?.startsWith("Responsiveness") ? `${running}…` : "Responsiveness (~2 min)"}
         </button>
