@@ -56,6 +56,11 @@ export interface FrontendPack {
      * valley's forest and meadows; not a square's paving. See
      * three/builders/coverPaint.ts. */
     paintCovers?: boolean;
+    /** Draw with a reversed depth buffer rather than a logarithmic one
+     * (see three/Viewer.tsx): far faster where much is hidden behind nearer
+     * things — a forest. Not yet with water: its reflection
+     * (three's Water.js) assumes the usual depth. */
+    reversedDepth?: boolean;
     /** Grows a forest from the covers (the rural pack's stands): trees by
      * the thousand, drawn plainly (see three/builders/forest.ts), beside the
      * scene's own trees, which are elements. */

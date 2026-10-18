@@ -19,6 +19,7 @@ import { WalkController, type Footprint } from "./walk";
 import { activePack } from "../pack";
 import { FLAT_TERRAIN, intersectTerrain, type Terrain } from "./terrain";
 import * as timeline from "../perf/timeline";
+import { readDebugParams } from "../debugParams";
 import { Crowd } from "./people/Crowd";
 import { planCrowd, walkerCount, type StopTally } from "./people/plan";
 import { buildWalkNetwork, type WalkNetwork } from "./people/network";
@@ -320,11 +321,15 @@ export function Viewer({
     // camera pose. A logarithmic depth buffer distributes precision evenly
     // across the whole range instead, which is the standard fix for exactly
     // this "near-field detail and a far horizon in one camera" case.
-    const renderer = new THREE.WebGLRenderer({
-      antialias: true,
-      powerPreference: "high-performance",
-      logarithmicDepthBuffer: true,
-    });
+    //
+    // A pack can ask for a reversed depth buffer instead (where the browser
+    // has EXT_clip_control; `scene3d.reversedDepth`, or `?depth=`): as
+    // precise far away, and it keeps the GPU's early depth test, which a
+    // logarithmic buffer turns off — so what's hidden behind nearer things
+    // (a forest's trees behind the nearest ones) isn't shaded at all.
+    const renderer = createRenderer(
+      DEBUG_PARAMS.depth ? DEBUG_PARAMS.depth === "reversed" : activePack().scene3d.reversedDepth === true
+    );
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     // Reset once per frame (below) rather than per render call, so the
     // counts cover every pass of a frame, shadow maps included.
@@ -348,9 +353,15 @@ export function Viewer({
     // EffectComposer renders through an offscreen target rather than straight
     // to the canvas, so the renderer's own MSAA (from `antialias: true` above)
     // never kicks in unless the target requests samples itself.
+    //
+    // A reversed depth buffer is only more precise far away if it holds
+    // floats: a float depth texture makes three.js give the target one
+    // (32 bits; the default is 24-bit integers, with which trees a few km
+    // away sank into the terrain under them).
     const composerTarget = new THREE.WebGLRenderTarget(1, 1, {
       type: THREE.HalfFloatType,
       samples: 4,
+      depthTexture: renderer.capabilities.reversedDepthBuffer ? new THREE.DepthTexture(1, 1, THREE.FloatType) : null,
     });
     const composer = new EffectComposer(renderer, composerTarget);
     composer.addPass(new RenderPass(threeScene, camera));
@@ -1058,6 +1069,24 @@ export function Viewer({
 
 /** How far past the site's edges panning can take what the camera looks
  * at: a quarter of the site's size, and never less than MIN_PAN_MARGIN_M. */
+const DEBUG_PARAMS = readDebugParams();
+
+/** The renderer, with a reversed depth buffer if asked and the browser has
+ * it, a logarithmic one otherwise (see where it's called). */
+function createRenderer(reversedDepth: boolean): THREE.WebGLRenderer {
+  const options = { antialias: true, powerPreference: "high-performance" } as const;
+  if (reversedDepth) {
+    const renderer = new THREE.WebGLRenderer({ ...options, reversedDepthBuffer: true });
+    if (renderer.capabilities.reversedDepthBuffer) {
+      console.info("3D view: reversed depth buffer");
+      return renderer;
+    }
+    console.warn("3D view: no reversed depth buffer here (EXT_clip_control): logarithmic instead");
+    renderer.dispose();
+  }
+  return new THREE.WebGLRenderer({ ...options, logarithmicDepthBuffer: true });
+}
+
 function panMargin(built: BuiltScene): number {
   const { minX, maxX, minZ, maxZ } = built.bounds;
   return Math.max(MIN_PAN_MARGIN_M, PAN_MARGIN_SHARE * Math.max(maxX - minX, maxZ - minZ));

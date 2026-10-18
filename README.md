@@ -38,8 +38,8 @@ in the Rendena valley, Trentino, with its boundary from OpenStreetMap), two
 cards (planting, felling) and a stub model whose indicators are the forest's
 area and the areas planted and felled. The land covers come from
 OpenStreetMap, the forest as stands with placeholder attributes (species by
-altitude, see `stands.py`); the browser grows the stands' trees, a share of
-them for now (`?treeShare=`). Its terrain comes from PAT's LiDAR DTM, downloaded by
+altitude, see `stands.py`); the browser grows the stands' trees, and draws
+fewer of them from afar. Its terrain comes from PAT's LiDAR DTM, downloaded by
 hand (see `data/bocenago/lidar/SOURCE.txt`, not in the repository); the
 terrain grid built from it is.
 
@@ -215,7 +215,10 @@ The frontend reads a few optional parameters from its URL (see
 | `comfort` | `off` | Comparison only: people ignore the felt temperature (by default they stop less, and walk less, where it's very hot or cold). |
 | `terrain` | `off` | Comparison only: draw the site flat, even if it has a terrain grid. |
 | `terrainScale` | e.g. `3` | Testing only: the terrain's heights multiplied by this, to see it on gentle ground. |
-| `treeShare` | `0`–`1` | Rural pack, testing only: the share of the stands' trees drawn (default `0.1`, about 34,000 trees in Bocenago). |
+| `treeFar` | metres | Testing only: beyond this distance from the camera, a forest's trees are thinned out to a tenth, with wider crowns (default: never). |
+| `treeShadows` | metres, or `off` | Testing only: how far from the camera a forest's trees cast shadows (default `1200`); `off`, nowhere. |
+| `depth` | `reversed`, `log` | Testing only: the depth buffer, whatever the pack's choice (rural: reversed, urban: logarithmic). Reversed needs the browser's `EXT_clip_control` (the console says which one is used) and breaks the urban pond's reflection. |
+| `treeShare` | `0`–`1` | Rural pack, testing only: the share of the stands' trees drawn (default `1`, about 340,000 trees in Bocenago). |
 
 The active site is not a URL parameter: it's chosen when starting the backend
 (`CIVIC_TWIN_SITE`, see above).

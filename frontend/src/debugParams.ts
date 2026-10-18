@@ -51,6 +51,15 @@ export interface DebugParams {
   /** `?terrainScale=N`: the terrain's heights times N — for testing on
    * gentle ground. */
   terrainScale: number | null;
+  /** `?treeFar=N|off`: how far from the camera a forest's trees are thinned
+   * out (see three/builders/forest.ts); "off" never — for testing. */
+  treeFar: number | "off" | null;
+  /** `?treeShadows=N|off`: how far from the camera a forest's trees cast
+   * shadows (see three/builders/forest.ts); "off", nowhere — for testing. */
+  treeShadows: number | "off" | null;
+  /** `?depth=reversed|log`: the depth buffer, whatever the pack's choice
+   * (`FrontendPack.scene3d.reversedDepth`) — for testing. */
+  depth: "log" | "reversed" | null;
 }
 
 // The interventions switch's buttons, by their URL name.
@@ -100,6 +109,9 @@ export function readDebugParams(search: string = window.location.search): DebugP
     comfort: params.get("comfort") !== "off",
     terrain: params.get("terrain") !== "off",
     terrainScale: num(params, "terrainScale"),
+    treeFar: params.get("treeFar") === "off" ? "off" : num(params, "treeFar"),
+    treeShadows: params.get("treeShadows") === "off" ? "off" : num(params, "treeShadows"),
+    depth: params.get("depth") === "reversed" ? "reversed" : params.get("depth") === "log" ? "log" : null,
   };
 }
 

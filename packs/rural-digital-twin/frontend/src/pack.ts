@@ -76,6 +76,9 @@ export const ruralPack: FrontendPack = {
     paintCovers: true,
     // The stands' trees.
     treeSource: standTrees,
+    // Most of a forest is hidden behind its nearest trees: see the core's
+    // FrontendPack.
+    reversedDepth: true,
     parts: [],
     // Mountain meadow, where no land cover is.
     terrainSurface: { color: 0xa3b77f, roughness: 1, texture: "lawn" },

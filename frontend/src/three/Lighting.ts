@@ -67,6 +67,16 @@ export class Lighting {
 
     this.sky = new Sky();
     this.sky.scale.setScalar(SKY_RADIUS);
+    if (renderer.capabilities.reversedDepthBuffer) {
+      // Sky.js pins the sky to the far plane by its depth, which a reversed
+      // depth buffer (see Viewer.tsx) turns into the near one: the sky is
+      // drawn first instead, behind everything, with no depth at all. First
+      // means the highest order: with a reversed depth buffer, three.js
+      // draws the opaque objects in the reverse of their sorted order.
+      this.sky.material.depthTest = false;
+      this.sky.material.depthWrite = false;
+      this.sky.renderOrder = 1e9;
+    }
     const uniforms = this.sky.material.uniforms;
     uniforms.turbidity.value = 4;
     uniforms.rayleigh.value = 2;

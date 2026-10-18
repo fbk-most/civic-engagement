@@ -8,15 +8,15 @@ import { polygonRings, toLocal, type ForestTree, type TreeSource } from "civic-e
 // and size don't depend on the stand's shape, then: a felling takes the
 // trees in its area away and moves no other.
 //
-// Only a share of the trees is drawn (`?treeShare=`, default 0.1): the
-// stands hold about 340,000, too many to draw one by one until the trees
-// have detail levels. The crowns are a little wider to make up for it.
+// `?treeShare=` draws only a share of them, for testing; the crowns are
+// then a little wider to make up for it. (From afar, the core draws only a
+// share anyway: see its builders/forest.ts.)
 
 // The densest stand there is: a planting (stands.py's PLANTING_DENSITY_PER_HA).
 const MAX_DENSITY_PER_HA = 2000;
 const LATTICE_M = Math.sqrt(10_000 / MAX_DENSITY_PER_HA);
 
-const DEFAULT_SHARE = 0.1;
+const DEFAULT_SHARE = 1;
 const SHARE = (() => {
   const value = Number(new URLSearchParams(window.location.search).get("treeShare"));
   return value > 0 && value <= 1 ? value : DEFAULT_SHARE;
@@ -65,6 +65,7 @@ export const standTrees: TreeSource = {
             crownBase: species.crownBase,
             kind,
             shade: 0.82 + 0.36 * draw(i, j, 5),
+            rank: draw(i, j, 6),
           });
         });
       }
