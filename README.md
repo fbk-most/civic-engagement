@@ -161,6 +161,7 @@ pack may read its own: see its README.
 | Parameter | Values | Effect |
 | --- | --- | --- |
 | `lang` | `it`, `en` | Interface language (default: the last one chosen with the IT/EN switch, else English). |
+| `temp` | `C`, `F` | Temperature unit, for display only: the model works in °C (default: the last one chosen with the °C/°F switch, else Celsius). The switch shows only in packs with the felt-temperature field. |
 | `viewer` | `1` | Open on the 3D view. |
 | `t` | years | Scenario year (as the "Anno" slider). |
 | `month`, `day`, `hour` | e.g. `6`, `21`, `22.5` | Date and time for the sun; all three are needed. |

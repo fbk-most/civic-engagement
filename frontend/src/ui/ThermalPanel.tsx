@@ -3,6 +3,7 @@ import type { CrowdExposure, GroupExposure } from "../three/people/comfort";
 import type { HourComfort } from "../three/people/daily";
 import { DailyChart } from "./DailyChart";
 import { locale, tr } from "../i18n/lang";
+import { fromCelsius, tempSymbol } from "../i18n/units";
 import { FELT_STOPS, STRESS_BANDS, summaryAt, type ThermalField, type ThermalReading } from "../thermal/field";
 
 interface Props {
@@ -39,6 +40,7 @@ const LEGEND_MIN = FELT_STOPS[0][0];
 const LEGEND_MAX = FELT_STOPS[FELT_STOPS.length - 1][0];
 const position = (celsius: number) => (100 * (celsius - LEGEND_MIN)) / (LEGEND_MAX - LEGEND_MIN);
 const GRADIENT = `linear-gradient(to right, ${FELT_STOPS.map(([c, hex]) => `${hex} ${position(c).toFixed(1)}%`).join(", ")})`;
+// The stress bands' edges, in °C: labelled in the unit shown.
 const TICKS = [-13, 0, 9, 26, 32, 38, 46];
 
 function formatDate(date: Date): string {
@@ -141,8 +143,9 @@ function CurveLegend({ curve }: { curve: NonNullable<Props["curve"]> }) {
   );
 }
 
+/** A temperature in °C, in the unit shown. */
 function celsius(value: number): string {
-  return `${value.toLocaleString(locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })} °C`;
+  return `${fromCelsius(value).toLocaleString(locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })} ${tempSymbol()}`;
 }
 
 /** Felt temperature: a panel with the hour's figures over the open space
@@ -256,13 +259,13 @@ export function ThermalPanel({
               <div className="thermal-panel__ticks">
                 {TICKS.map((tick) => (
                   <span key={tick} style={{ left: `${position(tick)}%` }}>
-                    {tick}
+                    {Math.round(fromCelsius(tick))}
                   </span>
                 ))}
               </div>
               <div className="thermal-panel__ends">
                 <span>← {tr("freddo", "cold")}</span>
-                <span>°C</span>
+                <span>{tempSymbol()}</span>
                 <span>{tr("caldo", "hot")} →</span>
               </div>
             </>

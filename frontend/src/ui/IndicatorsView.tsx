@@ -45,7 +45,7 @@ function ChartCard({
   onTimeChange: (t: number) => void;
   zeroBased: boolean;
 }) {
-  const get = (values: IndicatorValues) => numberValue(values, descriptor.id);
+  const get = (values: IndicatorValues) => numberValue(values, descriptor);
   const baseline = series.baseline.map(get);
   const scenario = series.scenario.map(get);
   const index = series.years.indexOf(t);

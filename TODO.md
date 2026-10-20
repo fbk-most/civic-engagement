@@ -35,6 +35,16 @@ This is the core's list. Each domain pack keeps its own, in its repository
   covering the map; the 3D overview ("Torna alla vista d'insieme") uses a
   fixed angle and distance.
 
+## Terrain
+
+- **Bumpy streets and pavements on a city's terrain**: with Piazza Dante's
+  terrain on, roads and sidewalks follow small height changes of the DTM,
+  probably measurement artefacts or noise rather than real relief, and
+  look bumpy; the urban demo runs flat (`?terrain=off`) for this reason. Smooth
+  the grid where the ground is paved (or everywhere, below a threshold)
+  when building it (`civic_engagement/ingestion/terrain.py`), and check
+  that a smoothed square still drains the way the real one does.
+
 ## Forest rendering
 
 The forest the rural pack grows (`frontend/src/three/builders/forest.ts`;

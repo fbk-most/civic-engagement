@@ -68,8 +68,8 @@ export function KpiPanel({ descriptors, indicators, baselineIndicators, deferred
           <KpiRow
             key={d.id}
             descriptor={d}
-            value={numberValue(shown, d.id)}
-            baseline={asIs || d.scenario_only ? null : numberValue(baseline, d.id)}
+            value={numberValue(shown, d)}
+            baseline={asIs || d.scenario_only ? null : numberValue(baseline, d)}
           />
         ))}
     </div>

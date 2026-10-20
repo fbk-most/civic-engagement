@@ -1,5 +1,6 @@
 import type { IndicatorDescriptor, IndicatorValues } from "../api/types";
 import { locale, tr } from "../i18n/lang";
+import { fromCelsius, tempSymbol } from "../i18n/units";
 
 /** What the key indicators panel and the "Indicators" tab show of an
  * indicator, read off its descriptor. */
@@ -12,15 +13,22 @@ export function indicatorShortLabel(d: IndicatorDescriptor): string {
   return d.short_label === null ? indicatorLabel(d) : tr(d.short_label, d.short_label_en ?? d.short_label);
 }
 
-export function indicatorUnit(d: IndicatorDescriptor): string {
-  return tr(d.unit, d.unit_en ?? d.unit);
+/** Whether an indicator is a temperature: one in °C, which is shown in the
+ * unit chosen (see i18n/units.ts). */
+function isTemperature(d: IndicatorDescriptor): boolean {
+  return d.unit.trim() === "°C";
 }
 
-/** A number indicator's value; null if missing, not computable or not a
- * number. */
-export function numberValue(values: IndicatorValues | null | undefined, id: string): number | null {
-  const value = values?.[id];
-  return typeof value === "number" ? value : null;
+export function indicatorUnit(d: IndicatorDescriptor): string {
+  return isTemperature(d) ? d.unit.replace("°C", tempSymbol()) : tr(d.unit, d.unit_en ?? d.unit);
+}
+
+/** A number indicator's value, as shown (a temperature in the unit chosen);
+ * null if missing, not computable or not a number. */
+export function numberValue(values: IndicatorValues | null | undefined, d: IndicatorDescriptor): number | null {
+  const value = values?.[d.id];
+  if (typeof value !== "number") return null;
+  return isTemperature(d) ? fromCelsius(value) : value;
 }
 
 export function formatNumber(value: number, decimals: number): string {

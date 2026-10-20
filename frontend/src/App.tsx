@@ -55,8 +55,10 @@ import { buildWalkNetwork } from "./three/people/network";
 import { CURRENT_YEAR, DEFAULT_SUN_SETTING, SEASON_PRESETS, sunPosition, type SunSetting } from "./three/sun";
 import { ViewTabs, type AppView } from "./ui/ViewTabs";
 import { LangSwitch } from "./ui/LangSwitch";
+import { TempSwitch } from "./ui/TempSwitch";
 import { ScenarioMenu } from "./ui/ScenarioMenu";
 import { tr, useLang } from "./i18n/lang";
+import { useTempUnit } from "./i18n/units";
 import * as timeline from "./perf/timeline";
 
 type Status = "loading" | "ready" | "error";
@@ -107,8 +109,10 @@ function fetchFieldIntoCache(key: string, t: number, month: number, day: number,
 }
 
 function App() {
-  // Re-renders the whole tree on a language change (see i18n/lang.ts).
+  // Re-render the whole tree on a change of language or of temperature
+  // unit (see i18n/lang.ts, i18n/units.ts).
   const lang = useLang();
+  const tempUnit = useTempUnit();
   const containerRef = useRef<HTMLDivElement>(null);
   // Guards against React 18 StrictMode's dev-only double effect invocation:
   // creating a second MapLibre GL (WebGL) instance while the first is mid-init
@@ -848,6 +852,7 @@ function App() {
           {status === "ready" && scene && (
             <ScenarioMenu interventionCount={scene.interventions.length} t={t} onSceneReplaced={handleSceneReplaced} />
           )}
+          {activePack().features.thermal && <TempSwitch unit={tempUnit} />}
           <LangSwitch lang={lang} />
         </div>
       </header>
