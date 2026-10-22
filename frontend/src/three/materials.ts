@@ -69,6 +69,14 @@ export function isPaintedPath(material: string): boolean {
   return activePack().scene3d.pathSurfaces[material]?.painted === true;
 }
 
+/** The terrain casts shadows from its slopes facing away from the sun only.
+ * A sunlit slope would otherwise shadow itself in stripes ("shadow acne")
+ * that move with the sun: the sun's one shadow map spans the whole site,
+ * about a metre a texel over a valley, far beyond what the shadow bias
+ * (set for trunks and furniture, see Lighting.ts) covers. A ridge still
+ * shades the valley behind it, from its far side. */
+const TERRAIN_SHADOW_SIDE = THREE.BackSide;
+
 const DEFAULT_COVER: Surface = { color: 0xd8d5cd, roughness: 0.9, texture: "paving" };
 const DEFAULT_TERRAIN: Surface = { color: 0x7d8a5c, roughness: 1 };
 const DEFAULT_PATH: Surface = { color: 0xcac5be, roughness: 0.85, texture: "paving" };
@@ -220,6 +228,7 @@ export class MaterialLibrary {
       // slope) the ground is dark, lit from the wrong side, rather than
       // see-through to the sky. The same triangles, each still drawn once.
       material.side = THREE.DoubleSide;
+      material.shadowSide = TERRAIN_SHADOW_SIDE;
       material.polygonOffset = true;
       material.polygonOffsetFactor = 3;
       material.polygonOffsetUnits = 3;
@@ -245,6 +254,7 @@ export class MaterialLibrary {
     const surface = activePack().scene3d.terrainSurface ?? DEFAULT_TERRAIN;
     const material = this.surfaceMaterial({ ...surface, color: 0xffffff });
     material.side = THREE.DoubleSide;
+    material.shadowSide = TERRAIN_SHADOW_SIDE;
     material.polygonOffset = true;
     material.polygonOffsetFactor = 3;
     material.polygonOffsetUnits = 3;

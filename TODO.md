@@ -17,6 +17,11 @@ This is the core's list. Each domain pack keeps its own, in its repository
   3D life into the core's viewer).
 - **The map's opening centre** (`frontend/src/map/mapSetup.ts`) is Piazza
   Dante's: take it from the site.
+- **Port urban to the current core** (it's pinned to `c94b073c`): the
+  buildings from `civic_engagement/ingestion/buildings.py` (done in urban's
+  working copy, verified identical, not committed), the tree source's
+  `elements`, and rural's fixes to `scripts/core.py` (npm reinstalls the
+  named core, and a fresh copy of a local one) and its pre-push hook.
 
 ## Interface
 
@@ -40,10 +45,12 @@ This is the core's list. Each domain pack keeps its own, in its repository
 - **Bumpy streets and pavements on a city's terrain**: with Piazza Dante's
   terrain on, roads and sidewalks follow small height changes of the DTM,
   probably measurement artefacts or noise rather than real relief, and
-  look bumpy; the urban demo runs flat (`?terrain=off`) for this reason. Smooth
-  the grid where the ground is paved (or everywhere, below a threshold)
-  when building it (`civic_engagement/ingestion/terrain.py`), and check
-  that a smoothed square still drains the way the real one does.
+  look bumpy; the urban demo runs flat (`?terrain=off`) for this reason.
+  The grid builder now averages the DTM over each cell (no more aliasing)
+  and can shape the ground under lines (`TerrainLine`, used by the rural
+  pack for its roads and streams): for a square, shape it under the paved
+  areas too (polygons, not lines yet), and check that a smoothed square
+  still drains the way the real one does.
 
 ## Forest rendering
 

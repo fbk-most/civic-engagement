@@ -94,3 +94,59 @@ def test_site_assets_list_the_terrain_grid(tmp_path, monkeypatch) -> None:
     response = get_site_asset("terrain_grid", v=asset.version)
     assert response.path == path
     assert "immutable" in response.headers["cache-control"]
+
+
+def test_cell_mean_averages_out_detail_finer_than_the_cell() -> None:
+    # Furrows 1 m apart (0.5 m cells, alternately 0 and 1 m high): a point
+    # sample lands on a furrow or between two; the cell's mean doesn't.
+    from civic_engagement.ingestion.terrain import sample_cell_mean
+
+    furrows = np.tile(np.array([0.0, 1.0]), (40, 20))
+    grid = Grid(0.0, 20.0, 0.5, 0.5, furrows)
+    x = np.array([5.25, 6.25, 7.75])
+    y = np.array([10.0, 10.0, 10.0])
+    assert np.allclose(sample_cell_mean(grid, x, y, 5.0), 0.5, atol=0.05)
+
+
+def test_filling_a_gap_leaves_no_streaks() -> None:
+    # A plane with a band of no data across it: filled, the band is the plane.
+    rows, cols = np.mgrid[0:40, 0:60]
+    plane = 0.3 * cols + 0.1 * rows
+    gappy = plane.copy()
+    gappy[10:25, :] = np.nan
+    filled = fill_from_neighbours(gappy)
+    band = filled[10:25]
+    # Close to the plane away from the grid's sides (where nothing beyond
+    # tells which way the ground goes), and smooth along the band: no streaks.
+    assert np.abs(band - plane[10:25])[:, 8:-8].max() < 0.6
+    assert np.abs(np.diff(band, n=2, axis=1)).max() < 0.1
+
+
+def _slope(rows: int = 40, cols: int = 40, cell: float = 5.0) -> np.ndarray:
+    """A hillside rising 0.5 m a metre towards +z (35% across a road along x)."""
+    return np.tile((np.arange(rows) * cell * 0.5)[:, None], (1, cols))
+
+
+def test_a_road_is_a_level_shelf_across_the_slope() -> None:
+    from civic_engagement.ingestion.terrain import TerrainLine, shape_under_lines
+
+    heights = _slope()
+    road = np.array([[10.0, 100.0], [190.0, 100.0]])
+    shaped = shape_under_lines(heights, 0.0, 0.0, 5.0, [road], [TerrainLine([], 3.0, 15.0)])
+    # Within half the width and a cell of the road (rows 19-21): level, at
+    # the road's height; far from it, the slope untouched.
+    across = shaped[19:22, 10:30]
+    assert np.ptp(across) < 1e-6 and abs(across.mean() - 50.0) < 1e-6
+    assert np.array_equal(shaped[:12], heights[:12]) and np.array_equal(shaped[29:], heights[29:])
+
+
+def test_water_only_runs_downhill() -> None:
+    from civic_engagement.ingestion.terrain import TerrainLine, shape_under_lines
+
+    heights = _slope()
+    # Down the slope, with a 3 m hump half way.
+    heights[18:22, 18:22] += 3.0
+    stream = np.array([[100.0, 180.0], [100.0, 10.0]])
+    shaped = shape_under_lines(heights, 0.0, 0.0, 5.0, [stream], [TerrainLine([], 1.5, 15.0, downhill=True)])
+    along = shaped[2:37, 20]
+    assert np.all(np.diff(along) >= -1e-9)  # rows go up the slope: never falling going uphill means never rising downstream

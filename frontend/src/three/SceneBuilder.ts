@@ -145,7 +145,7 @@ export async function buildScene(
   const vegetation = await buildVegetation(elements, anchor, materials, terrain);
   group.add(vegetation.group);
   // The forest the pack grows from the covers, if it does (see forest.ts).
-  const forest = scene3d.treeSource ? buildForest(scene3d.treeSource, covers, anchor, materials, terrain) : null;
+  const forest = scene3d.treeSource ? buildForest(scene3d.treeSource, covers, elements, anchor, materials, terrain) : null;
   if (forest) parts.push(forest.part);
 
   for (const build of scene3d.parts) parts.push(await build({ elements, covers, anchor, materials, terrain }));

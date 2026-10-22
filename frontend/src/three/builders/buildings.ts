@@ -15,6 +15,7 @@
  */
 
 import * as THREE from "three";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { DiscreteElement } from "../../api/types";
 import type { GeoAnchor } from "../geo";
 import type { MaterialLibrary } from "../materials";
@@ -79,8 +80,51 @@ export const extrusionProvider: BuildingGeometryProvider = {
       }
     }
 
-    return group;
+    return mergeByMaterial(group);
   },
 };
+
+/** `root`'s meshes merged into one per material: a few draw calls for the
+ * whole site rather than two per building (walls and roof), each drawn
+ * again in the sun's shadow pass — a valley's hundreds of buildings cost
+ * more CPU time per frame than its forest. Nothing needs a building as an
+ * object of its own (placard picking only looks at the placards). */
+function mergeByMaterial(root: THREE.Object3D): THREE.Group {
+  root.updateMatrixWorld(true);
+  const byMaterial = new Map<THREE.Material, { geometries: THREE.BufferGeometry[]; castShadow: boolean; receiveShadow: boolean }>();
+  root.traverse((child) => {
+    if (!(child instanceof THREE.Mesh) || Array.isArray(child.material)) return;
+    const geometry = child.geometry.index ? child.geometry.toNonIndexed() : child.geometry.clone();
+    geometry.applyMatrix4(child.matrixWorld);
+    child.geometry.dispose();
+    let entry = byMaterial.get(child.material);
+    if (!entry) {
+      entry = { geometries: [], castShadow: false, receiveShadow: false };
+      byMaterial.set(child.material, entry);
+    }
+    entry.geometries.push(geometry);
+    entry.castShadow ||= child.castShadow;
+    entry.receiveShadow ||= child.receiveShadow;
+  });
+
+  const merged = new THREE.Group();
+  merged.name = "buildings";
+  for (const [material, { geometries, castShadow, receiveShadow }] of byMaterial) {
+    // Only the attributes every piece has (walls and roofs differ in uvs).
+    const names = Object.keys(geometries[0].attributes).filter((name) => geometries.every((g) => g.getAttribute(name)));
+    for (const geometry of geometries) {
+      for (const name of Object.keys(geometry.attributes)) if (!names.includes(name)) geometry.deleteAttribute(name);
+      geometry.clearGroups();
+    }
+    const geometry = mergeGeometries(geometries, false);
+    geometries.forEach((g) => g.dispose());
+    if (!geometry) continue;
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.castShadow = castShadow;
+    mesh.receiveShadow = receiveShadow;
+    merged.add(mesh);
+  }
+  return merged;
+}
 
 export const ACTIVE_PROVIDER: BuildingGeometryProvider = extrusionProvider;

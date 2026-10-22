@@ -81,10 +81,11 @@ function offsetNormals(points: Point2[]): Point2[] {
   });
 }
 
+/** `height`: the ribbon's, or each point's. */
 function appendRibbon(
   points: Point2[],
   halfWidth: number,
-  height: number,
+  height: number | number[],
   positions: number[],
   normals: number[],
   uvs: number[],
@@ -104,7 +105,7 @@ function appendRibbon(
     for (const side of [1, -1]) {
       positions.push(
         points[i].x + offset.x * halfWidth * side,
-        height,
+        typeof height === "number" ? height : height[i],
         points[i].z + offset.z * halfWidth * side
       );
       normals.push(0, 1, 0);
@@ -130,10 +131,26 @@ function appendRibbon(
   }
 }
 
+/** A bridge's deck over the ground: straight from the ground at one end
+ * to the ground at the other, never below the ground in between. */
+function deckHeights(points: Point2[], terrain: Terrain, lift: number): number[] {
+  const ground = points.map((p) => terrain.heightAt(p.x, p.z) + lift);
+  const along = [0];
+  for (let i = 1; i < points.length; i++) {
+    along.push(along[i - 1] + Math.hypot(points[i].x - points[i - 1].x, points[i].z - points[i - 1].z));
+  }
+  const length = along[along.length - 1] || 1;
+  const first = ground[0];
+  const last = ground[ground.length - 1];
+  return ground.map((g, i) => Math.max(g, first + ((last - first) * along[i]) / length));
+}
+
 /** Paths arrive as LineStrings with a width, so they need to become ribbon
  * geometry. Everything sharing a surface material is merged into one mesh —
  * the baseline alone has ~200 path segments across 9 materials. On terrain,
- * the ribbons are laid on the ground (see shapes.ts's `drapeGeometry`). */
+ * the ribbons are laid on the ground (see shapes.ts's `drapeGeometry`),
+ * except bridges (`properties.bridge`): they span, a straight deck from end
+ * to end. */
 export function buildPaths(
   paths: DiscreteElement[],
   anchor: GeoAnchor,
@@ -143,25 +160,29 @@ export function buildPaths(
   const group = new THREE.Group();
   group.name = "paths";
 
+  // By material, and whether a bridge's (not laid on the ground).
   const byMaterial = new Map<
     string,
-    { positions: number[]; normals: number[]; uvs: number[]; indices: number[] }
+    { material: string; bridge: boolean; positions: number[]; normals: number[]; uvs: number[]; indices: number[] }
   >();
 
   for (const path of paths) {
     const material = String(path.properties.material ?? "paving");
     const width = Number(path.properties.width ?? DEFAULT_WIDTH_M);
     const isMarking = isPaintedPath(material);
-    let buffers = byMaterial.get(material);
+    const bridge = !terrain.flat && path.properties.bridge === true;
+    const key = `${material}${bridge ? ":bridge" : ""}`;
+    let buffers = byMaterial.get(key);
     if (!buffers) {
-      buffers = { positions: [], normals: [], uvs: [], indices: [] };
-      byMaterial.set(material, buffers);
+      buffers = { material, bridge, positions: [], normals: [], uvs: [], indices: [] };
+      byMaterial.set(key, buffers);
     }
     for (const coords of lineStrings(path.geometry)) {
+      const points = toLocalPoints(anchor, coords);
       appendRibbon(
-        toLocalPoints(anchor, coords),
+        points,
         Math.max(width, isMarking ? MIN_MARKING_WIDTH_M : MIN_PATH_WIDTH_M) / 2,
-        ribbonHeight(material),
+        bridge ? deckHeights(points, terrain, ribbonHeight(material)) : ribbonHeight(material),
         buffers.positions,
         buffers.normals,
         buffers.uvs,
@@ -170,18 +191,20 @@ export function buildPaths(
     }
   }
 
-  for (const [material, buffers] of byMaterial) {
+  for (const { material, bridge, ...buffers } of byMaterial.values()) {
     if (buffers.indices.length === 0) continue;
     let geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.Float32BufferAttribute(buffers.positions, 3));
     geometry.setAttribute("normal", new THREE.Float32BufferAttribute(buffers.normals, 3));
     geometry.setAttribute("uv", new THREE.Float32BufferAttribute(buffers.uvs, 2));
     geometry.setIndex(buffers.indices);
-    if (!terrain.flat) geometry = drapeGeometry(geometry, terrain, ribbonHeight(material));
+    if (!terrain.flat && !bridge) geometry = drapeGeometry(geometry, terrain, ribbonHeight(material));
 
     const mesh = new THREE.Mesh(geometry, materials.path(material));
     mesh.receiveShadow = true;
-    mesh.name = `paths-${material}`;
+    // A deck over a gully shades it.
+    mesh.castShadow = bridge;
+    mesh.name = `${bridge ? "bridges" : "paths"}-${material}`;
     group.add(mesh);
   }
 

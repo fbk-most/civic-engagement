@@ -45,7 +45,7 @@ class SiteConfig:
     # since they're either downloaded by hand from a regional geoportal or
     # supplied directly (see the ingestion/lidar.py and ortofoto.py module
     # docstrings for the exact file format expected). Both are optional at
-    # runtime: the urban pack's build_baseline.py degrades gracefully to OSM-tag-only
+    # runtime: ingestion/buildings.py degrades gracefully to OSM-tag-only
     # height/roof-shape logic when absent.
     @property
     def lidar_dbm_path(self) -> str:

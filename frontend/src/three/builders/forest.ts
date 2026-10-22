@@ -21,7 +21,7 @@
  */
 
 import * as THREE from "three";
-import type { CoverPolygon } from "../../api/types";
+import type { CoverPolygon, DiscreteElement } from "../../api/types";
 import type { GeoAnchor } from "../geo";
 import type { MaterialLibrary } from "../materials";
 import type { ScenePart } from "../parts";
@@ -57,7 +57,9 @@ export interface TreeKind {
 
 export interface TreeSource {
   kinds: Record<string, TreeKind>;
-  trees: (inputs: { covers: CoverPolygon[]; anchor: GeoAnchor; terrain: Terrain }) => ForestTree[];
+  /** The trees of the covers; the elements (roads, buildings...) say where
+   * none should stand. */
+  trees: (inputs: { covers: CoverPolygon[]; elements: DiscreteElement[]; anchor: GeoAnchor; terrain: Terrain }) => ForestTree[];
 }
 
 export interface Forest {
@@ -109,11 +111,12 @@ function within(limit: number, distance: number, now: boolean): boolean {
 export function buildForest(
   source: TreeSource,
   covers: CoverPolygon[],
+  elements: DiscreteElement[],
   anchor: GeoAnchor,
   materials: MaterialLibrary,
   terrain: Terrain
 ): Forest {
-  const trees = source.trees({ covers, anchor, terrain });
+  const trees = source.trees({ covers, elements, anchor, terrain });
   const group = new THREE.Group();
   group.name = "forest";
 
