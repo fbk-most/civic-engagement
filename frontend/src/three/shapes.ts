@@ -105,6 +105,13 @@ export function outerRingsXZ(anchor: GeoAnchor, geometry: GeoJSON.Geometry): THR
   return rings;
 }
 
+/** A ring of world (x, z) points (as `outerRingsXZ` gives) as a shape. */
+export function ringXZToShape(ring: THREE.Vector2[]): THREE.Shape {
+  const points = ring.map((p) => new THREE.Vector2(p.x, -p.y));
+  if (signedArea(points) < 0) points.reverse();
+  return new THREE.Shape(points);
+}
+
 /** One THREE.Shape per polygon (a MultiPolygon yields several), holes included. */
 export function geometryToShapes(anchor: GeoAnchor, geometry: GeoJSON.Geometry): THREE.Shape[] {
   const shapes: THREE.Shape[] = [];

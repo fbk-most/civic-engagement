@@ -1,11 +1,16 @@
 from fastapi import APIRouter, HTTPException
 
+from civic_engagement.config import SITE
 from civic_engagement.domain import active_pack
+from civic_engagement.geo_utils import within_boundary
 from civic_engagement.models.schema import Intervention, InterventionCreate, InterventionUpdate, SceneResponse
 from civic_engagement.scene import current_scene, validated_t
 from civic_engagement.store.state import store
 
 router = APIRouter()
+
+# The 422 detail for a card outside the site (the frontend checks first).
+OUTSIDE_BOUNDARY = "outside the site boundary"
 
 
 @router.get("/interventions", response_model=list[Intervention])
@@ -18,6 +23,10 @@ def create_intervention(data: InterventionCreate, t: int = 0) -> SceneResponse:
     year = validated_t(t)
     if data.card_type not in {card.card_type for card in active_pack().cards}:
         raise HTTPException(status_code=422, detail=f"Unknown card type {data.card_type!r}")
+    # Cards are for the site: what's drawn past its boundary is context. A
+    # provisional boundary (a placeholder circle, not drawn) doesn't bind.
+    if SITE.boundary_status == "surveyed" and not within_boundary(data.geometry, SITE.site_boundary_geojson):
+        raise HTTPException(status_code=422, detail=OUTSIDE_BOUNDARY)
     store.add_intervention(data, planted_year=year)
     return current_scene(year)
 

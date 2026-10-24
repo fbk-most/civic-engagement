@@ -35,7 +35,10 @@ class OrtofotoModel:
         try:
             with open(sidecar_path) as f:
                 sidecar = json.load(f)
-            array = np.array(Image.open(png_path).convert("RGB"), dtype=np.float64)
+            # Bytes, as in the file: a valley's orthophoto at 0.5 m is some
+            # hundred million pixels (PIL's bomb guard stops at 89 M).
+            Image.MAX_IMAGE_PIXELS = None
+            array = np.asarray(Image.open(png_path).convert("RGB"))
         except FileNotFoundError:
             return None
         grid = Grid(
@@ -46,6 +49,11 @@ class OrtofotoModel:
             array=array,
         )
         return cls(grid)
+
+    @property
+    def grid(self) -> Grid:
+        """The image (rows from the north edge, RGB bytes), georeferenced."""
+        return self._grid
 
     def sample_roof_rgb(self, polygon_utm: BaseGeometry) -> tuple[int, int, int] | None:
         pixels = sample_polygon(polygon_utm, self._grid)

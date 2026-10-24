@@ -3,18 +3,23 @@ returns them (their tags as columns; the packs fetch them), to building
 elements.
 
 A building's height and roof come, in order of trust, from PAT's LiDAR
-(lidar.py) when the site has it, then from the footprint's tags, then from
-the site's defaults (`BuildingDefaults`); its roof colour from the
-orthophoto (ortofoto.py), when there is one.
+(lidar.py) when the site has it (with `roof_samples`, the roof's form
+too: gabled or hipped, and its ridge's bearing), then from the footprint's
+tags, then from the site's defaults (`BuildingDefaults`); its roof colour from the
+orthophoto (ortofoto.py), when there is one; its walls' material from the
+`building:material` tag (a pack may guess it where OSM has none).
 """
 
+import math
 from dataclasses import dataclass, field
 
 import geopandas as gpd
 import pandas as pd
+from pyproj import Transformer
 from shapely.geometry import mapping
+from shapely.geometry.base import BaseGeometry
 
-from civic_engagement.config import PROJECTED_CRS
+from civic_engagement.config import PROJECTED_CRS, WGS84_CRS
 from civic_engagement.geo_utils import to_projected
 from civic_engagement.ingestion.lidar import LidarHeightModel
 from civic_engagement.ingestion.ortofoto import OrtofotoModel
@@ -112,6 +117,20 @@ def building_heights(buildings: gpd.GeoDataFrame, defaults: BuildingDefaults) ->
     return heights.fillna(defaults.height_m)
 
 
+_TO_WGS84 = Transformer.from_crs(PROJECTED_CRS, WGS84_CRS, always_xy=True)
+
+
+def ridge_bearing_deg(polygon_utm: BaseGeometry, ridge: tuple[float, float]) -> float:
+    """A ridge's direction (a unit vector in UTM) as a bearing, degrees
+    clockwise from true north, in [0, 180): UTM's north is a degree or so off
+    true north away from the zone's central meridian."""
+    centre = polygon_utm.centroid
+    lng0, lat0 = _TO_WGS84.transform(centre.x, centre.y)
+    lng1, lat1 = _TO_WGS84.transform(centre.x + ridge[0], centre.y + ridge[1])
+    east = (lng1 - lng0) * math.cos(math.radians(lat0))
+    return round(math.degrees(math.atan2(east, lat1 - lat0)) % 180, 1)
+
+
 def building_elements(
     buildings: gpd.GeoDataFrame,
     defaults: BuildingDefaults,
@@ -123,12 +142,14 @@ def building_elements(
     heights = building_heights(buildings, defaults)
     roof_shapes = tag_column(buildings, "roof:shape")
     kinds = tag_column(buildings, "building")
+    wall_materials = tag_column(buildings, "building:material")
     elements = []
     for i, geometry in buildings.geometry.items():
         height = float(heights[i])
         # Real tag always wins over anything inferred below.
         roof_shape = str(roof_shapes[i]) if pd.notna(roof_shapes[i]) else None
         ridge_height_m = None
+        ridge_bearing = None
 
         geojson = mapping(geometry)
         polygon_utm = to_projected(geojson) if (lidar or ortofoto) else None
@@ -144,6 +165,12 @@ def building_elements(
             rise = stats.roof_high - stats.roof_low
             if rise >= defaults.roof_samples_pitch_m:
                 height = stats.roof_low
+                form = lidar.roof_form(polygon_utm)
+                if form is not None:
+                    roof_shape = roof_shape or ("hipped" if form.shape == "hipped" else pitched)
+                    # A hip's ridge is along the long side; a gable's either way.
+                    if (roof_shape == "hipped") == (form.shape == "hipped"):
+                        ridge_bearing = ridge_bearing_deg(polygon_utm, form.ridge)
                 roof_shape = roof_shape or pitched
                 rise = min(max(rise, defaults.roof_min_rise_m), defaults.roof_max_rise_m)
                 ridge_height_m = round(height + rise, 1)
@@ -172,8 +199,12 @@ def building_elements(
             properties["roof_shape"] = roof_shape
         if ridge_height_m is not None:
             properties["ridge_height_m"] = ridge_height_m
+        if ridge_bearing is not None:
+            properties["ridge_bearing_deg"] = ridge_bearing
         if pd.notna(kinds[i]):
             properties["building_kind"] = str(kinds[i])
+        if pd.notna(wall_materials[i]):
+            properties["wall_material"] = str(wall_materials[i])
         if ortofoto and polygon_utm is not None:
             rgb = ortofoto.sample_roof_rgb(polygon_utm)
             if rgb is not None:

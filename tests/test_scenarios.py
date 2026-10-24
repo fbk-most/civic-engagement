@@ -88,3 +88,17 @@ def test_replace_sets_the_old_session_aside(tmp_path, monkeypatch):
     assert store.revision != revision
     (kept,) = tmp_path.glob("session.*.json")
     assert [i["id"] for i in json.loads(kept.read_text())["default"]] == ["a"]
+
+
+def test_within_boundary_gives_a_metre():
+    from civic_engagement.geo_utils import within_boundary
+
+    # About 100 m a side, near 46° N.
+    boundary = {"type": "Polygon", "coordinates": [[[11.0, 46.0], [11.0013, 46.0], [11.0013, 46.0009], [11.0, 46.0009], [11.0, 46.0]]]}
+    point = lambda lng, lat: {"type": "Point", "coordinates": [lng, lat]}  # noqa: E731
+    assert within_boundary(point(11.0006, 46.0004), boundary)
+    # Half a metre past the edge: still in; ten metres: out.
+    assert within_boundary(point(11.0013 + 0.5 / 77_300, 46.0004), boundary)
+    assert not within_boundary(point(11.0013 + 10 / 77_300, 46.0004), boundary)
+    line = {"type": "LineString", "coordinates": [[11.0006, 46.0004], [11.003, 46.0004]]}
+    assert not within_boundary(line, boundary)

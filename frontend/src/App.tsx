@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MapLayerMouseEvent, MapLibreMap } from "maplibre-gl";
 import type { TerraDraw } from "terra-draw";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -13,6 +13,7 @@ import { readDebugParams } from "./debugParams";
 import { createDraw } from "./map/terraDrawSetup";
 import {
   createIntervention,
+  HttpError,
   deleteIntervention,
   fetchCards,
   fetchDeferredIndicators,
@@ -58,6 +59,7 @@ import { LangSwitch } from "./ui/LangSwitch";
 import { TempSwitch } from "./ui/TempSwitch";
 import { ScenarioMenu } from "./ui/ScenarioMenu";
 import { tr, useLang } from "./i18n/lang";
+import { withinBoundary } from "./map/boundary";
 import { useTempUnit } from "./i18n/units";
 import * as timeline from "./perf/timeline";
 
@@ -84,6 +86,12 @@ const kpiDeferredCache = new Map<string, DeferredIndicators>();
 const KPI_DEFERRED_CACHE_SIZE = 40;
 /** How often a visible window asks whether another one changed the session. */
 const REVISION_POLL_MS = 3000;
+// How long a notice over the map stays.
+const NOTICE_MS = 4000;
+
+function outsideMessage(): string {
+  return tr("Le carte vanno posizionate dentro il confine del sito.", "Cards go within the site’s boundary.");
+}
 
 // Daily curves computed so far, by the key of the field they read.
 const curveCache = new Map<string, HourComfort[]>();
@@ -139,6 +147,14 @@ function App() {
   cardsRef.current = cards;
   const [selectedCard, setSelectedCard] = useState<CardSpec | null>(null);
   const [pendingGeometry, setPendingGeometry] = useState<GeoJSON.Geometry | null>(null);
+  // A short message over the map (a card drawn outside the site), gone by itself.
+  const [notice, setNotice] = useState<string | null>(null);
+  const noticeTimerRef = useRef<number | undefined>(undefined);
+  const showNotice = useCallback((message: string) => {
+    setNotice(message);
+    window.clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = window.setTimeout(() => setNotice(null), NOTICE_MS);
+  }, []);
   const [t, setT] = useState(initialDebugParams.t ?? 0);
   const [scene, setScene] = useState<SceneResponse | null>(null);
   // Null until known (flat if the site has no terrain grid). The ref is for
@@ -254,10 +270,17 @@ function App() {
       modeForPlacementRef.current = modeForPlacement;
       draw.on("finish", (id) => {
         const feature = draw.getSnapshotFeature(id);
-        if (feature) {
-          setPendingGeometry(feature.geometry);
-          draw.stop();
+        if (!feature) return;
+        // Cards are for the site: past a surveyed boundary is context (a
+        // provisional one, not drawn, doesn't bind; as in the backend).
+        const current = sceneRef.current;
+        if (current?.boundary_status === "surveyed" && !withinBoundary(feature.geometry, current.site_boundary)) {
+          draw.removeFeatures([id]);
+          showNotice(outsideMessage());
+          return;
         }
+        setPendingGeometry(feature.geometry);
+        draw.stop();
       });
 
       // Makes every tree (baseline or placed) clickable: baseline trees open
@@ -353,7 +376,7 @@ function App() {
       fetchCards().then(setCards).catch(console.error);
       fetchIndicatorDescriptors().then(setIndicatorDescriptors).catch(console.error);
     });
-  }, []);
+  }, [showNotice]);
 
   useEffect(() => {
     selectedCardRef.current = selectedCard;
@@ -761,6 +784,11 @@ function App() {
       .catch((err) => {
         console.error(err);
         timeline.end("scene");
+        // Past the boundary somewhere between the vertices the map checked.
+        if (err instanceof HttpError && err.status === 422) {
+          showNotice(outsideMessage());
+          rearmDrawing();
+        }
       });
   }
 
@@ -870,6 +898,7 @@ function App() {
               )}
         </div>
       )}
+      {notice && <div className="map-notice">{notice}</div>}
       {status === "ready" && (
         <>
           {view === "2d" && (

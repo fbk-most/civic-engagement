@@ -21,6 +21,7 @@ import { buildPaths } from "./builders/paths";
 import { buildVegetation } from "./builders/vegetation";
 import { buildForest } from "./builders/forest";
 import { buildWater } from "./builders/water";
+import { buildBoundary } from "./builders/boundary";
 import { buildTerrainSurface } from "./builders/terrainSurface";
 import { paintCovers } from "./builders/coverPaint";
 import { ACTIVE_PROVIDER } from "./builders/buildings";
@@ -150,6 +151,8 @@ export async function buildScene(
 
   for (const build of scene3d.parts) parts.push(await build({ elements, covers, anchor, materials, terrain }));
   parts.push(buildWater(covers, anchor, terrain));
+  // Only a surveyed boundary is drawn, as in the 2D map (see map/layers.ts).
+  if (scene.boundary_status === "surveyed") parts.push(buildBoundary(scene.site_boundary, anchor, terrain));
   for (const part of parts) group.add(part.object);
 
   return {

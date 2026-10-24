@@ -14,7 +14,14 @@
 import * as THREE from "three";
 import { addLampLighting } from "./lampLighting";
 import { loadGroundTextures, type GroundTextureSet } from "./assets";
-import { facadeEmissiveTexture, facadeNormalTexture, facadePatternTexture, facadeRoughnessTexture } from "./facade";
+import {
+  facadeEmissiveTexture,
+  facadeNormalTexture,
+  facadePatternTexture,
+  facadeRoughnessTexture,
+  woodFacadeNormalTexture,
+  woodFacadeTexture,
+} from "./facade";
 import { hashString } from "./hash";
 import { daylightFraction } from "./sun";
 import { activePack } from "../pack";
@@ -99,11 +106,23 @@ const DEFAULT_FACADE_PALETTE = [0xd6c9b0, 0xcfc4ae, 0xd9cdb6, 0xc8bda8, 0xded2bb
 
 const ROOF_COLOR = 0x8a5a44;
 
+// Tints over the wooden facade's own colours (see facade.ts), by a hash of
+// the building: larch weathers from brown to grey.
+const WOOD_TINTS = [0xffffff, 0xf2e6da, 0xe0dcd8];
+
 // Same warm tone as the urban pack's streetlights (their
 // LIGHT_COLOR) — a square at night should read as one consistent colour
 // temperature, not lamps and windows arguing with each other.
 const WINDOW_GLOW_COLOR = 0xffcc88;
 const WINDOW_EMISSIVE_MAX = 1.4;
+
+/** A roof's colour: `tint` is the median roof colour sampled from the
+ * orthophoto at ingestion time (see civic_engagement/ingestion/ortofoto.py)
+ * — real per-building colour where the site has it, the generic default
+ * elsewhere. In the working (linear) colour space, as vertex colours are. */
+export function roofColor(tint?: string): THREE.Color {
+  return new THREE.Color(tint ? parseInt(tint.slice(1), 16) : ROOF_COLOR);
+}
 
 /** Cut-off for foliage cards. Below 0.5 so crowns don't thin out as the mip
  * chain averages alpha down with distance, above the atlas's deepest-mip alpha
@@ -333,8 +352,16 @@ export class MaterialLibrary {
 
   /** Facade colour is keyed on the building kind when OSM knows it, otherwise
    * picked from a palette by a hash of the element id — a piazza of identical
-   * boxes in one flat grey is the thing that most reads as "not real". */
-  facade(elementId: string, buildingKind?: string): THREE.MeshStandardMaterial {
+   * boxes in one flat grey is the thing that most reads as "not real". A
+   * wooden building (`wallMaterial`, OSM's `building:material` or a pack's
+   * guess) is a barn: see `woodFacadeTexture`. */
+  facade(elementId: string, buildingKind?: string, wallMaterial?: string): THREE.MeshStandardMaterial {
+    if (wallMaterial === "wood") {
+      const tint = WOOD_TINTS[hashString(elementId) % WOOD_TINTS.length];
+      return this.get(`facade:wood:${tint}`, () =>
+        toMaterial({ color: tint, roughness: 0.9 }, { map: woodFacadeTexture(), normalMap: woodFacadeNormalTexture() })
+      );
+    }
     const known = buildingKind ? FACADE_COLORS[buildingKind] : undefined;
     const color =
       known ?? DEFAULT_FACADE_PALETTE[hashString(elementId) % DEFAULT_FACADE_PALETTE.length];
@@ -367,12 +394,10 @@ export class MaterialLibrary {
     for (const material of this.facadeMaterials) material.emissiveIntensity = intensity;
   }
 
-  /** `tint` is the median roof colour sampled from the 2015 orthophoto at
-   * ingestion time (see civic_engagement/ingestion/ortofoto.py) — real per-building
-   * colour where the site has it, the generic default elsewhere. */
-  roof(tint?: string): THREE.MeshStandardMaterial {
-    const color = tint ? parseInt(tint.slice(1), 16) : ROOF_COLOR;
-    return this.get(`roof:${color}`, () => toMaterial({ color, roughness: 0.8 }));
+  /** One for every roof: each roof's colour is its vertices' (see
+   * `roofColor`). */
+  roof(): THREE.MeshStandardMaterial {
+    return this.get("roof", () => toMaterial({ color: 0xffffff, roughness: 0.8 }, { vertexColors: true }));
   }
 
   /** Broadleaf clusters only — evergreens use `needles()` below, which

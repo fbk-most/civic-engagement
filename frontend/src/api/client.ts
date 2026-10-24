@@ -71,8 +71,18 @@ export async function createIntervention(data: InterventionCreate, t: number = 0
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error(`POST /api/interventions failed: ${res.status}`);
+  if (!res.ok) throw new HttpError(`POST /api/interventions failed: ${res.status}`, res.status);
   return res.json();
+}
+
+/** A failed request, with its HTTP status. */
+export class HttpError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
 }
 
 export async function updateIntervention(

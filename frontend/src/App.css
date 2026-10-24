@@ -405,6 +405,21 @@
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 }
 
+/* A short message over the map, centred under the top bar. */
+.map-notice {
+  position: absolute;
+  top: calc(var(--top-bar-height) + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 14px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+}
+
 .left-rail {
   position: absolute;
   top: calc(var(--top-bar-height) + 12px);

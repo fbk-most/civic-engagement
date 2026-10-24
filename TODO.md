@@ -17,11 +17,6 @@ This is the core's list. Each domain pack keeps its own, in its repository
   3D life into the core's viewer).
 - **The map's opening centre** (`frontend/src/map/mapSetup.ts`) is Piazza
   Dante's: take it from the site.
-- **Port urban to the current core** (it's pinned to `c94b073c`): the
-  buildings from `civic_engagement/ingestion/buildings.py` (done in urban's
-  working copy, verified identical, not committed), the tree source's
-  `elements`, and rural's fixes to `scripts/core.py` (npm reinstalls the
-  named core, and a fresh copy of a local one) and its pre-push hook.
 
 ## Interface
 
@@ -40,6 +35,25 @@ This is the core's list. Each domain pack keeps its own, in its repository
   covering the map; the 3D overview ("Torna alla vista d'insieme") uses a
   fixed angle and distance.
 
+## 3D view
+
+- **The boundary through the trees but not the hills**: today the site's
+  boundary line (`three/builders/boundary.ts`) is hidden by whatever is in
+  front of it; drawn through everything it showed stretches behind ridges,
+  and a faint copy where hidden didn't tell trees from hills at eye level.
+  To be hidden by the terrain only: a terrain-only depth pass each frame
+  (one more terrain draw) tested in the line's shader (both depth buffers,
+  reversed and logarithmic), or rays against the terrain on the CPU when
+  the camera moves (some ms, and lagging while flying).
+- **Cascaded shadow maps**: one shadow map over a scene of some km (the
+  rural pack's, 500 m past the boundary) is coarse up close; split it by
+  distance from the camera.
+- **Whole windows**: the facade is a tiled texture (see `three/facade.ts`),
+  one window per bay and storey from the building's lowest ground, so on a
+  slope the windows start underground, and the eaves and the gables cut
+  them anywhere. Windows fitted to each wall: whole storeys above the
+  ground, none cut by the roof, maybe a door.
+
 ## Terrain
 
 - **Bumpy streets and pavements on a city's terrain**: with Piazza Dante's
@@ -47,10 +61,11 @@ This is the core's list. Each domain pack keeps its own, in its repository
   probably measurement artefacts or noise rather than real relief, and
   look bumpy; the urban demo runs flat (`?terrain=off`) for this reason.
   The grid builder now averages the DTM over each cell (no more aliasing)
-  and can shape the ground under lines (`TerrainLine`, used by the rural
-  pack for its roads and streams): for a square, shape it under the paved
-  areas too (polygons, not lines yet), and check that a smoothed square
-  still drains the way the real one does.
+  and shapes the ground under lines (`TerrainLine`: the rural pack's roads
+  and streams, the urban pack's streets and paths, which looked fine);
+  still to do: shape it under the paved areas too (polygons, not lines
+  yet), check that a smoothed square still drains the way the real one 
+  does, and let the urban demo open with its terrain.
 
 ## Forest rendering
 

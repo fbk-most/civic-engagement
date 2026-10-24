@@ -164,33 +164,45 @@ function drawHeightField(ctx: CanvasRenderingContext2D, g: Geometry): void {
 export function facadeNormalTexture(): THREE.Texture {
   if (facadeNormal) return facadeNormal;
 
-  const g = geometry();
   const heightCanvas = document.createElement("canvas");
   heightCanvas.width = TEXTURE_PX;
   heightCanvas.height = TEXTURE_PX;
-  const heightCtx = heightCanvas.getContext("2d")!;
-  drawHeightField(heightCtx, g);
-  const heightData = heightCtx.getImageData(0, 0, TEXTURE_PX, TEXTURE_PX).data;
-  const heightAt = (x: number, y: number) => heightData[(y * TEXTURE_PX + x) * 4] / 255;
+  drawHeightField(heightCanvas.getContext("2d")!, geometry());
+  const texture = normalMapOf(heightCanvas, BAY_WIDTH_M, STOREY_HEIGHT_M, RELIEF_M, true);
+  texture.repeat.set(1 / BAY_WIDTH_M, 1 / STOREY_HEIGHT_M);
 
-  const texelWorldXM = BAY_WIDTH_M / TEXTURE_PX;
-  const texelWorldYM = STOREY_HEIGHT_M / TEXTURE_PX;
+  facadeNormal = texture;
+  return texture;
+}
+
+/** The normal map of a height canvas (mid-grey the wall's plane, black
+ * `reliefM` behind it) spanning `widthM` by `heightM`; repeating across, and
+ * up too if `wrapY`. */
+function normalMapOf(heightCanvas: HTMLCanvasElement, widthM: number, heightM: number, reliefM: number, wrapY: boolean): THREE.Texture {
+  const w = heightCanvas.width;
+  const h = heightCanvas.height;
+  const heightData = heightCanvas.getContext("2d")!.getImageData(0, 0, w, h).data;
+  const heightAt = (x: number, y: number) => heightData[(y * w + x) * 4] / 255;
+  const row = (y: number) => (wrapY ? (y + h) % h : Math.min(h - 1, Math.max(0, y)));
+
+  const texelWorldXM = widthM / w;
+  const texelWorldYM = heightM / h;
 
   const canvas = document.createElement("canvas");
-  canvas.width = TEXTURE_PX;
-  canvas.height = TEXTURE_PX;
+  canvas.width = w;
+  canvas.height = h;
   const ctx = canvas.getContext("2d")!;
-  const image = ctx.createImageData(TEXTURE_PX, TEXTURE_PX);
+  const image = ctx.createImageData(w, h);
 
-  for (let y = 0; y < TEXTURE_PX; y++) {
-    for (let x = 0; x < TEXTURE_PX; x++) {
-      const xL = heightAt((x - 1 + TEXTURE_PX) % TEXTURE_PX, y);
-      const xR = heightAt((x + 1) % TEXTURE_PX, y);
-      const yU = heightAt(x, (y - 1 + TEXTURE_PX) % TEXTURE_PX);
-      const yD = heightAt(x, (y + 1) % TEXTURE_PX);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const xL = heightAt((x - 1 + w) % w, y);
+      const xR = heightAt((x + 1) % w, y);
+      const yU = heightAt(x, row(y - 1));
+      const yD = heightAt(x, row(y + 1));
 
-      const dHdx = ((xR - xL) * RELIEF_M) / (2 * texelWorldXM);
-      const dHdy = ((yD - yU) * RELIEF_M) / (2 * texelWorldYM);
+      const dHdx = ((xR - xL) * reliefM) / (2 * texelWorldXM);
+      const dHdy = ((yD - yU) * reliefM) / (2 * texelWorldYM);
 
       let nx = -dHdx;
       let ny = -dHdy;
@@ -200,7 +212,7 @@ export function facadeNormalTexture(): THREE.Texture {
       ny /= len;
       nz /= len;
 
-      const idx = (y * TEXTURE_PX + x) * 4;
+      const idx = (y * w + x) * 4;
       image.data[idx] = Math.round((nx * 0.5 + 0.5) * 255);
       image.data[idx + 1] = Math.round((ny * 0.5 + 0.5) * 255);
       image.data[idx + 2] = Math.round((nz * 0.5 + 0.5) * 255);
@@ -214,11 +226,8 @@ export function facadeNormalTexture(): THREE.Texture {
   // skews every sampled normal.
   texture.colorSpace = THREE.NoColorSpace;
   texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(1 / BAY_WIDTH_M, 1 / STOREY_HEIGHT_M);
+  texture.wrapT = wrapY ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
   texture.anisotropy = 8;
-
-  facadeNormal = texture;
   return texture;
 }
 
@@ -300,5 +309,178 @@ export function facadeEmissiveTexture(): THREE.Texture {
   texture.repeat.set(1 / (WINDOW_GRID_N * BAY_WIDTH_M), 1 / (WINDOW_GRID_N * STOREY_HEIGHT_M));
 
   facadeEmissive = texture;
+  return texture;
+}
+
+// A barn of the Alps (a "tabià"): a ground floor of stone, with a small
+// window and a door, and above it walls of vertical larch boards. One tile
+// is a stretch of wall from the ground up; the boards run on past its top
+// (the texture clamps there, and boards are the same all the way up), so a
+// gable's peak is boards too.
+const WOOD_TILE_WIDTH_M = 8;
+const WOOD_TILE_HEIGHT_M = 6.4;
+const WOOD_PX_X = 512;
+const WOOD_PX_Y = 512;
+const STONE_HEIGHT_M = 2.4;
+const BEAM_HEIGHT_M = 0.2;
+const WOOD_RELIEF_M = 0.04;
+
+let woodTexture: THREE.Texture | null = null;
+
+/** A wall's v is 1 − its height above the building's base, in metres
+ * (three's ExtrudeGeometry; the gables' too, see roofs.ts): turned back
+ * into the height, so the tile stands on the ground. */
+function fromTheGround(texture: THREE.Texture): void {
+  texture.repeat.set(1 / WOOD_TILE_WIDTH_M, -1 / WOOD_TILE_HEIGHT_M);
+  texture.offset.set(0, 1 / WOOD_TILE_HEIGHT_M);
+}
+let woodNormal: THREE.Texture | null = null;
+
+/** The tile's parts, in canvas pixels (y down from the tile's top; the
+ * ground is at the bottom). Seeded, so the colour and the relief agree. */
+interface WoodLayout {
+  stoneTop: number;
+  beamTop: number;
+  stones: { x: number; y: number; w: number; h: number; shade: number }[];
+  boards: { x: number; w: number; shade: number }[];
+  window: { x: number; y: number; w: number; h: number };
+  door: { x: number; y: number; w: number; h: number };
+}
+
+function mulberry32(seed: number): () => number {
+  return () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+let woodLayoutCache: WoodLayout | null = null;
+
+function woodLayout(): WoodLayout {
+  if (woodLayoutCache) return woodLayoutCache;
+  const random = mulberry32(7);
+  const pxX = WOOD_PX_X / WOOD_TILE_WIDTH_M;
+  const pxY = WOOD_PX_Y / WOOD_TILE_HEIGHT_M;
+  const stoneTop = WOOD_PX_Y - STONE_HEIGHT_M * pxY;
+  const beamTop = stoneTop - BEAM_HEIGHT_M * pxY;
+
+  const stones: WoodLayout["stones"] = [];
+  for (let y = WOOD_PX_Y; y > stoneTop; ) {
+    const h = Math.min((0.22 + random() * 0.18) * pxY, y - stoneTop);
+    // Each course starts somewhere else, and wraps around the tile's sides.
+    const start = -random() * 0.5 * pxX;
+    for (let x = start; x < WOOD_PX_X + start; ) {
+      const w = Math.min((0.3 + random() * 0.45) * pxX, WOOD_PX_X + start - x);
+      stones.push({ x, y: y - h, w, h, shade: random() });
+      x += w;
+    }
+    y -= h;
+  }
+
+  const boards: WoodLayout["boards"] = [];
+  for (let x = 0; x < WOOD_PX_X; ) {
+    // The last board ends at the tile's edge, so the tiles join.
+    const w = Math.min((0.16 + random() * 0.1) * pxX, WOOD_PX_X - x);
+    boards.push({ x, w, shade: random() });
+    x += w;
+  }
+
+  woodLayoutCache = {
+    stoneTop,
+    beamTop,
+    stones,
+    boards,
+    window: { x: 1.5 * pxX, y: WOOD_PX_Y - 1.8 * pxY, w: 0.6 * pxX, h: 0.6 * pxY },
+    door: { x: 5 * pxX, y: WOOD_PX_Y - 1.9 * pxY, w: 1.1 * pxX, h: 1.9 * pxY },
+  };
+  return woodLayoutCache;
+}
+
+/** In the wood's and the stone's own colours (the material's tint only
+ * shades them, see `MaterialLibrary.facade`). */
+export function woodFacadeTexture(): THREE.Texture {
+  if (woodTexture) return woodTexture;
+  const l = woodLayout();
+  const canvas = document.createElement("canvas");
+  canvas.width = WOOD_PX_X;
+  canvas.height = WOOD_PX_Y;
+  const ctx = canvas.getContext("2d")!;
+
+  // Boards: larch, darkened by the sun, each a little different, the gaps
+  // between them dark.
+  for (const b of l.boards) {
+    const light = 26 + b.shade * 9;
+    ctx.fillStyle = `hsl(26, 24%, ${light}%)`;
+    ctx.fillRect(b.x, 0, b.w, l.beamTop);
+    ctx.fillStyle = "rgba(0, 0, 0, 0.12)";
+    for (let k = 1; k < 4; k++) ctx.fillRect(b.x + (b.w * k) / 4 + (b.shade - 0.5) * 3, 0, 1, l.beamTop);
+    ctx.fillStyle = "#1c1510";
+    ctx.fillRect(b.x, 0, 1.5, l.beamTop);
+  }
+
+  // The beam the boards stand on.
+  ctx.fillStyle = "#3e2f23";
+  ctx.fillRect(0, l.beamTop, WOOD_PX_X, l.stoneTop - l.beamTop);
+
+  // Stone, rendered with lime, the mortar lighter than the stones.
+  ctx.fillStyle = "#b9b2a5";
+  ctx.fillRect(0, l.stoneTop, WOOD_PX_X, WOOD_PX_Y - l.stoneTop);
+  for (const s of l.stones) {
+    ctx.fillStyle = `hsl(35, 8%, ${52 + s.shade * 16}%)`;
+    for (const dx of [0, WOOD_PX_X]) ctx.fillRect(s.x + dx + 1.5, s.y + 1.5, s.w - 3, s.h - 3);
+  }
+
+  // A small window, and a door of darker boards.
+  const { window: win, door } = l;
+  ctx.fillStyle = "#4a3828";
+  ctx.fillRect(win.x - 4, win.y - 4, win.w + 8, win.h + 8);
+  ctx.fillStyle = "#1d1a17";
+  ctx.fillRect(win.x, win.y, win.w, win.h);
+  ctx.fillStyle = "#33261b";
+  ctx.fillRect(door.x, door.y, door.w, door.h);
+  ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+  for (let k = 1; k < 5; k++) ctx.fillRect(door.x + (door.w * k) / 5, door.y, 1.5, door.h);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  fromTheGround(texture);
+  texture.anisotropy = 8;
+  woodTexture = texture;
+  return texture;
+}
+
+export function woodFacadeNormalTexture(): THREE.Texture {
+  if (woodNormal) return woodNormal;
+  const l = woodLayout();
+  const canvas = document.createElement("canvas");
+  canvas.width = WOOD_PX_X;
+  canvas.height = WOOD_PX_Y;
+  const ctx = canvas.getContext("2d")!;
+
+  ctx.fillStyle = "#808080";
+  ctx.fillRect(0, 0, WOOD_PX_X, WOOD_PX_Y);
+  ctx.fillStyle = "#202020"; // the gaps between the boards
+  for (const b of l.boards) ctx.fillRect(b.x, 0, 1.5, l.beamTop);
+  ctx.fillStyle = "#b0b0b0"; // the beam stands out
+  ctx.fillRect(0, l.beamTop, WOOD_PX_X, l.stoneTop - l.beamTop);
+  ctx.fillStyle = "#505050"; // mortar, behind the stones' faces
+  ctx.fillRect(0, l.stoneTop, WOOD_PX_X, WOOD_PX_Y - l.stoneTop);
+  for (const s of l.stones) {
+    const v = Math.round(128 + s.shade * 40);
+    ctx.fillStyle = `rgb(${v}, ${v}, ${v})`;
+    for (const dx of [0, WOOD_PX_X]) ctx.fillRect(s.x + dx + 1.5, s.y + 1.5, s.w - 3, s.h - 3);
+  }
+  ctx.fillStyle = "#000000"; // the window's recess
+  ctx.fillRect(l.window.x, l.window.y, l.window.w, l.window.h);
+  ctx.fillStyle = "#606060"; // the door, set back a little
+  ctx.fillRect(l.door.x, l.door.y, l.door.w, l.door.h);
+
+  const texture = normalMapOf(canvas, WOOD_TILE_WIDTH_M, WOOD_TILE_HEIGHT_M, WOOD_RELIEF_M, false);
+  fromTheGround(texture);
+  woodNormal = texture;
   return texture;
 }

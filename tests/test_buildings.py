@@ -2,9 +2,12 @@
 the height cascade, and a site's defaults for what the data doesn't say."""
 
 import geopandas as gpd
+import numpy as np
 from shapely.geometry import LineString, Point, box
 
 from civic_engagement.ingestion.buildings import BuildingDefaults, building_elements, footprints
+from civic_engagement.ingestion.lidar import LidarHeightModel, RoofForm
+from civic_engagement.ingestion.raster import Grid
 
 # About 1 m in degrees, near 46° N (longitude) and anywhere (latitude).
 M_LNG = 1 / 77_300
@@ -77,6 +80,9 @@ class _Lidar:
     def sample(self, polygon_utm):
         return self.stats
 
+    def roof_form(self, polygon_utm):
+        return None
+
 
 def test_roof_samples_give_eave_ridge_and_a_missing_building_the_defaults():
     from civic_engagement.ingestion.lidar import BuildingLidarStats
@@ -102,3 +108,31 @@ def test_roof_samples_give_eave_ridge_and_a_missing_building_the_defaults():
     large = footprints(_features([{"geometry": _square(0, 30), "building": "yes"}]))
     missing = BuildingLidarStats(height_p90=0.0, height_max=8.0, height_std=1.0, roof_share=0.1, roof_low=3.0, roof_high=7.0)
     assert building_elements(large, defaults, _Lidar(missing)) == []
+
+
+def _roof_model(roof) -> LidarHeightModel:
+    """A LiDAR model over a 40 m square at 0.5 m: flat ground at 100 m, and
+    the building's surface `roof(x, y)` metres above it (x, y from the
+    square's centre)."""
+    centres = (np.arange(80) + 0.5) * 0.5 - 20
+    x, y = np.meshgrid(centres, -centres)
+    dtm = np.full((80, 80), 100.0)
+    return LidarHeightModel(Grid(-20, 20, 0.5, 0.5, dtm + roof(x, y)), Grid(-20, 20, 0.5, 0.5, dtm))
+
+
+def test_roof_form_tells_a_gable_s_ridge_and_a_hip():
+    # 12 m east-west by 8 m: eaves at 5 m, the ridge 3 m above them.
+    footprint = box(-6, -4, 6, 4)
+    along = _roof_model(lambda x, y: 8 - 0.75 * np.abs(y))  # ridge east-west
+    across = _roof_model(lambda x, y: 8 - 0.5 * np.abs(x))  # ridge north-south
+    hipped = _roof_model(lambda x, y: 8 - 0.75 * np.maximum(np.abs(y), np.abs(x) - 2))
+
+    def ridge_east_west(form: RoofForm) -> bool:
+        return abs(form.ridge[0]) > 0.99
+
+    form = along.roof_form(footprint)
+    assert form.shape == "gabled" and ridge_east_west(form)
+    form = across.roof_form(footprint)
+    assert form.shape == "gabled" and not ridge_east_west(form)
+    form = hipped.roof_form(footprint)
+    assert form.shape == "hipped" and ridge_east_west(form)

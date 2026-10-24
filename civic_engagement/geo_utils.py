@@ -26,6 +26,18 @@ def to_projected_many(geojsons: list[dict]) -> list[BaseGeometry]:
     return list(gpd.GeoSeries([shape(g) for g in geojsons], crs=WGS84_CRS).to_crs(PROJECTED_CRS))
 
 
+# How far past the boundary a card may reach: a point clicked on the line,
+# a polygon's vertex snapped a hair outside.
+BOUNDARY_TOLERANCE_M = 1.0
+
+
+def within_boundary(geojson: dict, boundary: dict) -> bool:
+    """Whether a geometry lies within the boundary (both WGS84 GeoJSON),
+    give or take BOUNDARY_TOLERANCE_M."""
+    geometry, area = to_projected_many([geojson, boundary])
+    return geometry.within(area.buffer(BOUNDARY_TOLERANCE_M))
+
+
 def area_m2(geojson: dict) -> float:
     return to_projected(geojson).area
 

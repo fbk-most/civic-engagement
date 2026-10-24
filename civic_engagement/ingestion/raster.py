@@ -53,6 +53,13 @@ def sample_polygon(polygon_utm: BaseGeometry, grid: Grid, erode_m: float = 0.5) 
     polygon for footprints too small to survive that (a few small canopies in
     this baseline). Returns an empty array if nothing lands inside.
     """
+    return sample_polygon_xy(polygon_utm, grid, erode_m)[0]
+
+
+def sample_polygon_xy(
+    polygon_utm: BaseGeometry, grid: Grid, erode_m: float = 0.5
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """As `sample_polygon`, with the cells' centres: values, x, y."""
     import shapely
 
     shrunk = polygon_utm.buffer(-erode_m)
@@ -66,7 +73,7 @@ def sample_polygon(polygon_utm: BaseGeometry, grid: Grid, erode_m: float = 0.5) 
     row_lo = max(int((grid.origin_y - maxy) / grid.pixel_size_y) - 1, 0)
     row_hi = min(int((grid.origin_y - miny) / grid.pixel_size_y) + 2, nrows)
     if col_lo >= col_hi or row_lo >= row_hi:
-        return grid.array[0:0]
+        return grid.array[0:0], np.empty(0), np.empty(0)
 
     cols = np.arange(col_lo, col_hi)
     rows = np.arange(row_lo, row_hi)
@@ -75,4 +82,4 @@ def sample_polygon(polygon_utm: BaseGeometry, grid: Grid, erode_m: float = 0.5) 
     xx, yy = np.meshgrid(xs, ys)
 
     mask = shapely.contains_xy(shrunk, xx, yy)
-    return grid.array[row_lo:row_hi, col_lo:col_hi][mask]
+    return grid.array[row_lo:row_hi, col_lo:col_hi][mask], xx[mask], yy[mask]

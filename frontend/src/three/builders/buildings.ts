@@ -18,10 +18,10 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { DiscreteElement } from "../../api/types";
 import type { GeoAnchor } from "../geo";
-import type { MaterialLibrary } from "../materials";
-import { geometryToShapes, outlineHeightRange } from "../shapes";
+import { roofColor, type MaterialLibrary } from "../materials";
+import { outlineHeightRange } from "../shapes";
 import type { Terrain } from "../terrain";
-import { buildRoof } from "./roofs";
+import { buildRoof, wallShapes } from "./roofs";
 
 export interface SceneContext {
   anchor: GeoAnchor;
@@ -35,6 +35,8 @@ export interface BuildingGeometryProvider {
 }
 
 const DEFAULT_HEIGHT_M = 10;
+/** A roof's underside and edges: wood, darkened (see roofs.ts). */
+const SOFFIT_COLOR = new THREE.Color(0x4a3a2c);
 
 export const extrusionProvider: BuildingGeometryProvider = {
   id: "osm-extrusion",
@@ -45,7 +47,8 @@ export const extrusionProvider: BuildingGeometryProvider = {
 
     for (const building of buildings) {
       const height = Number(building.properties.height ?? DEFAULT_HEIGHT_M);
-      const shapes = geometryToShapes(anchor, building.geometry);
+      const roofShape = building.properties.roof_shape as string | undefined;
+      const shapes = wallShapes(anchor, building.geometry, roofShape);
       if (shapes.length === 0 || !(height > 0)) continue;
 
       const geometry = new THREE.ExtrudeGeometry(shapes, {
@@ -61,7 +64,9 @@ export const extrusionProvider: BuildingGeometryProvider = {
       const [base] = outlineHeightRange(terrain, anchor, building.geometry);
 
       const kind = building.properties.building_kind as string | undefined;
-      const mesh = new THREE.Mesh(geometry, materials.facade(building.id, kind));
+      const wallMaterial = building.properties.wall_material as string | undefined;
+      const facade = materials.facade(building.id, kind, wallMaterial);
+      const mesh = new THREE.Mesh(geometry, facade);
       mesh.position.y = base;
       mesh.castShadow = true;
       // Buildings shade each other across a square this size, so they receive
@@ -70,11 +75,19 @@ export const extrusionProvider: BuildingGeometryProvider = {
       mesh.name = building.id;
       group.add(mesh);
 
-      const roofShape = building.properties.roof_shape as string | undefined;
       const ridgeHeightM = building.properties.ridge_height_m as number | undefined;
-      const roofColor = building.properties.roof_color as string | undefined;
-      const roof = buildRoof(anchor, building.geometry, height, roofShape, ridgeHeightM, materials.roof(roofColor));
+      const ridgeBearingDeg = building.properties.ridge_bearing_deg as number | undefined;
+      const roofMaterial = materials.roof();
+      const roof = buildRoof(anchor, building.geometry, height, roofShape, ridgeHeightM, ridgeBearingDeg, roofMaterial, facade);
       if (roof) {
+        // One roof material for all, coloured by vertex: each roof its own
+        // colour (the orthophoto's) costs no draw call of its own.
+        const color = roofColor(building.properties.roof_color as string | undefined);
+        roof.traverse((child) => {
+          if (child instanceof THREE.Mesh && child.material === roofMaterial) {
+            paint(child.geometry, child.userData.soffit ? SOFFIT_COLOR : color);
+          }
+        });
         roof.position.y += base;
         group.add(roof);
       }
@@ -83,6 +96,13 @@ export const extrusionProvider: BuildingGeometryProvider = {
     return mergeByMaterial(group);
   },
 };
+
+function paint(geometry: THREE.BufferGeometry, color: THREE.Color): void {
+  const count = geometry.getAttribute("position").count;
+  const colors = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) color.toArray(colors, i * 3);
+  geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+}
 
 /** `root`'s meshes merged into one per material: a few draw calls for the
  * whole site rather than two per building (walls and roof), each drawn
