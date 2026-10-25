@@ -27,11 +27,21 @@ const ROOF_THICKNESS_M = 0.2;
 // occasional single small bay) mostly land above 0.85; true L/T/cross shapes
 // sit at 0.36-0.78 (see the exploration that picked this threshold).
 const RECTANGULARITY_THRESHOLD = 0.85;
+// A footprint that rectangular is one block, under one roof, unless it's a
+// block and a wing (a church's nave and its narrower apse, a house and its
+// bay), each at least this wide: under one roof, the wing's walls would stand
+// metres inside its eaves. A narrower strip is the survey's, or a step in a
+// wall: the roof's overhang covers it.
+const MIN_WING_M = 3;
 
 // Fallback rise for a real OSM `roof:shape` tag with no LiDAR ridge height
 // behind it (a handful of buildings) — a moderate ~35° pitch look, not a
 // measurement.
 const DEFAULT_RISE_FRACTION = 0.35;
+// The steepest a roof gets (rise over half its width: 45°), whatever its
+// ridge height: a LiDAR ridge over a narrow footprint may be a taller
+// neighbour's.
+const MAX_PITCH = 1;
 
 type Point = [number, number, number];
 
@@ -360,19 +370,19 @@ export function buildRoof(
   if (!found || found.across <= 0 || found.along <= 0) return buildFlatParapet();
   const obb = ridgeBearingDeg === undefined ? found : turnedTo(found, ridgeBearingDeg);
 
-  const rectangularity = polygonArea(rings[0]) / (obb.across * obb.along);
-  if (rectangularity >= RECTANGULARITY_THRESHOLD) {
-    const ridgeY = Math.max(eaveY + 0.3, ridgeHeightM ?? eaveY + Math.min(obb.across, obb.along) * DEFAULT_RISE_FRACTION);
-    return pitchedRoof(obb, shape, eaveY, ridgeY, material, wallMaterial) ?? buildFlatParapet();
-  }
-
   // Wings: a roof each, of one pitch (the LiDAR's ridge is the largest
   // part's), so that the narrower wings' ridges are lower.
   const plan = wings(anchor, geometry, shape);
-  if (!plan) return buildFlatParapet();
+  if (!plan) {
+    const rectangularity = polygonArea(rings[0]) / (obb.across * obb.along);
+    if (rectangularity < RECTANGULARITY_THRESHOLD) return buildFlatParapet();
+    const rise = ridgeHeightM !== undefined ? ridgeHeightM - eaveY : Math.min(obb.across, obb.along) * DEFAULT_RISE_FRACTION;
+    const ridgeY = eaveY + Math.max(0.3, Math.min(rise, (MAX_PITCH * obb.across) / 2));
+    return pitchedRoof(obb, shape, eaveY, ridgeY, material, wallMaterial) ?? buildFlatParapet();
+  }
   const boxes = plan.rects.roofs.map((r) => boxOf(r, plan.frame));
   const main = boxes.reduce((a, b) => (a.across * a.along >= b.across * b.along ? a : b));
-  const pitch = ridgeHeightM !== undefined ? (ridgeHeightM - eaveY) / (main.across / 2) : 2 * DEFAULT_RISE_FRACTION;
+  const pitch = Math.min(MAX_PITCH, ridgeHeightM !== undefined ? (ridgeHeightM - eaveY) / (main.across / 2) : 2 * DEFAULT_RISE_FRACTION);
   const roof = new THREE.Group();
   for (const box of boxes) {
     const part = pitchedRoof(box, shape, eaveY, eaveY + Math.max(0.3, (pitch * box.across) / 2), material, wallMaterial);
@@ -382,8 +392,9 @@ export function buildRoof(
 }
 
 /** A footprint as wings (see roofParts.ts), if it is one and its roof is
- * one a footprint of wings may have: not rectangular (that's one roof), one
- * polygon without a courtyard. */
+ * one a footprint of wings may have: one polygon without a courtyard, not
+ * rectangular (that's one roof) unless a wing of it is wide enough to be one
+ * (see `MIN_WING_M`). */
 function wings(
   anchor: GeoAnchor,
   geometry: GeoJSON.Geometry,
@@ -394,9 +405,13 @@ function wings(
   if (rings.length !== 1) return null;
   const frame = minAreaOBB(convexHull(rings[0]));
   if (!frame || frame.across <= 0 || frame.along <= 0) return null;
-  if (polygonArea(rings[0]) / (frame.across * frame.along) >= RECTANGULARITY_THRESHOLD) return null;
   const rects = footprintRects(rings[0], frame.angle, frame.center);
-  return rects ? { frame, rects } : null;
+  if (!rects) return null;
+  if (polygonArea(rings[0]) / (frame.across * frame.along) >= RECTANGULARITY_THRESHOLD) {
+    const narrow = (r: Rect) => Math.min(r.x1 - r.x0, r.z1 - r.z0) < MIN_WING_M;
+    if (rects.walls.length < 2 || rects.walls.some(narrow)) return null;
+  }
+  return { frame, rects };
 }
 
 /** The outline a building's walls stand on: its footprint's, or, for a

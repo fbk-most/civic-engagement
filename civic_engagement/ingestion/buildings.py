@@ -155,7 +155,9 @@ def building_elements(
         polygon_utm = to_projected(geojson) if (lidar or ortofoto) else None
         stats = lidar.sample(polygon_utm) if lidar else None
         if stats is not None and defaults.roof_samples and stats.roof_share < defaults.roof_samples_min_share:
-            if polygon_utm.area > defaults.roof_samples_max_missing_m2:
+            # (A canopy, OSM's building=roof, may well be missing: the
+            # survey's building model leaves out what's open underneath.)
+            if polygon_utm.area > defaults.roof_samples_max_missing_m2 and kinds[i] != "roof":
                 print(f"building-{i}: {polygon_utm.area:.0f} m², but {stats.roof_share:.0%} of it a roof in the LiDAR: left out")
                 continue
             stats = None
@@ -164,7 +166,11 @@ def building_elements(
         if stats is not None and defaults.roof_samples:
             rise = stats.roof_high - stats.roof_low
             if rise >= defaults.roof_samples_pitch_m:
-                height = stats.roof_low
+                # Rising more than a roof does, the low samples are another
+                # building's, a lower one inside the same footprint (an
+                # annex, the roofs in a courtyard): the eave is the ridge's,
+                # less the largest rise.
+                height = max(stats.roof_low, stats.roof_high - defaults.roof_max_rise_m)
                 form = lidar.roof_form(polygon_utm)
                 if form is not None:
                     roof_shape = roof_shape or ("hipped" if form.shape == "hipped" else pitched)
