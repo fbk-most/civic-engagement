@@ -5,7 +5,8 @@ import { ageClassLabel, speciesLabel, yearLabel } from "../i18n/labels";
 interface Props {
   element: DiscreteElement;
   onClose: () => void;
-  onReplant: () => void;
+  /** Absent for a viewer, who can't replant. */
+  onReplant?: () => void;
 }
 
 // Read-only: baseline tree identity (species/age/size/cut year) is assigned
@@ -36,7 +37,7 @@ export function TreeIdentityCard({ element, onClose, onReplant }: Props) {
         {props.cut_year === null ? tr("nessuno previsto in questo orizzonte", "none within this horizon") : yearLabel(props.cut_year)}
       </p>
       <div className="param-form__actions">
-        {isStump && (
+        {isStump && onReplant && (
           <button type="button" onClick={onReplant}>
             {tr("Ripianta qui", "Replant here")}
           </button>

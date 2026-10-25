@@ -126,3 +126,17 @@ def cgroup_quota(cpu_max: str) -> int | None:
     <period>" for none), at least one."""
     quota, period = cpu_max.split()
     return None if quota == "max" else max(1, int(quota) // int(period))
+
+
+MECHANISMS = ("open", "pin")
+
+
+@cache
+def auth_mechanism() -> str:
+    """How a request gets its team and role (`CIVIC_ENGAGEMENT_AUTH`, see
+    access.py): "open", the default — no login, one team, everyone an
+    editor — or "pin"."""
+    mechanism = os.environ.get("CIVIC_ENGAGEMENT_AUTH", "open")
+    if mechanism not in MECHANISMS:
+        raise ValueError(f"CIVIC_ENGAGEMENT_AUTH={mechanism!r}: one of {', '.join(MECHANISMS)}")
+    return mechanism

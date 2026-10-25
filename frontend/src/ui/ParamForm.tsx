@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { CardSpec } from "../api/types";
 import { tr } from "../i18n/lang";
-import { cardLabel, optionLabel, paramLabel, yearLabel } from "../i18n/labels";
+import { authorsLabel, cardLabel, optionLabel, paramLabel, yearLabel } from "../i18n/labels";
 
 interface Props {
   card: CardSpec;
@@ -13,6 +13,8 @@ interface Props {
    * one. Shown so it's never a surprise that something doesn't appear
    * before this point. */
   plantedYear?: number;
+  /** An existing card's authors, with teams. */
+  authors?: { created_by?: string | null; updated_by?: string | null };
   onSubmit: (params: Record<string, unknown>) => void;
   onCancel: () => void;
   onDelete?: () => void;
@@ -23,6 +25,7 @@ export function ParamForm({
   initialValues,
   submitLabel = tr("Posiziona", "Place"),
   plantedYear,
+  authors,
   onSubmit,
   onCancel,
   onDelete,
@@ -46,6 +49,7 @@ export function ParamForm({
           <strong>{yearLabel(plantedYear)}</strong>
         </p>
       )}
+      {authors && authorsLabel(authors) && <p className="param-form__authors">{authorsLabel(authors)}</p>}
       {card.params.map((param) => (
         <label key={param.key} className="param-form__field">
           {paramLabel(param)}

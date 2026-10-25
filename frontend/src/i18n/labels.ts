@@ -50,6 +50,17 @@ export function yearLabel(t: number): string {
   return t === 0 ? tr("Ora", "Now") : tr(`+${t}a`, `+${t}y`);
 }
 
+/** Who placed a card, and who last changed it ("Posata da Anna · modificata
+ * da Marco"); "" without teams, where cards have no authors. */
+export function authorsLabel(authors: { created_by?: string | null; updated_by?: string | null }): string {
+  const parts = [];
+  if (authors.created_by) parts.push(tr(`Posata da ${authors.created_by}`, `Placed by ${authors.created_by}`));
+  if (authors.updated_by && authors.updated_by !== authors.created_by) {
+    parts.push(tr(`modificata da ${authors.updated_by}`, `changed by ${authors.updated_by}`));
+  }
+  return parts.join(" · ");
+}
+
 /** One-line "Label: value · Label: value" summary of an intervention's
  * parameters, for the intervention list and the 3D info card. */
 export function summarizeParams(card: CardSpec | undefined, params: Record<string, unknown>): string {

@@ -28,10 +28,11 @@ function cardCount(n: number): string {
   return n === 1 ? tr("1 carta", "1 card") : tr(`${n} carte`, `${n} cards`);
 }
 
-/** Saved scenarios (see civic_engagement/store/scenarios.py): save the session's
- * cards under a name, load a saved set in their place, or start afresh. The
- * session is shared, so a load or a clear changes it for every open window
- * (they follow within seconds); the cards replaced are kept on the server. */
+/** Saved scenarios (see civic_engagement/store/scenarios.py): save the team's
+ * cards under a name, load a saved set — or one of the site's — in their
+ * place, or start afresh. The scene is the team's, so a load or a clear
+ * changes it for every window of the team (they follow within seconds); the
+ * cards replaced are kept on the server. */
 export function ScenarioMenu({ interventionCount, t, onSceneReplaced }: Props) {
   const [open, setOpen] = useState(false);
   const [scenarios, setScenarios] = useState<ScenarioInfo[] | null>(null);
@@ -39,6 +40,10 @@ export function ScenarioMenu({ interventionCount, t, onSceneReplaced }: Props) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  // The team's own, and the site's presets, which every team can load and
+  // none delete.
+  const saved = scenarios?.filter((scenario) => !scenario.preset) ?? [];
+  const presets = scenarios?.filter((scenario) => scenario.preset) ?? [];
 
   function refresh() {
     fetchScenarios()
@@ -151,11 +156,11 @@ export function ScenarioMenu({ interventionCount, t, onSceneReplaced }: Props) {
           <h3>{tr("Scenari salvati", "Saved scenarios")}</h3>
           {scenarios === null ? (
             <p className="scenario-menu__note">{tr("Caricamento…", "Loading…")}</p>
-          ) : scenarios.length === 0 ? (
+          ) : saved.length === 0 ? (
             <p className="scenario-menu__note">{tr("Nessuno scenario salvato.", "No saved scenarios.")}</p>
           ) : (
             <ul className="scenario-menu__list">
-              {scenarios.map((scenario) => (
+              {saved.map((scenario) => (
                 <li key={scenario.id}>
                   <span className="scenario-menu__name">
                     <strong>{scenario.name}</strong>
@@ -179,6 +184,24 @@ export function ScenarioMenu({ interventionCount, t, onSceneReplaced }: Props) {
                 </li>
               ))}
             </ul>
+          )}
+          {presets.length > 0 && (
+            <>
+              <h3>{tr("Scenari del sito", "The site's scenarios")}</h3>
+              <ul className="scenario-menu__list">
+                {presets.map((scenario) => (
+                  <li key={scenario.id}>
+                    <span className="scenario-menu__name">
+                      <strong>{scenario.name}</strong>
+                      <span>{cardCount(scenario.interventions)}</span>
+                    </span>
+                    <button type="button" disabled={busy} onClick={() => handleLoad(scenario)}>
+                      {tr("Carica", "Load")}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
           <form className="scenario-menu__save" onSubmit={handleSave}>
             <label htmlFor="scenario-name">

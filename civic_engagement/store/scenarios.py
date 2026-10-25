@@ -9,11 +9,14 @@ slug of its name):
 A document holding just the list of interventions (the old demo preset
 format) is read too, with its name as the scenario's name.
 
-Two places: the scenarios saved in the session, in the state's storage
-(store/storage.py) under data/<site>/scenarios/, and the site's presets,
-shipped with its data in data/<site>/scenarios/ — the same files unless
-`CIVIC_ENGAGEMENT_STATE` puts the state elsewhere. A saved scenario with a
-preset's id hides it; a preset can't be deleted.
+Two places: the scenarios a team saved, in the state's storage
+(store/storage.py), and the site's presets, shipped with its data in
+data/<site>/scenarios/, which every team can load. A team's library
+(`library`): with the open mechanism, its one team's is
+data/<site>/scenarios/ — the same files as the presets unless
+`CIVIC_ENGAGEMENT_STATE` puts the state elsewhere; with teams (pin),
+data/<site>/scenarios/<team>/. A saved scenario with a preset's id hides
+it; a preset can't be deleted.
 """
 
 import json
@@ -22,7 +25,7 @@ import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
-from civic_engagement.config import SITE
+from civic_engagement.config import SITE, auth_mechanism
 from civic_engagement.models.schema import Intervention, ScenarioInfo
 from civic_engagement.store.storage import LocalStorage, Storage, state_storage
 
@@ -31,14 +34,18 @@ class ScenarioError(Exception):
     """A scenario that can't be read, saved or found; the message says why."""
 
 
-def _site_scenarios() -> tuple[Storage, Storage | None]:
-    saved = state_storage().within(f"{SITE.data_dir}/scenarios")
+def library(team: str = "default") -> tuple[Storage, Storage | None]:
+    """The team's saved scenarios, and the site's presets (None when they're
+    the same documents)."""
     presets = LocalStorage(Path(SITE.data_dir) / "scenarios")
-    same = isinstance(saved, LocalStorage) and saved.location == presets.location
-    return saved, None if same else presets
+    if auth_mechanism() == "open":
+        saved = state_storage().within(f"{SITE.data_dir}/scenarios")
+    else:
+        saved = state_storage().within(f"{SITE.data_dir}/scenarios/{team}")
+    return saved, None if saved.location == presets.location else presets
 
 
-SAVED, PRESETS = _site_scenarios()
+SAVED, PRESETS = library()
 
 
 def scenario_id(name: str) -> str:
@@ -87,9 +94,10 @@ def list_scenarios(saved: Storage = SAVED, presets: Storage | None = PRESETS) ->
         for name in documents.names():
             scenario = name.removesuffix(".json")
             try:
-                infos[scenario] = _parse(scenario, documents.read(name) or b"")[0]
+                info = _parse(scenario, documents.read(name) or b"")[0]
             except (ScenarioError, ValueError, KeyError, TypeError):
                 continue  # not a scenario of this site: not offered
+            infos[scenario] = info.model_copy(update={"preset": documents is presets})
     return sorted(infos.values(), key=lambda info: (info.saved_at or "", info.name), reverse=True)
 
 
@@ -138,3 +146,13 @@ def delete_scenario(scenario: str, saved: Storage = SAVED, presets: Storage | No
     if presets is not None and presets.read(_name(scenario)) is not None:
         raise ScenarioError(f"Scenario {scenario!r} comes with the site: it can't be deleted")
     raise FileNotFoundError(scenario)
+
+
+def scenario_documents(saved: Storage) -> dict[str, bytes]:
+    """A library's saved scenarios, by file name: for an export."""
+    return {name: saved.read(name) or b"" for name in saved.names()}
+
+
+def delete_library(saved: Storage) -> None:
+    for name in saved.names():
+        saved.delete(name)

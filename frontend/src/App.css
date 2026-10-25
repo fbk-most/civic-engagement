@@ -1636,3 +1636,76 @@
 .scenario-menu__clear {
   align-self: flex-start;
 }
+
+/* With teams: whose scene this is (ui/TeamBadge.tsx). */
+.team-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.team-badge button {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background: #fff;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.param-form__authors {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: #666;
+}
+
+/* The PIN screen (ui/PinScreen.tsx), in front of the app with teams. */
+.pin-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f4f4f1;
+}
+
+.pin-screen__lang {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+.pin-screen__form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(320px, 90vw);
+  padding: 24px;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+}
+
+.pin-screen__form h1 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.pin-screen__form input {
+  font-size: 22px;
+  padding: 8px 10px;
+  letter-spacing: 0.04em;
+}
+
+.pin-screen__form button {
+  padding: 8px;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.pin-screen__error {
+  margin: 0;
+  color: #b3261e;
+  font-size: 14px;
+}

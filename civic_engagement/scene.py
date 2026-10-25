@@ -12,6 +12,9 @@ Reads the registered pack when imported (see domain.py).
 """
 
 import json
+import os
+import threading
+from collections import OrderedDict
 from functools import lru_cache
 from typing import Any
 
@@ -27,7 +30,7 @@ from civic_engagement.models.schema import (
     Intervention,
     SceneResponse,
 )
-from civic_engagement.store.state import store
+from civic_engagement.store.state import DEFAULT_TEAM, store
 
 # The scenario horizon: t is any integer year offset in this range, not just
 # a handful of preset points.
@@ -63,15 +66,22 @@ def _as_is() -> Any:
     return _evaluate([])
 
 
-# One entry: the evaluation for the last intervention set asked about. Moving
-# the year slider doesn't change the interventions, so it never misses; any
+# The evaluations of the last intervention sets asked about, the least
+# recently used dropped first: one per team at least, so that teams with
+# different scenes don't re-evaluate each other's at every request. Moving
+# the year slider doesn't change the interventions, so it never misses; an
 # edit does, and re-evaluates.
-_scenario_cache: dict[str, Any] = {}
+EVALUATIONS = int(os.environ.get("CIVIC_ENGAGEMENT_EVALUATIONS", "8"))
+_scenario_cache: OrderedDict[str, Any] = OrderedDict()
+_cache_lock = threading.Lock()
 
 
 def interventions_key(interventions: list[Intervention]) -> str:
-    """Identifies a set of interventions, for caching what depends on it."""
-    return json.dumps([i.model_dump(mode="json") for i in interventions], sort_keys=True)
+    """Identifies a set of interventions, for caching what depends on it.
+    Their authors don't change what they evaluate to."""
+    return json.dumps(
+        [i.model_dump(mode="json", exclude={"created_by", "updated_by"}) for i in interventions], sort_keys=True
+    )
 
 
 def evaluation(interventions: list[Intervention]) -> Any:
@@ -79,13 +89,18 @@ def evaluation(interventions: list[Intervention]) -> Any:
     if not interventions:
         return _as_is()
     key = interventions_key(interventions)
-    # Read once and kept in hand: requests run in threads, and another one
-    # may replace the entry in between.
-    evaluated = _scenario_cache.get(key)
-    if evaluated is None:
-        evaluated = _evaluate(interventions)
-        _scenario_cache.clear()
+    with _cache_lock:
+        evaluated = _scenario_cache.get(key)
+        if evaluated is not None:
+            _scenario_cache.move_to_end(key)
+            return evaluated
+    # Outside the lock: two teams' evaluations run side by side (the same
+    # one asked twice at once is evaluated twice, rarely).
+    evaluated = _evaluate(interventions)
+    with _cache_lock:
         _scenario_cache[key] = evaluated
+        while len(_scenario_cache) > EVALUATIONS:
+            _scenario_cache.popitem(last=False)
     return evaluated
 
 
@@ -93,13 +108,13 @@ def indicator_descriptors() -> IndicatorDescriptors:
     return active_pack().indicators
 
 
-def current_scene(t: int = 0, session_id: str = "default") -> SceneResponse:
+def current_scene(t: int = 0, team: str = DEFAULT_TEAM) -> SceneResponse:
     pack = active_pack()
     baseline = load_baseline()
     # Read before the interventions: a change landing in between makes the
     # window refresh once more, never miss it.
-    revision = store.revision
-    interventions = store.list_interventions(session_id)
+    revision = store.revision(team)
+    interventions = store.list_interventions(team)
     scenario = evaluation(interventions)
     elements, covers = pack.assemble(scenario, t)
 
@@ -120,22 +135,22 @@ def current_scene(t: int = 0, session_id: str = "default") -> SceneResponse:
     )
 
 
-def deferred_indicators(t: int, session_id: str = "default") -> DeferredIndicators:
-    """The deferred indicators at year t, with and without the session's
+def deferred_indicators(t: int, team: str = DEFAULT_TEAM) -> DeferredIndicators:
+    """The deferred indicators at year t, with and without the team's
     interventions."""
     pack = active_pack()
     return DeferredIndicators(
         t=t,
-        scenario=pack.deferred_values(store.list_interventions(session_id), t),
+        scenario=pack.deferred_values(store.list_interventions(team), t),
         baseline=pack.deferred_values([], t),
     )
 
 
-def indicator_series(session_id: str = "default") -> IndicatorSeries:
+def indicator_series(team: str = DEFAULT_TEAM) -> IndicatorSeries:
     """Every indicator for every year of the horizon, with and without the
-    session's interventions — the "Indicatori" tab's time series."""
+    team's interventions — the "Indicatori" tab's time series."""
     pack = active_pack()
-    interventions = store.list_interventions(session_id)
+    interventions = store.list_interventions(team)
     scenario = evaluation(interventions)
     years = list(range(MIN_T, MAX_T + 1))
     baseline_deferred = pack.deferred_series([], years)

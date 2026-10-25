@@ -130,6 +130,8 @@ export interface ScenarioInfo {
   saved_at: string | null;
   /** How many interventions it holds. */
   interventions: number;
+  /** The site's, shipped with it: every team can load it, none delete it. */
+  preset: boolean;
 }
 
 export type CardType = string;
@@ -174,6 +176,10 @@ export interface Intervention {
   created_at: string;
   replaces_element_id: string | null;
   planted_year: number;
+  /** The member who placed it, and who last changed it (by name, as it was
+   * then); null without teams. */
+  created_by?: string | null;
+  updated_by?: string | null;
 }
 
 export interface InterventionCreate {
@@ -257,4 +263,26 @@ export interface ThermalFieldResponse {
   mean_felt_c: number[];
   heat_stress_pct: number[];
   sunlit_pct: number[];
+}
+
+/** How the app is entered (see civic_engagement/access.py): `open`, no
+ * login, one team, everyone an editor; `pin`, a PIN per member. */
+export interface AuthInfo {
+  mechanism: "open" | "pin";
+  /** With `pin`: an example of the PINs' format, the login field's hint. */
+  example: string | null;
+}
+
+export type Role = "editor" | "viewer";
+
+/** Who this window is. */
+export interface Me {
+  team: { id: string; name: string };
+  /** Null without teams. */
+  member: { id: string; name: string; role: Role } | null;
+  role: Role;
+}
+
+export interface LoginResponse extends Me {
+  token: string;
 }

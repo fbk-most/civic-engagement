@@ -1,5 +1,6 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from civic_engagement.access import Access, access
 from civic_engagement.models.schema import (
     BaselineScene,
     DeferredIndicators,
@@ -26,15 +27,15 @@ def get_baseline() -> BaselineScene:
 
 
 @router.get("/scene", response_model=SceneResponse)
-def get_scene(t: int = 0) -> SceneResponse:
-    return current_scene(validated_t(t))
+def get_scene(t: int = 0, who: Access = Depends(access)) -> SceneResponse:
+    return current_scene(validated_t(t), who.team)
 
 
 @router.get("/session/revision")
-def get_session_revision() -> dict[str, str]:
+def get_session_revision(who: Access = Depends(access)) -> dict[str, str]:
     """Cheap to ask: a window checks it when it comes back into focus and
     fetches the scene only if it differs from its scene's `revision`."""
-    return {"revision": store.revision}
+    return {"revision": store.revision(who.team)}
 
 
 @router.get("/indicators/descriptors", response_model=IndicatorDescriptors)
@@ -43,12 +44,12 @@ def get_indicator_descriptors() -> IndicatorDescriptors:
 
 
 @router.get("/indicators/deferred", response_model=DeferredIndicators)
-def get_deferred_indicators(t: int = 0) -> DeferredIndicators:
+def get_deferred_indicators(t: int = 0, who: Access = Depends(access)) -> DeferredIndicators:
     """The indicators too slow for the scene (two fields, for the urban
     thermal ones), which the scene needn't wait for."""
-    return deferred_indicators(validated_t(t))
+    return deferred_indicators(validated_t(t), who.team)
 
 
 @router.get("/indicators/series", response_model=IndicatorSeries)
-def get_indicator_series() -> IndicatorSeries:
-    return indicator_series()
+def get_indicator_series(who: Access = Depends(access)) -> IndicatorSeries:
+    return indicator_series(who.team)

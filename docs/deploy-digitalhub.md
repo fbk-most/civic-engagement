@@ -4,8 +4,9 @@
 
 How a pack's app runs on [DigitalHub](https://scc-digitalhub.github.io/docs/0.15/)
 (version 0.15) as a container, for any domain and any DigitalHub instance.
-What the app itself provides is in [design-multi-team.md](design-multi-team.md)
-(see "Running in a container"); each pack documents its own deployment —
+What the app itself provides — teams, PINs, the state's storage — is in
+the core's README ("Teams"); what its image must respect, in
+[The image](#the-image) below. Each pack documents its own deployment —
 image, sites, parameters, instance — in its repository (for the urban pack:
 `bologna-civic-dt/docs/deploy-digitalhub.md`).
 
@@ -52,12 +53,26 @@ instance with the [tests](#checking-an-instance) below.
 
 ### The image
 
-Built outside the platform (the pack's CI, e.g. GitHub Actions to GHCR),
-respecting [Running in a container](design-multi-team.md#running-in-a-container):
-non-root by number, port 8080, nothing written outside `/tmp`. It starts
-the app with the core's launcher, `python -m civic_engagement.serve
-<module>:app`, and sets `CIVIC_ENGAGEMENT_FRONTEND` to the built app (the
-urban pack's `Dockerfile` is an example).
+Built outside the platform (the pack's CI, e.g. GitHub Actions to GHCR).
+It starts the app with the core's launcher, `python -m
+civic_engagement.serve <module>:app`, and sets `CIVIC_ENGAGEMENT_FRONTEND`
+to the built app (the urban pack's `Dockerfile` is an example). What a
+pack's image can count on, and must respect, wherever it runs:
+
+- **Any non-root user**, by number (`USER 1000:1000`); nothing written
+  outside `/tmp` and the state's storage.
+- **Port 8080**; `GET /api/health` for readiness.
+- **Configured by environment**: `CIVIC_ENGAGEMENT_SITE`,
+  `CIVIC_ENGAGEMENT_FRONTEND` (set by the image), `CIVIC_ENGAGEMENT_AUTH`,
+  `CIVIC_ENGAGEMENT_STATE`, `CIVIC_ENGAGEMENT_CPUS`, the secrets
+  (`CIVIC_ENGAGEMENT_PIN_SECRET`, the manager's credentials, the store's
+  `AWS_*` with S3), `CIVIC_ENGAGEMENT_TRUSTED_PROXY`.
+- **State outside the container** when the container's disk doesn't
+  outlive it; **one process** per site's state, and a new one started only
+  once the old one has stopped.
+- **The root of a hostname**, one per site.
+- `CIVIC_ENGAGEMENT_PIN_SECRET` must stay the same across deployments:
+  changing it invalidates every PIN and token.
 
 ### The run
 

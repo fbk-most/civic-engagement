@@ -108,10 +108,10 @@ def test_replace_sets_the_old_session_aside(tmp_path, monkeypatch):
     store = state.SessionStore(LocalStorage(tmp_path), "session.json")
     store.replace([_intervention("a")])
     assert not list(tmp_path.glob("session.*.json"))  # nothing to set aside yet
-    revision = store.revision
+    revision = store.revision()
     store.replace([_intervention("b"), _intervention("c")])
     assert [i.id for i in store.list_interventions()] == ["b", "c"]
-    assert store.revision != revision
+    assert store.revision() != revision
     (kept,) = tmp_path.glob("session.*.json")
     assert [i["id"] for i in json.loads(kept.read_text())["default"]] == ["a"]
 

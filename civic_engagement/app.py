@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
@@ -33,14 +33,25 @@ def create_app(pack: DomainPack, title: str = "Civic Digital Twin PoC", frontend
     register(pack)
     # Imported only now: they read the pack and the active site when
     # imported (see domain.py).
+    from civic_engagement.access import access, check_configuration, team_store
     from civic_engagement.api import (
+        routes_admin,
+        routes_auth,
         routes_cards,
         routes_interventions,
         routes_scenarios,
         routes_scene,
         routes_site_assets,
     )
-    from civic_engagement.config import SITE
+    from civic_engagement.config import SITE, auth_mechanism
+    from civic_engagement.store.state import store
+
+    # With teams: refuses to start without its secrets; reads every team's
+    # session now, not on its first request.
+    check_configuration()
+    if auth_mechanism() == "pin":
+        for team in team_store().teams():
+            store.load(team.id)
 
     if frontend is None:
         frontend = os.environ.get("CIVIC_ENGAGEMENT_FRONTEND") or None
@@ -57,20 +68,25 @@ def create_app(pack: DomainPack, title: str = "Civic Digital Twin PoC", frontend
             allow_headers=["*"],
         )
 
+    # Every route, the pack's too, behind `access`: with teams, a valid
+    # token for each, with no exceptions to remember but logging in, the
+    # manager's (their own credentials) and /health.
     for router in (
         routes_scene.router,
         routes_site_assets.router,
         routes_cards.router,
         routes_interventions.router,
         routes_scenarios.router,
+        *pack.routers(),
     ):
-        app.include_router(router, prefix="/api")
-    for router in pack.routers():
-        app.include_router(router, prefix="/api")
+        app.include_router(router, prefix="/api", dependencies=[Depends(access)])
+    app.include_router(routes_auth.router, prefix="/api")
+    if auth_mechanism() == "pin":
+        app.include_router(routes_admin.router, prefix="/api")
 
     @app.get("/api/health")
     def health() -> dict[str, str]:
-        """Up, with the site's session loaded (the store reads it when imported)."""
+        """Up, with the site's teams and sessions loaded (above)."""
         return {"status": "ok", "site": SITE.site_id}
 
     if frontend is not None:

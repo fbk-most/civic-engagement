@@ -16,6 +16,14 @@ dependencies = [
     "uvicorn[standard]>=0.51.0",
 ]
 
+[project.scripts]
+# The manager's CLI (civic_engagement/admin.py).
+civic-engagement-admin = "civic_engagement.admin:main"
+
+[project.optional-dependencies]
+# The state in an S3 bucket (CIVIC_ENGAGEMENT_STATE=s3://...).
+s3 = ["boto3>=1.40"]
+
 [dependency-groups]
 dev = [
     "httpx2>=2.16.0",

@@ -1,19 +1,21 @@
 import type { CSSProperties } from "react";
 import type { CardSpec, Intervention } from "../api/types";
 import { tr } from "../i18n/lang";
-import { cardLabel, summarizeParams, yearLabel } from "../i18n/labels";
+import { authorsLabel, cardLabel, summarizeParams, yearLabel } from "../i18n/labels";
 import { CardIcon } from "./cardIcons";
 import { categoryColor } from "./categoryColors";
 
 interface Props {
   intervention: Intervention;
   card: CardSpec | null;
-  onEdit: () => void;
+  /** Absent for a viewer, who can't change it. */
+  onEdit?: () => void;
   onClose: () => void;
 }
 
-/** Read-only details of a placard picked in the 3D view. Editing stays on
- * the 2D map, so this only offers the way there. */
+/** Read-only details of a card: picked in the 3D view, where editing stays
+ * on the 2D map, so this only offers the way there; or a viewer's, who
+ * only looks. */
 export function InterventionInfoCard({ intervention, card, onEdit, onClose }: Props) {
   const color = card ? categoryColor(card.category) : "#999";
   return (
@@ -26,10 +28,13 @@ export function InterventionInfoCard({ intervention, card, onEdit, onClose }: Pr
         {tr("In vigore da: ", "In effect from: ")}<strong>{yearLabel(intervention.planted_year)}</strong>
       </p>
       <p className="intervention-info__summary">{summarizeParams(card ?? undefined, intervention.params)}</p>
+      {authorsLabel(intervention) && <p className="param-form__authors">{authorsLabel(intervention)}</p>}
       <div className="param-form__actions">
-        <button type="submit" onClick={onEdit}>
-          {tr("Modifica nella mappa 2D", "Edit on the 2D map")}
-        </button>
+        {onEdit && (
+          <button type="submit" onClick={onEdit}>
+            {tr("Modifica nella mappa 2D", "Edit on the 2D map")}
+          </button>
+        )}
         <button type="button" onClick={onClose}>
           {tr("Chiudi", "Close")}
         </button>

@@ -2,7 +2,7 @@
 import { createElement, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
-import App from "./App";
+import { AccessGate } from "./AccessGate";
 import { registerPack, type FrontendPack } from "./pack";
 
 export type { FrontendPack, Pair } from "./pack";
@@ -13,7 +13,7 @@ export type { ExpressionSpecification } from "maplibre-gl";
 /** Renders the app for `pack` into `root`. */
 export function startApp(pack: FrontendPack, root: HTMLElement): void {
   registerPack(pack);
-  createRoot(root).render(createElement(StrictMode, null, createElement(App)));
+  createRoot(root).render(createElement(StrictMode, null, createElement(AccessGate)));
 }
 
 // For the packs' own scene parts (FrontendPack.scene3d.parts).

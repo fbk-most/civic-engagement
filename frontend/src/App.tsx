@@ -58,6 +58,8 @@ import { ViewTabs, type AppView } from "./ui/ViewTabs";
 import { LangSwitch } from "./ui/LangSwitch";
 import { TempSwitch } from "./ui/TempSwitch";
 import { ScenarioMenu } from "./ui/ScenarioMenu";
+import { TeamBadge } from "./ui/TeamBadge";
+import { useAccess } from "./access";
 import { tr, useLang } from "./i18n/lang";
 import { withinBoundary } from "./map/boundary";
 import { useTempUnit } from "./i18n/units";
@@ -121,6 +123,10 @@ function App() {
   // unit (see i18n/lang.ts, i18n/units.ts).
   const lang = useLang();
   const tempUnit = useTempUnit();
+  // With teams, a viewer only looks: no cards to place, change or remove,
+  // no scenarios to load or save (the backend refuses them anyway).
+  const access = useAccess();
+  const canEdit = access.me.role === "editor";
   const containerRef = useRef<HTMLDivElement>(null);
   // Guards against React 18 StrictMode's dev-only double effect invocation:
   // creating a second MapLibre GL (WebGL) instance while the first is mid-init
@@ -877,9 +883,10 @@ function App() {
           {status === "ready" && view !== "indicators" && (
             <InterventionsToggle mode={interventionMode} onChange={changeInterventionMode} />
           )}
-          {status === "ready" && scene && (
+          {status === "ready" && scene && canEdit && (
             <ScenarioMenu interventionCount={scene.interventions.length} t={t} onSceneReplaced={handleSceneReplaced} />
           )}
+          {access.mechanism === "pin" && <TeamBadge access={access} />}
           {activePack().features.thermal && <TempSwitch unit={tempUnit} />}
           <LangSwitch lang={lang} />
         </div>
@@ -906,12 +913,14 @@ function App() {
               {/* The current situation has no cards to place or list. */}
               {interventionMode !== "hidden" && (
                 <div className="left-rail">
-                  <CardPalette
-                    cards={cards}
-                    selected={selectedCard}
-                    onSelect={handleSelectCard}
-                    initiallyCollapsed={initialDebugParams.panelsClosed}
-                  />
+                  {canEdit && (
+                    <CardPalette
+                      cards={cards}
+                      selected={selectedCard}
+                      onSelect={handleSelectCard}
+                      initiallyCollapsed={initialDebugParams.panelsClosed}
+                    />
+                  )}
                   <InterventionList
                     interventions={scene?.interventions ?? []}
                     cards={cards}
@@ -977,28 +986,35 @@ function App() {
               {view === "2d" &&
                 (pendingGeometry && selectedCard ? (
                   <ParamForm card={selectedCard} plantedYear={t} onSubmit={handleSubmit} onCancel={rearmDrawing} />
-                ) : selectedIntervention && selectedInterventionCard ? (
+                ) : selectedIntervention && selectedInterventionCard && canEdit ? (
                   <ParamForm
                     card={selectedInterventionCard}
                     initialValues={selectedIntervention.params}
                     plantedYear={selectedIntervention.planted_year}
+                    authors={selectedIntervention}
                     submitLabel={tr("Salva", "Save")}
                     onSubmit={(params) => handleUpdateIntervention(selectedIntervention.id, params)}
                     onCancel={() => setSelectedInterventionId(null)}
                     onDelete={() => handleDeleteIntervention(selectedIntervention.id)}
                   />
+                ) : selectedIntervention ? (
+                  <InterventionInfoCard
+                    intervention={selectedIntervention}
+                    card={selectedInterventionCard}
+                    onClose={() => setSelectedInterventionId(null)}
+                  />
                 ) : selectedTreeElement ? (
                   <TreeIdentityCard
                     element={selectedTreeElement}
                     onClose={() => setSelectedTreeElementId(null)}
-                    onReplant={() => handleReplant(selectedTreeElement)}
+                    onReplant={canEdit ? () => handleReplant(selectedTreeElement) : undefined}
                   />
                 ) : null)}
               {view === "3d" && selectedIntervention && (
                 <InterventionInfoCard
                   intervention={selectedIntervention}
                   card={selectedInterventionCard}
-                  onEdit={() => handleEditInterventionIn2D(selectedIntervention.id)}
+                  onEdit={canEdit ? () => handleEditInterventionIn2D(selectedIntervention.id) : undefined}
                   onClose={() => setSelectedInterventionId(null)}
                 />
               )}

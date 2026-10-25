@@ -90,9 +90,41 @@ is under way.
 
 `CIVIC_ENGAGEMENT_STATE=<directory>` keeps the session and the saved
 scenarios elsewhere (`civic_engagement/store/storage.py`), under
-`<directory>/data/<site>/`: for a container whose own files are read-only.
-The site's preset scenarios, in `data/<site>/scenarios/`, are offered
-beside the saved ones, and can't be deleted.
+`<directory>/data/<site>/`: for a container whose own files are read-only;
+or `s3://<bucket>/<prefix>`, in a bucket (the core's `s3` extra, the
+standard `AWS_*` variables). The site's preset scenarios, in
+`data/<site>/scenarios/`, are offered beside the saved ones, and can't be
+deleted.
+
+### Teams
+
+All of the above is the app as it runs by default, with no login
+(`CIVIC_ENGAGEMENT_AUTH=open`): one team, everyone an editor. With
+`CIVIC_ENGAGEMENT_AUTH=pin`, several teams work on the same site, each with
+its own scene and scenarios: a member opens the app on a PIN screen, and the
+PIN says the team and the role — an editor changes the scene, a viewer
+looks at it, with their own year, date and point of view. A manager sets
+the teams up and hands out the PINs, with `civic-engagement-admin`
+(`civic_engagement/access.py` says how access works, `api/routes_admin.py`
+what the manager can do).
+
+```bash
+CIVIC_ENGAGEMENT_AUTH=pin \
+CIVIC_ENGAGEMENT_PIN_SECRET=<16 or more random characters, the same across restarts> \
+CIVIC_ENGAGEMENT_MANAGER_USER=manager CIVIC_ENGAGEMENT_MANAGER_PASSWORD=<password> \
+CIVIC_ENGAGEMENT_TRUSTED_PROXY=0 \
+  uv run uvicorn <pack>.main:app
+
+export CIVIC_ENGAGEMENT_ADMIN_URL=http://localhost:8000 \
+  CIVIC_ENGAGEMENT_MANAGER_USER=manager CIVIC_ENGAGEMENT_MANAGER_PASSWORD=<password>
+uv run civic-engagement-admin team create "Team 1"
+uv run civic-engagement-admin member add team-1 "Anna" --editor    # prints Anna's PIN
+uv run civic-engagement-admin member add team-1 --viewers          # the team's viewers' PIN
+```
+
+`CIVIC_ENGAGEMENT_TRUSTED_PROXY` tells the throttling of wrong PINs where the
+client's IP is: 0, the connection's (no proxy); 1, the one a gateway adds to
+`X-Forwarded-For`; unset, nowhere (only a site-wide limit).
 
 ### In a container
 
@@ -113,8 +145,7 @@ container, the CPU count is the machine's, not the quota's.
 origin, no Vite. `GET /api/health` says the backend is up.
 
 How a pack's app is delivered on the DigitalHub platform:
-[docs/deploy-digitalhub.md](docs/deploy-digitalhub.md); teams of
-participants, in design: [docs/design-multi-team.md](docs/design-multi-team.md).
+[docs/deploy-digitalhub.md](docs/deploy-digitalhub.md).
 
 The pack's model is evaluated once per set of interventions, for every year
 of the horizon at once; the backend serves the scene and the indicators for

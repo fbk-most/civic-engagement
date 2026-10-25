@@ -28,6 +28,7 @@ from civic_engagement.models.schema import (
     IndicatorValues,
     Intervention,
 )
+from civic_engagement.pins import DigitPin, PinFormat
 
 
 class DomainPack(ABC):
@@ -40,6 +41,8 @@ class DomainPack(ABC):
     element_types: frozenset[str]
     cover_types: frozenset[str]
     indicators: IndicatorDescriptors
+    # The PINs' format, with teams (CIVIC_ENGAGEMENT_AUTH=pin): see pins.py.
+    pin_format: PinFormat = DigitPin()
 
     @abstractmethod
     def evaluate(self, baseline: BaselineScene, interventions: list[Intervention]) -> Any:

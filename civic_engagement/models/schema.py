@@ -57,6 +57,8 @@ class Intervention(BaseModel):
         "viewing +10y doesn't appear already 10 years grown; only relevant for replants, where "
         "it also gates when the new tree appears / the old stump is suppressed.",
     )
+    created_by: str | None = Field(default=None, description="The member who placed it, by name as it was then; None without teams")
+    updated_by: str | None = Field(default=None, description="The member who last changed its parameters")
 
 
 class InterventionCreate(BaseModel):
@@ -88,6 +90,7 @@ class ScenarioInfo(BaseModel):
     name: str
     saved_at: str | None = Field(default=None, description="ISO 8601, UTC; None for a hand-made file")
     interventions: int = Field(description="How many interventions it holds")
+    preset: bool = Field(default=False, description="The site's, shipped with it: every team can load it, none delete it")
 
 
 class ScenarioSave(BaseModel):
@@ -248,3 +251,73 @@ class SceneResponse(BaseModel):
         description="The session's revision this scene was computed from (see GET /session/revision): "
         "a window compares the two to tell whether another window changed the session.",
     )
+
+
+# Access: teams, members and PINs (see civic_engagement/access.py).
+
+Role = Literal["editor", "viewer"]
+
+
+class TeamInfo(BaseModel):
+    id: str
+    name: str
+
+
+class MemberInfo(BaseModel):
+    id: str
+    name: str
+    role: Role
+
+
+class AuthInfo(BaseModel):
+    mechanism: Literal["open", "pin"] = Field(description="open: no login, one team, everyone an editor; pin: a PIN per member")
+    example: str | None = Field(default=None, description="With pin: an example of the format, the login field's hint")
+
+
+class PinLogin(BaseModel):
+    pin: str
+
+
+class Me(BaseModel):
+    """Who a request is: its team, member and role."""
+
+    team: TeamInfo
+    member: MemberInfo | None = Field(default=None, description="None with the open mechanism")
+    role: Role
+
+
+class LoginResponse(Me):
+    token: str = Field(description="Sent back on every call: Authorization: Bearer <token>")
+
+
+class TeamCreate(BaseModel):
+    name: str
+    from_scenario: str | None = Field(default=None, description="Its starting scene: a site preset, or a scenario of `from_team`")
+    from_team: str | None = None
+
+
+class TeamRename(BaseModel):
+    name: str
+
+
+class MemberCreate(BaseModel):
+    name: str = Field(default="", description="An editor's name, shown on the cards they place; for the viewers, optional")
+    role: Role
+
+
+class TeamScene(BaseModel):
+    """The scene a team gets: a scenario (a site preset, or one of `team`'s), or none."""
+
+    scenario: str | None = None
+    team: str | None = None
+
+
+class AdminMember(MemberInfo):
+    pin_version: int
+    pin: str | None = Field(default=None, description="The PIN, in clear: only in the answer that made it")
+
+
+class AdminTeam(TeamInfo):
+    created_at: str
+    members: list[AdminMember]
+    interventions: int = Field(default=0, description="Cards in its scene")
