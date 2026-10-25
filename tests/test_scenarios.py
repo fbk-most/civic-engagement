@@ -12,6 +12,7 @@ from civic_engagement.store.scenarios import (
     save_scenario,
     scenario_id,
 )
+from civic_engagement.store.storage import LocalStorage
 
 
 def _intervention(id: str, deleted: bool = False) -> Intervention:
@@ -31,55 +32,80 @@ def test_scenario_id_is_a_slug():
     assert scenario_id("!!!") == ""
 
 
-def test_save_list_read_delete(tmp_path):
-    info = save_scenario("Proposta A", [_intervention("a"), _intervention("b", deleted=True)], directory=tmp_path)
+@pytest.fixture
+def saved(tmp_path):
+    """Saved scenarios in a directory of their own, no presets."""
+    return LocalStorage(tmp_path)
+
+
+def test_save_list_read_delete(saved):
+    info = save_scenario("Proposta A", [_intervention("a"), _intervention("b", deleted=True)], saved=saved, presets=None)
     assert (info.id, info.name, info.interventions) == ("proposta-a", "Proposta A", 1)
-    assert [s.id for s in list_scenarios(tmp_path)] == ["proposta-a"]
-    read_info, interventions = read_scenario("proposta-a", tmp_path)
+    assert [s.id for s in list_scenarios(saved, None)] == ["proposta-a"]
+    read_info, interventions = read_scenario("proposta-a", saved, None)
     assert read_info.name == "Proposta A"
     assert [i.id for i in interventions] == ["a"]
-    delete_scenario("proposta-a", tmp_path)
-    assert list_scenarios(tmp_path) == []
+    delete_scenario("proposta-a", saved, None)
+    assert list_scenarios(saved, None) == []
 
 
-def test_save_refuses_to_overwrite_unless_asked(tmp_path):
-    save_scenario("Proposta A", [_intervention("a")], directory=tmp_path)
+def test_save_refuses_to_overwrite_unless_asked(saved):
+    save_scenario("Proposta A", [_intervention("a")], saved=saved, presets=None)
     with pytest.raises(FileExistsError):
-        save_scenario("proposta a", [], directory=tmp_path)
-    assert save_scenario("proposta a", [], overwrite=True, directory=tmp_path).interventions == 0
+        save_scenario("proposta a", [], saved=saved, presets=None)
+    assert save_scenario("proposta a", [], overwrite=True, saved=saved, presets=None).interventions == 0
 
 
-def test_save_needs_a_name(tmp_path):
+def test_save_needs_a_name(saved):
     with pytest.raises(ScenarioError):
-        save_scenario("  ", [], directory=tmp_path)
+        save_scenario("  ", [], saved=saved, presets=None)
 
 
-def test_ids_cannot_leave_the_directory(tmp_path):
+def test_ids_cannot_leave_the_directory(saved):
     with pytest.raises(ScenarioError):
-        read_scenario("../session", tmp_path)
+        read_scenario("../session", saved, None)
     with pytest.raises(ScenarioError):
-        delete_scenario("../session", tmp_path)
+        delete_scenario("../session", saved, None)
 
 
-def test_reads_a_bare_list_and_skips_other_sites(tmp_path):
+def test_reads_a_bare_list_and_skips_other_sites(tmp_path, saved):
     (tmp_path / "old.json").write_text(json.dumps([_intervention("a").model_dump()]))
     (tmp_path / "elsewhere.json").write_text(
         json.dumps({"site_id": "not-" + SITE.site_id, "name": "x", "interventions": []})
     )
     (tmp_path / "broken.json").write_text("{")
-    assert [(s.id, s.name, s.interventions) for s in list_scenarios(tmp_path)] == [("old", "old", 1)]
+    assert [(s.id, s.name, s.interventions) for s in list_scenarios(saved, None)] == [("old", "old", 1)]
     with pytest.raises(ScenarioError):
-        read_scenario("elsewhere", tmp_path)
+        read_scenario("elsewhere", saved, None)
     with pytest.raises(ScenarioError):
-        read_scenario("broken", tmp_path)
+        read_scenario("broken", saved, None)
+
+
+def test_presets_beside_the_saved_scenarios(tmp_path):
+    """The state elsewhere than the site's data: its presets are offered
+    too, can be hidden by a saved scenario, and can't be deleted."""
+    presets, saved = LocalStorage(tmp_path / "presets"), LocalStorage(tmp_path / "state")
+    save_scenario("Demo", [_intervention("a")], saved=presets, presets=None)
+    assert [s.id for s in list_scenarios(saved, presets)] == ["demo"]
+    assert [i.id for i in read_scenario("demo", saved, presets)[1]] == ["a"]
+    with pytest.raises(FileExistsError):
+        save_scenario("Demo", [], saved=saved, presets=presets)
+    save_scenario("Demo", [_intervention("b")], overwrite=True, saved=saved, presets=presets)
+    assert [i.id for i in read_scenario("demo", saved, presets)[1]] == ["b"]
+    assert len(list_scenarios(saved, presets)) == 1
+    delete_scenario("demo", saved, presets)  # the saved one: the preset is back
+    assert [i.id for i in read_scenario("demo", saved, presets)[1]] == ["a"]
+    with pytest.raises(ScenarioError):
+        delete_scenario("demo", saved, presets)
+    with pytest.raises(FileNotFoundError):
+        delete_scenario("other", saved, presets)
 
 
 def test_replace_sets_the_old_session_aside(tmp_path, monkeypatch):
     from civic_engagement.store import state
 
-    monkeypatch.setattr(state, "SESSION_JSON_PATH", tmp_path / "session.json")
     monkeypatch.delenv("CIVIC_ENGAGEMENT_SCENARIO", raising=False)
-    store = state.SessionStore()
+    store = state.SessionStore(LocalStorage(tmp_path), "session.json")
     store.replace([_intervention("a")])
     assert not list(tmp_path.glob("session.*.json"))  # nothing to set aside yet
     revision = store.revision

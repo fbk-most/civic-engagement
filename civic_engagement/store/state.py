@@ -1,4 +1,5 @@
-"""In-memory intervention store, mirrored to a JSON file after each mutation.
+"""In-memory intervention store, mirrored to a JSON document after each
+mutation (in the state's storage, store/storage.py).
 
 No database: this is a single-facilitator, single-session PoC (see
 project plan). The JSON mirror exists purely as a crash-safety net and as
@@ -8,21 +9,23 @@ runtime source of truth.
 
 import json
 import os
-import shutil
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import PurePosixPath
 
 from civic_engagement.config import SITE
 from civic_engagement.models.schema import Intervention, InterventionCreate
+from civic_engagement.store.storage import Storage, state_storage
 
-# One session file per site — see config.SiteConfig.session_json_path.
-SESSION_JSON_PATH = Path(SITE.session_json_path)
+# One session document per site — see config.SiteConfig.session_json_path.
+SESSION_NAME = SITE.session_json_path
 DEFAULT_SESSION_ID = "default"
 
 
 class SessionStore:
-    def __init__(self) -> None:
+    def __init__(self, storage: Storage | None = None, name: str = SESSION_NAME) -> None:
+        self._storage = storage if storage is not None else state_storage()
+        self._name = name
         self._sessions: dict[str, list[Intervention]] = {}
         # Bumped on every change, so a window can ask "anything new?" without
         # fetching the scene (see `revision`).
@@ -89,27 +92,29 @@ class SessionStore:
 
     def replace(self, interventions: list[Intervention], session_id: str = DEFAULT_SESSION_ID) -> None:
         """The session becomes these interventions (a scenario loaded, or
-        none to start afresh). The session file as it was is set aside next
-        to it, timestamped, unless it held nothing."""
-        if self.list_interventions(session_id) and SESSION_JSON_PATH.exists():
-            kept = SESSION_JSON_PATH.with_name(f"session.{datetime.now():%Y%m%d-%H%M%S}.json")
-            shutil.copy(SESSION_JSON_PATH, kept)
+        none to start afresh). The session document as it was is set aside
+        next to it, timestamped, unless it held nothing."""
+        if self.list_interventions(session_id):
+            previous = self._storage.read(self._name)
+            if previous is not None:
+                kept = PurePosixPath(self._name).with_name(f"session.{datetime.now():%Y%m%d-%H%M%S}.json")
+                self._storage.write(kept.as_posix(), previous)
         self._sessions[session_id] = [i.model_copy(deep=True) for i in interventions]
         self._save()
 
     def _save(self) -> None:
         self._changes += 1
-        SESSION_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             session_id: [i.model_dump() for i in interventions]
             for session_id, interventions in self._sessions.items()
         }
-        SESSION_JSON_PATH.write_text(json.dumps(payload, indent=2))
+        self._storage.write(self._name, json.dumps(payload, indent=2).encode())
 
     def _load(self) -> None:
-        if not SESSION_JSON_PATH.exists():
+        data = self._storage.read(self._name)
+        if data is None:
             return
-        payload = json.loads(SESSION_JSON_PATH.read_text())
+        payload = json.loads(data)
         self._sessions = {
             session_id: [Intervention(**i) for i in interventions]
             for session_id, interventions in payload.items()

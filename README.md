@@ -88,6 +88,34 @@ replaces is kept as `data/<site>/session.<timestamp>.json`.
 every start, `--reload` restarts included, so leave it out once a workshop
 is under way.
 
+`CIVIC_ENGAGEMENT_STATE=<directory>` keeps the session and the saved
+scenarios elsewhere (`civic_engagement/store/storage.py`), under
+`<directory>/data/<site>/`: for a container whose own files are read-only.
+The site's preset scenarios, in `data/<site>/scenarios/`, are offered
+beside the saved ones, and can't be deleted.
+
+### In a container
+
+A pack's image runs its app with the core's launcher, on port 8080:
+
+```bash
+python -m civic_engagement.serve bologna_civic_dt.main:app
+```
+
+It sizes the native libraries' threads (OpenMP, OpenBLAS) to the CPUs the
+process may use: `CIVIC_ENGAGEMENT_CPUS`, or else the container's CPU quota
+(`civic_engagement.config.cpus`, also for a pack's own thread pools). In a
+container, the CPU count is the machine's, not the quota's.
+`CIVIC_ENGAGEMENT_HOST` and `CIVIC_ENGAGEMENT_PORT` change where it listens.
+
+`CIVIC_ENGAGEMENT_FRONTEND=<directory>`, the pack's built app (its
+`frontend/dist`), has the backend serve it at `/`, beside the API: one
+origin, no Vite. `GET /api/health` says the backend is up.
+
+How a pack's app is delivered on the DigitalHub platform:
+[docs/deploy-digitalhub.md](docs/deploy-digitalhub.md); teams of
+participants, in design: [docs/design-multi-team.md](docs/design-multi-team.md).
+
 The pack's model is evaluated once per set of interventions, for every year
 of the horizon at once; the backend serves the scene and the indicators for
 the year asked.

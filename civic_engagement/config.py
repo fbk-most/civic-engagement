@@ -98,3 +98,31 @@ class _ActiveSite:
 
 
 SITE = cast(SiteConfig, _ActiveSite())
+
+
+def cpus() -> int:
+    """The CPUs this process may use: `CIVIC_ENGAGEMENT_CPUS`, or else the
+    container's CPU quota (cgroup v2's `cpu.max`), or else the CPUs it may
+    run on. For sizing thread pools: in a container, `os.cpu_count()` is
+    the machine's — 16 under a quota of 4 on DigitalHub, so a pool sized by
+    it runs four times the threads the quota pays for, throttled."""
+    if os.environ.get("CIVIC_ENGAGEMENT_CPUS"):
+        return max(1, int(os.environ["CIVIC_ENGAGEMENT_CPUS"]))
+    try:
+        with open("/sys/fs/cgroup/cpu.max") as f:
+            quota = cgroup_quota(f.read())
+    except OSError:
+        quota = None
+    if quota is not None:
+        return quota
+    try:
+        return len(os.sched_getaffinity(0))
+    except AttributeError:  # not on Linux
+        return os.cpu_count() or 1
+
+
+def cgroup_quota(cpu_max: str) -> int | None:
+    """The whole CPUs in a cgroup v2 `cpu.max` ("<quota> <period>", or "max
+    <period>" for none), at least one."""
+    quota, period = cpu_max.split()
+    return None if quota == "max" else max(1, int(quota) // int(period))
