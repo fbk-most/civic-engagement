@@ -13,7 +13,7 @@ import { Lighting } from "./Lighting";
 import { MaterialLibrary } from "./materials";
 import { terminateTreeWorkerPool } from "./workers/treeWorkerPool";
 import type { SeasonState, SunPosition } from "./sun";
-import { DEFAULT_FOV_DEG, LOOK_DISTANCE_M, MIN_CAMERA_HEIGHT_M, OVERVIEW_FOV_DEG, type CameraPose } from "./camera";
+import { DEFAULT_FOV_DEG, EYE_HEIGHT_M, LOOK_DISTANCE_M, MIN_CAMERA_HEIGHT_M, OVERVIEW_FOV_DEG, type CameraPose } from "./camera";
 import { anchorFromPolygon, bearingToDirection, directionToBearing, toLocal, toLngLat } from "./geo";
 import { WalkController, type Footprint } from "./walk";
 import { activePack } from "../pack";
@@ -403,8 +403,35 @@ export function Viewer({
     // down drags the orbit target below y=0 and the camera follows it under
     // the pavement.
     controls.screenSpacePanning = false;
-    controls.minDistance = 1;
+    // Zoomed all the way in: at eye height from the ground, as walking.
+    controls.minDistance = EYE_HEIGHT_M;
     controlsRef.current = controls;
+
+    // Pans and zooms first put the orbit target back on the ground (see
+    // `groundTarget`); rotations keep it, so that turning from a placed
+    // viewpoint still looks around from where one stands. Which gesture
+    // starts is read before the controls see it (capture phase).
+    let regrounds = false;
+    const handleGesturePointerDown = (event: PointerEvent) => {
+      const rotates = event.pointerType !== "touch" &&
+        (event.button === 2 || (event.button === 0 && (event.ctrlKey || event.metaKey || event.shiftKey)));
+      regrounds = !rotates;
+    };
+    const handleGestureWheel = (event: WheelEvent) => {
+      // The controls ignore the wheel during a drag: so does this.
+      if (event.buttons === 0) regrounds = true;
+    };
+    const handleGestureStart = () => {
+      if (regrounds && builtRef.current) groundTarget(builtRef.current, camera, controls);
+    };
+    // After a pan, so that a rotation that follows turns around the ground.
+    const handleGestureEnd = () => {
+      if (regrounds && builtRef.current) groundTarget(builtRef.current, camera, controls);
+    };
+    renderer.domElement.addEventListener("pointerdown", handleGesturePointerDown, { capture: true });
+    renderer.domElement.addEventListener("wheel", handleGestureWheel, { capture: true });
+    controls.addEventListener("start", handleGestureStart);
+    controls.addEventListener("end", handleGestureEnd);
 
     const walk = new WalkController(camera, renderer.domElement);
     walk.controls.addEventListener("lock", () => {
@@ -715,6 +742,10 @@ export function Viewer({
       renderer.domElement.removeEventListener("pointerup", handlePointerUp);
       renderer.domElement.removeEventListener("pointermove", handlePointerMove);
       renderer.domElement.removeEventListener("pointerleave", handlePointerLeave);
+      renderer.domElement.removeEventListener("pointerdown", handleGesturePointerDown, { capture: true });
+      renderer.domElement.removeEventListener("wheel", handleGestureWheel, { capture: true });
+      controls.removeEventListener("start", handleGestureStart);
+      controls.removeEventListener("end", handleGestureEnd);
       thermalOverlay.dispose();
       thermalOverlayRef.current = null;
       if (placardsRef.current) disposePlacards(placardsRef.current);
@@ -1120,6 +1151,24 @@ function clampToGround(terrain: Terrain, camera: THREE.PerspectiveCamera, contro
   if (controls.target.y < targetGround) controls.target.y = targetGround;
   const cameraGround = terrain.heightAt(camera.position.x, camera.position.z) + MIN_CAMERA_HEIGHT_M;
   if (camera.position.y < cameraGround) camera.position.y = cameraGround;
+}
+
+/** Moves the orbit target along the line of sight to where it meets the
+ * ground. The view doesn't change, only what the controls act on: the
+ * controls pan the target on its own level, so panning across a slope leaves
+ * it in mid-air or under a hill, and zooming then closes in on that point, not
+ * on the ground; and both zooming and panning go at the speed of the target's
+ * distance. Nothing moves if the line of sight misses the ground, or meets it
+ * beyond the zoom or the pan limits (see `keepNearSite`). */
+function groundTarget(built: BuiltScene, camera: THREE.PerspectiveCamera, controls: OrbitControls): void {
+  const forward = camera.getWorldDirection(new THREE.Vector3());
+  const hit = intersectTerrain(built.terrain, camera.position, forward, controls.maxDistance);
+  if (!hit) return;
+  const target = camera.position.clone().addScaledVector(forward, Math.max(hit.distance, controls.minDistance));
+  const { minX, maxX, minZ, maxZ } = built.bounds;
+  const margin = panMargin(built);
+  if (target.x < minX - margin || target.x > maxX + margin || target.z < minZ - margin || target.z > maxZ + margin) return;
+  controls.target.copy(target);
 }
 
 /** Puts the camera at a placed viewpoint, looking along its bearing. */
