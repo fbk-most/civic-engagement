@@ -91,8 +91,10 @@ is under way.
 `CIVIC_ENGAGEMENT_STATE=<directory>` keeps the session and the saved
 scenarios elsewhere (`civic_engagement/store/storage.py`), under
 `<directory>/data/<site>/`: for a container whose own files are read-only;
-or `s3://<bucket>/<prefix>`, in a bucket (the core's `s3` extra, the
-standard `AWS_*` variables). The site's preset scenarios, in
+or `s3://<bucket>/<prefix>`, in a bucket (the core's `s3` extra; the
+credentials `CIVIC_ENGAGEMENT_S3_ACCESS_KEY` and
+`CIVIC_ENGAGEMENT_S3_SECRET_KEY`, the endpoint
+`CIVIC_ENGAGEMENT_S3_ENDPOINT`, or else the standard `AWS_*` variables). The site's preset scenarios, in
 `data/<site>/scenarios/`, are offered beside the saved ones, and can't be
 deleted.
 

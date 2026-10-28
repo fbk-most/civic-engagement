@@ -5,8 +5,8 @@ documents ("<directory>/<file>.json"), under a root.
 default — so the documents are where they have always been, next to each
 site's baseline in data/<site>/ — or `s3://<bucket>/<prefix>`, any
 S3-compatible store, for a container whose own disk doesn't outlive it
-(credentials and endpoint from the standard `AWS_*` variables, or
-`S3_ENDPOINT_URL`). The site's read-only data (baseline, terrain, preset
+(credentials and endpoint: see `s3_client`).
+The site's read-only data (baseline, terrain, preset
 scenarios) is read from data/<site>/ whatever the root.
 
 Writes go through to the root before a change is answered. One that fails
@@ -132,11 +132,7 @@ class S3Storage(Storage):
 
     def __init__(self, bucket: str, prefix: str = "", client=None) -> None:
         if client is None:
-            import boto3
-
-            # boto3 reads AWS_ENDPOINT_URL itself; S3_ENDPOINT_URL is what
-            # some platforms (DigitalHub) set.
-            client = boto3.client("s3", endpoint_url=os.environ.get("AWS_ENDPOINT_URL") or os.environ.get("S3_ENDPOINT_URL"))
+            client = s3_client()
         self._client, self.bucket, self.prefix = client, bucket, prefix.strip("/")
 
     @property
@@ -173,6 +169,31 @@ class S3Storage(Storage):
         for page in self._client.get_paginator("list_objects_v2").paginate(Bucket=self.bucket, Prefix=prefix, Delimiter="/"):
             names += [item["Key"][len(prefix):] for item in page.get("Contents", [])]
         return sorted(name for name in names if name.endswith(".json"))
+
+
+def s3_client():
+    """The S3 client for the state. With CIVIC_ENGAGEMENT_S3_ACCESS_KEY and
+    CIVIC_ENGAGEMENT_S3_SECRET_KEY, exactly those credentials, without a
+    session token: a platform may put its own temporary `AWS_*` in every
+    container (DigitalHub does, and they override a secret of the same
+    name). Otherwise boto3's own (the `AWS_*` variables, ~/.aws, ...).
+
+    The endpoint: CIVIC_ENGAGEMENT_S3_ENDPOINT, else AWS_ENDPOINT_URL, else
+    S3_ENDPOINT_URL (what some platforms set); none for AWS itself."""
+    import boto3
+
+    key = os.environ.get("CIVIC_ENGAGEMENT_S3_ACCESS_KEY", "")
+    secret = os.environ.get("CIVIC_ENGAGEMENT_S3_SECRET_KEY", "")
+    if bool(key) != bool(secret):
+        raise RuntimeError("CIVIC_ENGAGEMENT_S3_ACCESS_KEY and CIVIC_ENGAGEMENT_S3_SECRET_KEY go together")
+    endpoint = (
+        os.environ.get("CIVIC_ENGAGEMENT_S3_ENDPOINT")
+        or os.environ.get("AWS_ENDPOINT_URL")
+        or os.environ.get("S3_ENDPOINT_URL")
+    )
+    if key:
+        return boto3.client("s3", endpoint_url=endpoint, aws_access_key_id=key, aws_secret_access_key=secret, aws_session_token=None)
+    return boto3.client("s3", endpoint_url=endpoint)
 
 
 class Retrying(Storage):

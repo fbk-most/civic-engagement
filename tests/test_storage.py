@@ -25,6 +25,39 @@ def test_names_cannot_leave_the_root(tmp_path):
             storage.read(name)
 
 
+S3_VARIABLES = (
+    "CIVIC_ENGAGEMENT_S3_ACCESS_KEY", "CIVIC_ENGAGEMENT_S3_SECRET_KEY", "CIVIC_ENGAGEMENT_S3_ENDPOINT",
+    "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_ENDPOINT_URL", "S3_ENDPOINT_URL",
+)
+
+
+def _s3_client(monkeypatch, **variables):
+    pytest.importorskip("boto3")
+    from civic_engagement.store.storage import s3_client
+
+    for name in S3_VARIABLES:
+        monkeypatch.delenv(name, raising=False)
+    for name, value in variables.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setenv("AWS_REGION", "default")
+    client = s3_client()
+    credentials = client._request_signer._credentials.get_frozen_credentials()
+    return client.meta.endpoint_url, credentials.access_key, credentials.secret_key, credentials.token
+
+
+def test_s3_credentials_of_our_own_beat_the_platforms(monkeypatch):
+    platform = {
+        "AWS_ACCESS_KEY_ID": "temporary", "AWS_SECRET_ACCESS_KEY": "temporary-secret",
+        "AWS_SESSION_TOKEN": "session", "AWS_ENDPOINT_URL": "https://platform.example.org",
+    }
+    assert _s3_client(monkeypatch, **platform) == ("https://platform.example.org", "temporary", "temporary-secret", "session")
+    ours = {"CIVIC_ENGAGEMENT_S3_ACCESS_KEY": "static", "CIVIC_ENGAGEMENT_S3_SECRET_KEY": "static-secret"}
+    assert _s3_client(monkeypatch, **platform, **ours) == ("https://platform.example.org", "static", "static-secret", None)
+    assert _s3_client(monkeypatch, **platform, **ours, CIVIC_ENGAGEMENT_S3_ENDPOINT="https://ours.example.org")[0] == "https://ours.example.org"
+    with pytest.raises(RuntimeError):
+        _s3_client(monkeypatch, CIVIC_ENGAGEMENT_S3_ACCESS_KEY="static")
+
+
 @pytest.fixture
 def s3_storage():
     """A bucket at CIVIC_ENGAGEMENT_TEST_S3 (an endpoint: MinIO, moto's

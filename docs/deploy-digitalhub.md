@@ -41,7 +41,7 @@ instance with the [tests](#checking-an-instance) below.
 | Resources | Without `resources`, no guarantee (`BestEffort`). `{"cpu": "4", "mem": "4Gi"}` gives requests = limits for the CPU, a memory limit about 10% above the request | Always set `resources` |
 | CPUs | The container sees the machine's CPUs (`nproc`: 16 under a quota of 4) | `CIVIC_ENGAGEMENT_CPUS` set to the quota |
 | Volumes | A `persistent_volume_claim` is **created per run** (`v-<run-id>-<name>`): kept across a stop and resume of the run, but a new run gets a new, empty one. The platform can be configured to refuse pre-existing volumes | No durable state on volumes |
-| Credentials | Every pod gets S3 credentials (`AWS_*`, `S3_BUCKET`), Postgres ones (`DB_*`) and a platform token with a refresh token — **temporary**: about 5.5 hours (*instance*) | Not for a service running for weeks: long-lived credentials as a **project secret**, passed with `secrets=[…]` |
+| Credentials | Every pod gets S3 credentials (`AWS_*` with an `AWS_SESSION_TOKEN`, `S3_BUCKET`), Postgres ones (`DB_*`) and a platform token with a refresh token — **temporary**: about 5.5 hours (*instance*). They **override** a project secret of the same name | Not for a service running for weeks: long-lived S3 credentials as a **project secret** under the core's own names, `CIVIC_ENGAGEMENT_S3_ACCESS_KEY` and `CIVIC_ENGAGEMENT_S3_SECRET_KEY` (and `CIVIC_ENGAGEMENT_S3_ENDPOINT` if not the pod's `AWS_ENDPOINT_URL`), passed with `secrets=[…]`: the core then ignores the pod's `AWS_*` |
 | S3 | Reading and writing under `<bucket>/<prefix>/` works from a run | `CIVIC_ENGAGEMENT_STATE=s3://<bucket>/<prefix>` |
 | Network | The cluster reaches the internet (*instance*) | — |
 | Services | Each run has its service, `s-containerserve-<run-id>`; each function also a **stable alias**, `s-<project>-<function>-latest`, pointing at its latest run | Gateway routes to the alias |
@@ -65,8 +65,9 @@ pack's image can count on, and must respect, wherever it runs:
 - **Configured by environment**: `CIVIC_ENGAGEMENT_SITE`,
   `CIVIC_ENGAGEMENT_FRONTEND` (set by the image), `CIVIC_ENGAGEMENT_AUTH`,
   `CIVIC_ENGAGEMENT_STATE`, `CIVIC_ENGAGEMENT_CPUS`, the secrets
-  (`CIVIC_ENGAGEMENT_PIN_SECRET`, the manager's credentials, the store's
-  `AWS_*` with S3), `CIVIC_ENGAGEMENT_TRUSTED_PROXY`.
+  (`CIVIC_ENGAGEMENT_PIN_SECRET`, the manager's credentials, with S3
+  `CIVIC_ENGAGEMENT_S3_ACCESS_KEY` and `_SECRET_KEY`),
+  `CIVIC_ENGAGEMENT_TRUSTED_PROXY`.
 - **State outside the container** when the container's disk doesn't
   outlive it; **one process** per site's state, and a new one started only
   once the old one has stopped.
@@ -148,10 +149,11 @@ On a new instance, before the first deployment, in a test project:
 
 | Test | How | Tells |
 |---|---|---|
-| Non-root | `traefik/whoami` with `args=["--port", "8080"]`, without and with `run_as_user` | Whether root is refused |
+| Non-root | `traefik/whoami` with `args=["--port", "8080"]` (a run's argument: the SDK ignores a function's `args`), without and with `run_as_user` | Whether root is refused |
 | Image, resources, volume | `ghcr.io/astral-sh/uv:python3.12-bookworm-slim` with `command="sh"`, a script writing to a volume and serving it with `python -m http.server 8080`; `resources` 4 CPU / 4 GiB | Pulling from GHCR, the quota, the volume's lifetime (stop/resume, new run), `nproc` |
 | Environment | the same, printing `env` names only, then the values of `AWS_CREDENTIALS_EXPIRATION`, `DHCORE_EXPIRES_IN`, `S3_BUCKET`, `DHCORE_VERSION` | The credentials and how long they last; the core's version |
 | S3 | the same, `uv run --with boto3` writing and reading an object under the project's prefix | Access to the bucket; the internet from the cluster |
+| Secrets | a project secret `AWS_ACCESS_KEY_ID` with a dummy value; a run given it, comparing | Whether the pod's own credentials override a secret (they do on DigitalHub 0.15.1) |
 | Gateway | a route to whoami's alias; from outside: `curl $H/` (the `X-Forwarded-For` header), `curl "$H/data?size=5000000"`, `curl "$H/?wait=40s"` and longer, a new run behind the same route | The client's IP, response size, the timeout, the alias across runs |
 
 Questions for the instance's administrators:
