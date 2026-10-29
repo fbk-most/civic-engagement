@@ -122,6 +122,20 @@ def test_throttle_per_ip_and_across_the_site():
         assert throttle.wait("c") == 0
         throttle.failed(None)
     assert throttle.wait("c") == 60 and throttle.status()["failures_last_window"] == 10
+    assert throttle.status()["site_wait_s"] == 60
+    throttle.reset()
+    assert throttle.wait("c") == 0 and throttle.status()["failures_last_window"] == 0
+
+
+def test_throttle_reset_for_one_ip():
+    now = [0.0]
+    throttle = access.Throttle(free=1, clock=lambda: now[0])
+    for ip in ("a", "b"):
+        throttle.failed(ip)
+        throttle.failed(ip)
+    assert throttle.status()["waiting_ips"] == {"a": 2, "b": 2}
+    throttle.reset("a")
+    assert throttle.wait("a") == 0 and throttle.wait("b") == 2
 
 
 def test_tokens_are_signed(monkeypatch):
@@ -167,6 +181,9 @@ def test_failed_writes_are_kept_and_retried(tmp_path):
 # The app, with teams.
 
 
+PASSWORD = "manager-password"
+
+
 @pytest.fixture
 def pin_app(tmp_path, monkeypatch):
     """The app with CIVIC_ENGAGEMENT_AUTH=pin, its state in tmp_path."""
@@ -174,23 +191,22 @@ def pin_app(tmp_path, monkeypatch):
     monkeypatch.setenv("CIVIC_ENGAGEMENT_STATE", str(tmp_path))
     monkeypatch.setenv("CIVIC_ENGAGEMENT_PIN_SECRET", SECRET)
     monkeypatch.setenv("CIVIC_ENGAGEMENT_MANAGER_USER", "manager")
-    monkeypatch.setenv("CIVIC_ENGAGEMENT_MANAGER_PASSWORD", "password")
+    monkeypatch.setenv("CIVIC_ENGAGEMENT_MANAGER_PASSWORD", PASSWORD)
     monkeypatch.setenv("CIVIC_ENGAGEMENT_TRUSTED_PROXY", "1")
     monkeypatch.delenv("CIVIC_ENGAGEMENT_FRONTEND", raising=False)
     for cached in (config.auth_mechanism, storage.state_storage, access.team_store):
         cached.cache_clear()
     monkeypatch.setattr(state.store, "_sessions", {})
-    monkeypatch.setattr(access, "throttle", access.Throttle())
-    from civic_engagement.api import routes_auth, routes_admin
-
-    monkeypatch.setattr(routes_auth, "throttle", access.throttle)
-    monkeypatch.setattr(routes_admin, "throttle", access.throttle)
+    access.pin_throttle.reset()
+    access.manager_throttle.reset()
     yield TestClient(create_app(active_pack()))
     for cached in (config.auth_mechanism, storage.state_storage, access.team_store):
         cached.cache_clear()
+    access.pin_throttle.reset()
+    access.manager_throttle.reset()
 
 
-ADMIN = {"Authorization": "Basic " + base64.b64encode(b"manager:password").decode()}
+ADMIN = {"Authorization": "Basic " + base64.b64encode(f"manager:{PASSWORD}".encode()).decode()}
 
 
 def _login(client, pin: str) -> dict:
@@ -313,12 +329,35 @@ def test_the_manager_runs_the_teams(pin_app):
 
 def test_guessing_pins_waits(pin_app):
     _workshop(pin_app)
-    for _ in range(5):
-        assert pin_app.post("/api/auth/pin", json={"pin": "000000"}, headers={"X-Forwarded-For": "10.0.0.9"}).status_code in (401, 200)
-    response = pin_app.post("/api/auth/pin", json={"pin": "000000"}, headers={"X-Forwarded-For": "10.0.0.9"})
+    guess = lambda ip: pin_app.post("/api/auth/pin", json={"pin": "000000"}, headers={"X-Forwarded-For": ip})  # noqa: E731
+    for _ in range(10):
+        assert guess("10.0.0.9").status_code in (401, 200)
+    response = guess("10.0.0.9")
     assert response.status_code == 429 and int(response.headers["retry-after"]) >= 1
     # Another IP isn't held up.
-    assert pin_app.post("/api/auth/pin", json={"pin": "000000"}, headers={"X-Forwarded-For": "10.0.0.8"}).status_code != 429
+    assert guess("10.0.0.8").status_code != 429
+    # Nor is the manager, from the same IP; who can let it try again.
+    manager = {**ADMIN, "X-Forwarded-For": "10.0.0.9"}
+    status = pin_app.get("/api/admin/status", headers=manager).json()["throttle"]
+    assert "10.0.0.9" in status["pins"]["waiting_ips"] and status["manager"]["waiting_ips"] == {}
+    assert pin_app.post("/api/admin/throttle/reset", json={"ip": "10.0.0.9"}, headers=manager).json()["waiting_ips"] == {}
+    assert guess("10.0.0.9").status_code == 401
+
+
+def test_wrong_manager_passwords_dont_hold_pins_up(pin_app):
+    pins = _workshop(pin_app)
+    wrong = {"Authorization": "Basic " + base64.b64encode(b"manager:wrong").decode(), "X-Forwarded-For": "10.0.0.7"}
+    for _ in range(5):
+        assert pin_app.get("/api/admin/status", headers=wrong).status_code == 401
+    assert pin_app.get("/api/admin/status", headers=wrong).status_code == 429
+    response = pin_app.post("/api/auth/pin", json={"pin": pins["editor1"]}, headers={"X-Forwarded-For": "10.0.0.7"})
+    assert response.status_code == 200
+
+
+def test_a_short_manager_password_is_refused(pin_app, monkeypatch):
+    monkeypatch.setenv("CIVIC_ENGAGEMENT_MANAGER_PASSWORD", "short")
+    with pytest.raises(RuntimeError, match="at least 12"):
+        access.check_configuration()
 
 
 def test_the_cli(pin_app, monkeypatch, capsys):
@@ -359,6 +398,8 @@ def test_the_cli(pin_app, monkeypatch, capsys):
         admin.main(["team", "delete", "team-1", "--yes"])
         admin.main(["status"])
         assert json.loads(capsys.readouterr().out.split("\n", 2)[-1])["teams"] == 0
+        admin.main(["throttle", "reset"])
+        assert "everyone" in capsys.readouterr().out
         with pytest.raises(SystemExit, match="401"):
             admin.Admin(f"http://127.0.0.1:{port}", "manager", "wrong").call("GET", "/status")
     finally:

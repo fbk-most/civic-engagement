@@ -113,8 +113,7 @@ what the manager can do).
 ```bash
 CIVIC_ENGAGEMENT_AUTH=pin \
 CIVIC_ENGAGEMENT_PIN_SECRET=<16 or more random characters, the same across restarts> \
-CIVIC_ENGAGEMENT_MANAGER_USER=manager CIVIC_ENGAGEMENT_MANAGER_PASSWORD=<password> \
-CIVIC_ENGAGEMENT_TRUSTED_PROXY=0 \
+CIVIC_ENGAGEMENT_MANAGER_USER=manager CIVIC_ENGAGEMENT_MANAGER_PASSWORD=<12 or more characters> \
   uv run uvicorn <pack>.main:app
 
 export CIVIC_ENGAGEMENT_ADMIN_URL=http://localhost:8000 \
@@ -124,9 +123,19 @@ uv run civic-engagement-admin member add team-1 "Anna" --editor    # prints Anna
 uv run civic-engagement-admin member add team-1 --viewers          # the team's viewers' PIN
 ```
 
-`CIVIC_ENGAGEMENT_TRUSTED_PROXY` tells the throttling of wrong PINs where the
-client's IP is: 0, the connection's (no proxy); 1, the one a gateway adds to
-`X-Forwarded-For`; unset, nowhere (only a site-wide limit).
+Wrong PINs are throttled per client IP (10 a minute free, then waits of up
+to a minute) and across the site (beyond 60 a minute, everyone waits); the
+manager's wrong passwords apart, so that PINs never hold the manager up.
+`civic-engagement-admin status` shows who's waiting,
+`civic-engagement-admin throttle reset [<ip>]` lets them try again at once.
+
+`CIVIC_ENGAGEMENT_TRUSTED_PROXY` tells the throttling where the client's IP
+is: 0, the connection's — only when clients connect straight to the app;
+1, the one a gateway adds to `X-Forwarded-For`, if it's the client's;
+unset (the default), nowhere: only the site-wide limit. Behind Docker's
+port forwarding, or a gateway that passes on an address of its own, every
+client looks the same: leave it unset, or one participant's typos hold
+everyone up.
 
 ### In a container
 

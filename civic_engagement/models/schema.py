@@ -312,6 +312,12 @@ class TeamScene(BaseModel):
     team: str | None = None
 
 
+class ThrottleReset(BaseModel):
+    """Whose wrong PINs to forget: an IP's, or (none) everyone's."""
+
+    ip: str | None = None
+
+
 class AdminMember(MemberInfo):
     pin_version: int
     pin: str | None = Field(default=None, description="The PIN, in clear: only in the answer that made it")

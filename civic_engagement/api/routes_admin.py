@@ -1,14 +1,15 @@
 """The manager's API (`pin` only): teams, members and their PINs, a team's
-scene, its export, the store's state. Basic credentials (access.manager);
+scene, its export, the store's state, the PINs' throttle. Basic
+credentials (access.manager);
 the CLI, civic_engagement/admin.py, calls it."""
 
 import json
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from civic_engagement.access import manager, team_store, throttle
+from civic_engagement.access import manager, manager_throttle, pin_throttle, team_store
 from civic_engagement.config import SITE
-from civic_engagement.models.schema import AdminMember, AdminTeam, MemberCreate, TeamCreate, TeamRename, TeamScene
+from civic_engagement.models.schema import AdminMember, AdminTeam, MemberCreate, TeamCreate, TeamRename, TeamScene, ThrottleReset
 from civic_engagement.store.scenarios import ScenarioError, delete_library, library, read_scenario, scenario_documents
 from civic_engagement.store.state import store
 from civic_engagement.store.storage import state_storage
@@ -162,5 +163,13 @@ def get_status() -> dict:
             "last_write": storage.last_write,
             "last_error": storage.last_error,
         },
-        "throttle": throttle.status(),
+        "throttle": {"pins": pin_throttle.status(), "manager": manager_throttle.status()},
     }
+
+
+@router.post("/throttle/reset")
+def post_throttle_reset(data: ThrottleReset) -> dict:
+    """Forgets wrong PINs — an IP's, or everyone's — so that those held up
+    can try again at once (e.g. a venue whose participants share an IP)."""
+    pin_throttle.reset(data.ip)
+    return pin_throttle.status()

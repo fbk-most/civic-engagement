@@ -14,6 +14,7 @@ CIVIC_ENGAGEMENT_MANAGER_USER, CIVIC_ENGAGEMENT_MANAGER_PASSWORD.
     civic-engagement-admin scene set <team> <scenario> [--of <team>] | scene set <team> --empty
     civic-engagement-admin export <team> > team-1.json
     civic-engagement-admin status
+    civic-engagement-admin throttle reset [<ip>]               # wrong PINs forgotten: an IP's, or everyone's
 
 A member is named by its id or its name.
 """
@@ -114,6 +115,9 @@ def main(argv: list[str] | None = None) -> None:
     export = commands.add_parser("export")
     export.add_argument("team")
     commands.add_parser("status")
+    throttle = commands.add_parser("throttle").add_subparsers(dest="action", required=True)
+    reset = throttle.add_parser("reset", help="forget wrong PINs, so that those held up can try again")
+    reset.add_argument("ip", nargs="?", help="only this IP's (default: everyone's)")
 
     args = parser.parse_args(argv)
     admin = Admin(
@@ -148,6 +152,9 @@ def main(argv: list[str] | None = None) -> None:
             print()
         case "status", _:
             print(json.dumps(admin.call("GET", "/status"), indent=1))
+        case "throttle", "reset":
+            admin.call("POST", "/throttle/reset", {"ip": args.ip})
+            print(f"Wrong PINs forgotten: {args.ip or 'everyone'}")
 
 
 if __name__ == "__main__":

@@ -18,7 +18,8 @@ revoked PIN (a new version) invalidates it.
 The environment, with `pin`:
 - `CIVIC_ENGAGEMENT_PIN_SECRET`: the HMACs' secret, the same across
   deployments (changing it invalidates every PIN and token);
-- `CIVIC_ENGAGEMENT_MANAGER_USER`, `CIVIC_ENGAGEMENT_MANAGER_PASSWORD`;
+- `CIVIC_ENGAGEMENT_MANAGER_USER`, `CIVIC_ENGAGEMENT_MANAGER_PASSWORD` (at
+  least 12 characters);
 - `CIVIC_ENGAGEMENT_TRUSTED_PROXY` (see `client_ip`).
 """
 
@@ -105,11 +106,11 @@ def read_token(token: str) -> tuple[str, int] | None:
     return member_id, int(version)
 
 
-# Guessing PINs.
+# Guessing PINs, and the manager's password.
 
 
 class Throttle:
-    """Failed attempts (a PIN, the manager's password), per client IP and
+    """Failed attempts (PINs, or the manager's password), per client IP and
     across the site. From an IP, after `free` failures within `window`
     seconds, each further failure — whenever it comes — makes the next
     attempt wait, doubling up to `longest` seconds; `memory` seconds without
@@ -120,7 +121,7 @@ class Throttle:
     PIN: that would let anyone shut a team out."""
 
     def __init__(
-        self, free: int = 5, window: float = 60, longest: float = 300, memory: float = 3600, ceiling: int = 60,
+        self, free: int = 10, window: float = 60, longest: float = 60, memory: float = 900, ceiling: int = 60,
         clock=time.monotonic,
     ):
         self.free, self.window, self.longest, self.memory = free, window, longest, memory
@@ -165,12 +166,23 @@ class Throttle:
         now = self._clock()
         with self._lock:
             self._expire(now)
+            waiting = {ip: math.ceil(until - now) for ip, (_, _, until, _) in self._ips.items() if until > now}
             return {
                 "failures_last_window": len(self._site),
                 "window_s": self.window,
                 "ceiling": self.ceiling,
-                "waiting_ips": sum(1 for _, _, until, _ in self._ips.values() if until > now),
+                "site_wait_s": math.ceil(self._site[0] + self.window - now) if len(self._site) >= self.ceiling else 0,
+                "waiting_ips": dict(sorted(waiting.items())),
             }
+
+    def reset(self, ip: str | None = None) -> None:
+        """Forgets an IP's failures; without one, every IP's and the site's."""
+        with self._lock:
+            if ip is None:
+                self._ips.clear()
+                self._site.clear()
+            else:
+                self._ips.pop(ip, None)
 
     def _expire(self, now: float) -> None:
         while self._site and self._site[0] <= now - self.window:
@@ -182,7 +194,13 @@ class Throttle:
                 del self._ips[ip]
 
 
-throttle = Throttle()
+# Apart, so that wrong PINs never hold the manager up (nor the other way
+# round): participants often share an IP (a venue's network, Docker's port
+# forwarding), and the manager must be able to step in — e.g. to reset
+# the PINs' throttle. PINs are forgiving (people mistype them); the
+# manager's password, long, isn't.
+pin_throttle = Throttle()
+manager_throttle = Throttle(free=5, longest=300, memory=3600)
 
 
 def client_ip(request: Request) -> str | None:
@@ -191,7 +209,9 @@ def client_ip(request: Request) -> str | None:
     `X-Forwarded-For` — trusted only if the proxy sets it:
     `CIVIC_ENGAGEMENT_TRUSTED_PROXY` = how many proxies append to it (1 for
     one gateway), or 0 for none (the connection's address is the client's).
-    Unset: no IP — only the site-wide ceiling applies."""
+    Unset: no IP — only the site-wide ceiling applies. Where every client
+    arrives from one address (Docker's port forwarding, a gateway behind a
+    load balancer that hides it), leave it unset."""
     proxies = os.environ.get("CIVIC_ENGAGEMENT_TRUSTED_PROXY", "")
     if not proxies:
         return None
@@ -201,7 +221,7 @@ def client_ip(request: Request) -> str | None:
     return forwarded[-int(proxies)] if len(forwarded) >= int(proxies) else None
 
 
-def throttled(request: Request) -> str | None:
+def throttled(request: Request, throttle: Throttle) -> str | None:
     """The client's IP, or a 429 if it must wait."""
     ip = client_ip(request)
     wait = throttle.wait(ip)
@@ -244,7 +264,7 @@ _basic = HTTPBasic(auto_error=False)
 
 def manager(request: Request, credentials: HTTPBasicCredentials | None = Depends(_basic)) -> None:
     """The manager's Basic credentials (`CIVIC_ENGAGEMENT_MANAGER_USER`, `_PASSWORD`)."""
-    ip = throttled(request)
+    ip = throttled(request, manager_throttle)
     user = os.environ.get("CIVIC_ENGAGEMENT_MANAGER_USER", "")
     password = os.environ.get("CIVIC_ENGAGEMENT_MANAGER_PASSWORD", "")
     given = credentials or HTTPBasicCredentials(username="", password="")
@@ -253,8 +273,13 @@ def manager(request: Request, credentials: HTTPBasicCredentials | None = Depends
     )
     if not (user and password and valid):
         if credentials is not None:
-            throttle.failed(ip)
+            manager_throttle.failed(ip)
         raise HTTPException(status_code=401, detail="The manager's credentials", headers={"WWW-Authenticate": "Basic"})
+
+
+# The manager's password, the first defence of the admin API (its
+# throttle, the second).
+MANAGER_PASSWORD_MIN = 12
 
 
 def check_configuration() -> None:
@@ -264,4 +289,6 @@ def check_configuration() -> None:
         return
     if not (os.environ.get("CIVIC_ENGAGEMENT_MANAGER_USER") and os.environ.get("CIVIC_ENGAGEMENT_MANAGER_PASSWORD")):
         raise RuntimeError("CIVIC_ENGAGEMENT_AUTH=pin needs CIVIC_ENGAGEMENT_MANAGER_USER and CIVIC_ENGAGEMENT_MANAGER_PASSWORD")
+    if len(os.environ["CIVIC_ENGAGEMENT_MANAGER_PASSWORD"]) < MANAGER_PASSWORD_MIN:
+        raise RuntimeError(f"CIVIC_ENGAGEMENT_MANAGER_PASSWORD: at least {MANAGER_PASSWORD_MIN} characters")
     team_store()

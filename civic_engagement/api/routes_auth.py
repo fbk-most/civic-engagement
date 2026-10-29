@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from civic_engagement.access import Access, access, make_token, team_store, throttle, throttled
+from civic_engagement.access import Access, access, make_token, pin_throttle, team_store, throttled
 from civic_engagement.config import auth_mechanism
 from civic_engagement.domain import active_pack
 from civic_engagement.models.schema import AuthInfo, LoginResponse, Me, PinLogin
@@ -24,10 +24,10 @@ def post_pin(data: PinLogin, request: Request) -> LoginResponse:
     Retry-After) after too many."""
     if auth_mechanism() != "pin":
         raise HTTPException(status_code=404, detail="No PINs here: CIVIC_ENGAGEMENT_AUTH isn't pin")
-    ip = throttled(request)
+    ip = throttled(request, pin_throttle)
     found = team_store().by_pin(data.pin)
     if found is None:
-        throttle.failed(ip)
+        pin_throttle.failed(ip)
         raise HTTPException(status_code=401, detail="Not a PIN")
     team, member = found
     who = Access(team=team.id, team_name=team.name, role=member.role, member_id=member.id, member_name=member.name)

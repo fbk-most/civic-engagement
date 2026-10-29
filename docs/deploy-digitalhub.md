@@ -96,7 +96,7 @@ run = function.run(
         {"name": "CIVIC_ENGAGEMENT_AUTH", "value": "pin"},          # or what the deployment chooses
         {"name": "CIVIC_ENGAGEMENT_STATE", "value": "s3://<bucket>/<prefix>/"},
         {"name": "CIVIC_ENGAGEMENT_CPUS", "value": "4"},
-        {"name": "CIVIC_ENGAGEMENT_TRUSTED_PROXY", "value": "1"},   # if the gateway sets X-Forwarded-For
+        {"name": "CIVIC_ENGAGEMENT_TRUSTED_PROXY", "value": "1"},   # only if X-Forwarded-For holds the client's own IP
     ],
     secrets=["<manager>", "<pin-secret>", "<s3-credentials>"],
     run_as_user=1000, run_as_group=1000, fs_group=1000,
@@ -154,7 +154,7 @@ On a new instance, before the first deployment, in a test project:
 | Environment | the same, printing `env` names only, then the values of `AWS_CREDENTIALS_EXPIRATION`, `DHCORE_EXPIRES_IN`, `S3_BUCKET`, `DHCORE_VERSION` | The credentials and how long they last; the core's version |
 | S3 | the same, `uv run --with boto3` writing and reading an object under the project's prefix | Access to the bucket; the internet from the cluster |
 | Secrets | a project secret `AWS_ACCESS_KEY_ID` with a dummy value; a run given it, comparing | Whether the pod's own credentials override a secret (they do on DigitalHub 0.15.1) |
-| Gateway | a route to whoami's alias; from outside: `curl $H/` (the `X-Forwarded-For` header), `curl "$H/data?size=5000000"`, `curl "$H/?wait=40s"` and longer, a new run behind the same route | The client's IP, response size, the timeout, the alias across runs |
+| Gateway | a route to whoami's alias; from outside: `curl $H/` (the `X-Forwarded-For` header), `curl "$H/data?size=5000000"`, `curl "$H/?wait=40s"` and longer, a new run behind the same route | The client's IP (is the last `X-Forwarded-For` the client's own, or an address inside the cluster? Only the first makes `CIVIC_ENGAGEMENT_TRUSTED_PROXY=1` right), response size, the timeout, the alias across runs |
 
 Questions for the instance's administrators:
 
