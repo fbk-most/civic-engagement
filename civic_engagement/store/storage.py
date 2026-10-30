@@ -5,7 +5,7 @@ documents ("<directory>/<file>.json"), under a root.
 default — so the documents are where they have always been, next to each
 site's baseline in data/<site>/ — or `s3://<bucket>/<prefix>`, any
 S3-compatible store, for a container whose own disk doesn't outlive it
-(credentials and endpoint: see `s3_client`).
+(credentials and endpoint: see `storage_at`).
 The site's read-only data (baseline, terrain, preset
 scenarios) is read from data/<site>/ whatever the root.
 
@@ -126,14 +126,35 @@ class LocalStorage(Storage):
         return sorted(p.name for p in folder.glob("*.json")) if folder.is_dir() else []
 
 
+# What S3 answers to credentials that have expired, or were replaced.
+EXPIRED = {"ExpiredToken", "ExpiredTokenException", "InvalidAccessKeyId", "InvalidToken", "TokenRefreshRequired"}
+
+
 class S3Storage(Storage):
     """Objects under a prefix of an S3 bucket. Needs boto3 (the core's `s3`
-    extra)."""
+    extra). The client: `client`, or `credentials`' — a source of clients
+    kept fresh (`client()`, `renew(stale)`: digitalhub.Credentials) — or
+    `s3_client()`'s."""
 
-    def __init__(self, bucket: str, prefix: str = "", client=None) -> None:
-        if client is None:
+    def __init__(self, bucket: str, prefix: str = "", client=None, credentials=None) -> None:
+        if client is None and credentials is None:
             client = s3_client()
-        self._client, self.bucket, self.prefix = client, bucket, prefix.strip("/")
+        self._client, self._credentials = client, credentials
+        self.bucket, self.prefix = bucket, prefix.strip("/")
+
+    def _call(self, operation):
+        """`operation(client)`; with `credentials`, if S3 answers that they
+        have expired, renewed and tried once more."""
+        from botocore.exceptions import ClientError
+
+        client = self._credentials.client() if self._credentials is not None else self._client
+        try:
+            return operation(client)
+        except ClientError as error:
+            if self._credentials is None or error.response.get("Error", {}).get("Code") not in EXPIRED:
+                raise
+            log.warning("S3 credentials expired (%s): renewed", error.response["Error"]["Code"])
+            return operation(self._credentials.renew(stale=client))
 
     @property
     def location(self) -> str:
@@ -144,31 +165,45 @@ class S3Storage(Storage):
         return f"{self.prefix}/{name}" if self.prefix else name
 
     def read(self, name: str) -> bytes | None:
-        try:
-            return self._client.get_object(Bucket=self.bucket, Key=self._key(name))["Body"].read()
-        except self._client.exceptions.NoSuchKey:
-            return None
+        key = self._key(name)
+
+        def get(client) -> bytes | None:
+            try:
+                return client.get_object(Bucket=self.bucket, Key=key)["Body"].read()
+            except client.exceptions.NoSuchKey:
+                return None
+
+        return self._call(get)
 
     def write(self, name: str, data: bytes) -> None:
-        self._client.put_object(Bucket=self.bucket, Key=self._key(name), Body=data, ContentType="application/json")
+        key = self._key(name)
+        self._call(lambda client: client.put_object(Bucket=self.bucket, Key=key, Body=data, ContentType="application/json"))
 
     def delete(self, name: str) -> bool:
         key = self._key(name)
-        try:
-            self._client.head_object(Bucket=self.bucket, Key=key)
-        except self._client.exceptions.ClientError as error:
-            if error.response.get("Error", {}).get("Code") in ("404", "NoSuchKey", "NotFound"):
-                return False
-            raise
-        self._client.delete_object(Bucket=self.bucket, Key=key)
-        return True
+
+        def delete(client) -> bool:
+            try:
+                client.head_object(Bucket=self.bucket, Key=key)
+            except client.exceptions.ClientError as error:
+                if error.response.get("Error", {}).get("Code") in ("404", "NoSuchKey", "NotFound"):
+                    return False
+                raise
+            client.delete_object(Bucket=self.bucket, Key=key)
+            return True
+
+        return self._call(delete)
 
     def names(self, directory: str = "") -> list[str]:
         prefix = self._key(directory) + "/" if directory else (f"{self.prefix}/" if self.prefix else "")
-        names = []
-        for page in self._client.get_paginator("list_objects_v2").paginate(Bucket=self.bucket, Prefix=prefix, Delimiter="/"):
-            names += [item["Key"][len(prefix):] for item in page.get("Contents", [])]
-        return sorted(name for name in names if name.endswith(".json"))
+
+        def names(client) -> list[str]:
+            found = []
+            for page in client.get_paginator("list_objects_v2").paginate(Bucket=self.bucket, Prefix=prefix, Delimiter="/"):
+                found += [item["Key"][len(prefix):] for item in page.get("Contents", [])]
+            return found
+
+        return sorted(name for name in self._call(names) if name.endswith(".json"))
 
 
 def s3_client():
@@ -294,9 +329,20 @@ class Retrying(Storage):
 
 
 def storage_at(root: str) -> Storage:
-    """A local directory, or `s3://<bucket>/<prefix>`."""
+    """A local directory, or `s3://<bucket>/<prefix>`: its credentials from
+    `s3_client`, or with CIVIC_ENGAGEMENT_S3_CREDENTIALS=digitalhub from the
+    platform, renewed (civic_engagement/digitalhub.py, the core's `dh` extra)."""
     if root.startswith("s3://"):
         bucket, _, prefix = root.removeprefix("s3://").partition("/")
+        source = os.environ.get("CIVIC_ENGAGEMENT_S3_CREDENTIALS", "")
+        if source == "digitalhub":
+            if os.environ.get("CIVIC_ENGAGEMENT_S3_ACCESS_KEY"):
+                raise RuntimeError("CIVIC_ENGAGEMENT_S3_CREDENTIALS=digitalhub, or CIVIC_ENGAGEMENT_S3_ACCESS_KEY: not both")
+            from civic_engagement.digitalhub import credentials
+
+            return S3Storage(bucket, prefix, credentials=credentials())
+        if source:
+            raise RuntimeError(f"CIVIC_ENGAGEMENT_S3_CREDENTIALS={source}: only digitalhub, or unset")
         return S3Storage(bucket, prefix)
     return LocalStorage(root)
 

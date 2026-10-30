@@ -94,7 +94,10 @@ scenarios elsewhere (`civic_engagement/store/storage.py`), under
 or `s3://<bucket>/<prefix>`, in a bucket (the core's `s3` extra; the
 credentials `CIVIC_ENGAGEMENT_S3_ACCESS_KEY` and
 `CIVIC_ENGAGEMENT_S3_SECRET_KEY`, the endpoint
-`CIVIC_ENGAGEMENT_S3_ENDPOINT`, or else the standard `AWS_*` variables). The site's preset scenarios, in
+`CIVIC_ENGAGEMENT_S3_ENDPOINT`, or else the standard `AWS_*` variables; on
+DigitalHub, `CIVIC_ENGAGEMENT_S3_CREDENTIALS=digitalhub` and the `dh`
+extra: the run's own, renewed through the platform's SDK,
+`civic_engagement/digitalhub.py`). The site's preset scenarios, in
 `data/<site>/scenarios/`, are offered beside the saved ones, and can't be
 deleted.
 

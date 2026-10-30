@@ -41,7 +41,8 @@ instance with the [tests](#checking-an-instance) below.
 | Resources | Without `resources`, no guarantee (`BestEffort`). `{"cpu": "4", "mem": "4Gi"}` gives requests = limits for the CPU, a memory limit about 10% above the request | Always set `resources` |
 | CPUs | The container sees the machine's CPUs (`nproc`: 16 under a quota of 4) | `CIVIC_ENGAGEMENT_CPUS` set to the quota |
 | Volumes | A `persistent_volume_claim` is **created per run** (`v-<run-id>-<name>`): kept across a stop and resume of the run, but a new run gets a new, empty one. The platform can be configured to refuse pre-existing volumes | No durable state on volumes |
-| Credentials | Every pod gets S3 credentials (`AWS_*` with an `AWS_SESSION_TOKEN`, `S3_BUCKET`), Postgres ones (`DB_*`) and a platform token with a refresh token — **temporary**: about 5.5 hours (*instance*). They **override** a project secret of the same name | Not for a service running for weeks: long-lived S3 credentials as a **project secret** under the core's own names, `CIVIC_ENGAGEMENT_S3_ACCESS_KEY` and `CIVIC_ENGAGEMENT_S3_SECRET_KEY` (and `CIVIC_ENGAGEMENT_S3_ENDPOINT` if not the pod's `AWS_ENDPOINT_URL`), passed with `secrets=[…]`: the core then ignores the pod's `AWS_*` |
+| Credentials | Every pod gets S3 credentials (`AWS_*` with an `AWS_SESSION_TOKEN`, `S3_BUCKET`), Postgres ones (`DB_*`) and a platform token with a refresh token — **temporary**: about 5.5 hours (*instance*); S3's and the platform's expire together. They come from the run's Kubernetes Secret (`sec-containerserve-<run-id>`, through `envFrom`), written when the run is created and **not updated**: a restarted container gets the same ones. The SDK renews them (`digitalhub.refresh_token()`, then `get_s3_client()`): new ones, refresh token included, the old ones invalidated. The refresh token lapses unused after about a month | For a service running for weeks: `CIVIC_ENGAGEMENT_S3_CREDENTIALS=digitalhub` (the core's `dh` extra): the core renews them every 2 hours (`CIVIC_ENGAGEMENT_S3_REFRESH_S`), and at once if S3 says they've expired; `/api/admin/status` shows them (`storage.credentials`). Static S3 credentials, where an instance gives them: under the core's names, `CIVIC_ENGAGEMENT_S3_ACCESS_KEY` and `CIVIC_ENGAGEMENT_S3_SECRET_KEY` (and `CIVIC_ENGAGEMENT_S3_ENDPOINT`), not `AWS_*`, which the pod's own, with their session token, would get in the way of |
+| Restarts | The platform ends a run (`ERROR`, "Multiple pod restarts") at its container's **second** restart, however far apart (*instance*). With renewed credentials even a first restart fails: the run's variables no longer work | Deploy again (a new run gets new credentials; the state is in S3). Keep the memory well within its limit: an app killed for its memory is restarted |
 | S3 | Reading and writing under `<bucket>/<prefix>/` works from a run | `CIVIC_ENGAGEMENT_STATE=s3://<bucket>/<prefix>` |
 | Network | The cluster reaches the internet (*instance*) | — |
 | Services | Each run has its service, `s-containerserve-<run-id>`; each function also a **stable alias**, `s-<project>-<function>-latest`, pointing at its latest run | Gateway routes to the alias |
@@ -65,9 +66,9 @@ pack's image can count on, and must respect, wherever it runs:
 - **Configured by environment**: `CIVIC_ENGAGEMENT_SITE`,
   `CIVIC_ENGAGEMENT_FRONTEND` (set by the image), `CIVIC_ENGAGEMENT_AUTH`,
   `CIVIC_ENGAGEMENT_STATE`, `CIVIC_ENGAGEMENT_CPUS`, the secrets
-  (`CIVIC_ENGAGEMENT_PIN_SECRET`, the manager's credentials, with S3
-  `CIVIC_ENGAGEMENT_S3_ACCESS_KEY` and `_SECRET_KEY`),
-  `CIVIC_ENGAGEMENT_TRUSTED_PROXY`.
+  (`CIVIC_ENGAGEMENT_PIN_SECRET`, the manager's credentials),
+  `CIVIC_ENGAGEMENT_S3_CREDENTIALS=digitalhub` (the image with the core's
+  `dh` extra), `CIVIC_ENGAGEMENT_TRUSTED_PROXY`.
 - **State outside the container** when the container's disk doesn't
   outlive it; **one process** per site's state, and a new one started only
   once the old one has stopped.
@@ -95,10 +96,11 @@ run = function.run(
         {"name": "CIVIC_ENGAGEMENT_SITE", "value": "<site>"},
         {"name": "CIVIC_ENGAGEMENT_AUTH", "value": "pin"},          # or what the deployment chooses
         {"name": "CIVIC_ENGAGEMENT_STATE", "value": "s3://<bucket>/<prefix>/"},
+        {"name": "CIVIC_ENGAGEMENT_S3_CREDENTIALS", "value": "digitalhub"},   # the run's own, renewed
         {"name": "CIVIC_ENGAGEMENT_CPUS", "value": "4"},
         {"name": "CIVIC_ENGAGEMENT_TRUSTED_PROXY", "value": "1"},   # only if X-Forwarded-For holds the client's own IP
     ],
-    secrets=["<manager>", "<pin-secret>", "<s3-credentials>"],
+    secrets=["<manager>", "<pin-secret>"],
     run_as_user=1000, run_as_group=1000, fs_group=1000,
 )
 ```
@@ -138,6 +140,8 @@ the new run's start, under a minute.
 ### Logs and cleaning up
 
 - A run's log: the console, on the run's page.
+- A run that has ended by itself (`ERROR`: its container restarted twice,
+  e.g. killed for its memory) is deployed again as an upgrade is.
 - Stopped runs keep their volumes (if any were asked for) until the
   administrators' policy removes them.
 - A run stopped while still `PENDING` can leave its service behind: delete

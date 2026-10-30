@@ -23,6 +23,10 @@ civic-engagement-admin = "civic_engagement.admin:main"
 [project.optional-dependencies]
 # The state in an S3 bucket (CIVIC_ENGAGEMENT_STATE=s3://...).
 s3 = ["boto3>=1.40"]
+# The DigitalHub platform, through its SDK: S3 credentials renewed
+# (CIVIC_ENGAGEMENT_S3_CREDENTIALS=digitalhub; civic_engagement/digitalhub.py).
+# The SDK's version is the platform's.
+dh = ["boto3>=1.40", "digitalhub>=0.15,<0.16"]
 
 [dependency-groups]
 dev = [

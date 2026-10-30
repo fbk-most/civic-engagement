@@ -7,6 +7,7 @@ import json
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from civic_engagement import digitalhub
 from civic_engagement.access import manager, manager_throttle, pin_throttle, team_store
 from civic_engagement.config import SITE
 from civic_engagement.models.schema import AdminMember, AdminTeam, MemberCreate, TeamCreate, TeamRename, TeamScene, ThrottleReset
@@ -162,6 +163,7 @@ def get_status() -> dict:
             "behind": storage.behind,
             "last_write": storage.last_write,
             "last_error": storage.last_error,
+            "credentials": digitalhub.status(),
         },
         "throttle": {"pins": pin_throttle.status(), "manager": manager_throttle.status()},
     }
