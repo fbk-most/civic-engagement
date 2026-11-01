@@ -13,6 +13,7 @@ default site if unset), not a live in-app switcher.
 import os
 from dataclasses import dataclass
 from functools import cache
+from pathlib import Path
 from typing import cast
 
 
@@ -126,6 +127,49 @@ def cgroup_quota(cpu_max: str) -> int | None:
     <period>" for none), at least one."""
     quota, period = cpu_max.split()
     return None if quota == "max" else max(1, int(quota) // int(period))
+
+
+def memory(cgroup: str = "/sys/fs/cgroup", process: str = "/proc/self/status") -> dict:
+    """The memory, in MiB, for the manager's status: the container's (cgroup
+    v2) — its limit, what it uses (`used`, page cache included; `anon`, the
+    part that can't be given back, the one that gets the app killed), its
+    peak — how many times the kernel killed a process of it for its memory,
+    and this process's (`process`, `process_peak`). None where not known
+    (not in a container, not on Linux). A restarted container starts them
+    over: the app killed is in the platform's restarts, not here."""
+
+    def read(name: str) -> str | None:
+        try:
+            return (Path(cgroup) / name).read_text()
+        except OSError:
+            return None
+
+    def mib(value: str | int | None) -> float | None:
+        if value is None or str(value).strip() in ("", "max"):
+            return None
+        return round(int(value) / 2**20, 1)
+
+    def field(text: str | None, key: str, scale: int = 1) -> int | None:
+        for line in (text or "").splitlines():
+            parts = line.split()
+            if len(parts) >= 2 and parts[0].rstrip(":") == key:
+                return int(parts[1]) * scale
+        return None
+
+    try:
+        status = Path(process).read_text()
+    except OSError:
+        status = None
+    events = read("memory.events")
+    return {
+        "limit_mib": mib(read("memory.max")),
+        "used_mib": mib(read("memory.current")),
+        "anon_mib": mib(field(read("memory.stat"), "anon")),
+        "peak_mib": mib(read("memory.peak")),
+        "oom_kills": field(events, "oom_kill"),
+        "process_mib": mib(field(status, "VmRSS", 1024)),
+        "process_peak_mib": mib(field(status, "VmHWM", 1024)),
+    }
 
 
 MECHANISMS = ("open", "pin")

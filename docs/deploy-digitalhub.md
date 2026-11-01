@@ -1,19 +1,20 @@
 # Deploying on DigitalHub
 
-**Status: guide from tests; the urban pack's image built, not yet deployed** (October 2026).
+**Status: guide from tests; the urban pack's app deployed on a test instance** (October 2026).
 
 How a pack's app runs on [DigitalHub](https://scc-digitalhub.github.io/docs/0.15/)
 (version 0.15) as a container, for any domain and any DigitalHub instance.
 What the app itself provides — teams, PINs, the state's storage — is in
 the core's README ("Teams"); what its image must respect, in
 [The image](#the-image) below. Each pack documents its own deployment —
-image, sites, parameters, instance — in its repository (for the urban pack:
-`bologna-civic-dt/docs/deploy-digitalhub.md`).
+image, sites, parameters — in its repository (for the urban pack:
+`bologna-civic-dt/docs/deploy-digitalhub.md`); what's specific to an
+instance (its addresses, bucket, projects) stays out of the repositories.
 
-What follows was measured on the instance *digitalhub-bologna* (core
-0.15.1) on 24 October 2026. Some of it is the platform's behaviour, some
-the instance's configuration (marked *instance*): check it on another
-instance with the [tests](#checking-an-instance) below.
+What follows was measured on two instances (core 0.15.1), in October 2026.
+Some of it is the platform's behaviour, some an instance's configuration
+(marked *instance*): check it on another instance with the
+[tests](#checking-an-instance) below.
 
 ## The model
 
@@ -42,7 +43,7 @@ instance with the [tests](#checking-an-instance) below.
 | CPUs | The container sees the machine's CPUs (`nproc`: 16 under a quota of 4) | `CIVIC_ENGAGEMENT_CPUS` set to the quota |
 | Volumes | A `persistent_volume_claim` is **created per run** (`v-<run-id>-<name>`): kept across a stop and resume of the run, but a new run gets a new, empty one. The platform can be configured to refuse pre-existing volumes | No durable state on volumes |
 | Credentials | Every pod gets S3 credentials (`AWS_*` with an `AWS_SESSION_TOKEN`, `S3_BUCKET`), Postgres ones (`DB_*`) and a platform token with a refresh token — **temporary**: about 5.5 hours (*instance*); S3's and the platform's expire together. They come from the run's Kubernetes Secret (`sec-containerserve-<run-id>`, through `envFrom`), written when the run is created and **not updated**: a restarted container gets the same ones. The SDK renews them (`digitalhub.refresh_token()`, then `get_s3_client()`): new ones, refresh token included, the old ones invalidated. The refresh token lapses unused after about a month | For a service running for weeks: `CIVIC_ENGAGEMENT_S3_CREDENTIALS=digitalhub` (the core's `dh` extra): the core renews them every 2 hours (`CIVIC_ENGAGEMENT_S3_REFRESH_S`), and at once if S3 says they've expired; `/api/admin/status` shows them (`storage.credentials`). Static S3 credentials, where an instance gives them: under the core's names, `CIVIC_ENGAGEMENT_S3_ACCESS_KEY` and `CIVIC_ENGAGEMENT_S3_SECRET_KEY` (and `CIVIC_ENGAGEMENT_S3_ENDPOINT`), not `AWS_*`, which the pod's own, with their session token, would get in the way of |
-| Restarts | The platform ends a run (`ERROR`, "Multiple pod restarts") at its container's **second** restart, however far apart (*instance*). With renewed credentials even a first restart fails: the run's variables no longer work | Deploy again (a new run gets new credentials; the state is in S3). Keep the memory well within its limit: an app killed for its memory is restarted |
+| Restarts | The platform ends a run (`ERROR`, "Multiple pod restarts") at its container's **second** restart, however far apart (*instance*). With renewed credentials even a first restart fails: the run's variables no longer work | Deploy again (a new run gets new credentials; the state is in S3). The app says when: its windows show "The app needs restarting", and `/api/admin/status` `restart_needed` — writes failing for over a minute, or credentials that can't be renewed and expire within the hour (the core renews them on starting, so a restarted container shows it at once). Keep the memory well within its limit: an app killed for its memory is restarted. `/api/admin/status` `memory` shows it: the container's limit, use (`anon`, the part that can't be given back) and peak, the process's |
 | S3 | Reading and writing under `<bucket>/<prefix>/` works from a run | `CIVIC_ENGAGEMENT_STATE=s3://<bucket>/<prefix>` |
 | Network | The cluster reaches the internet (*instance*) | — |
 | Services | Each run has its service, `s-containerserve-<run-id>`; each function also a **stable alias**, `s-<project>-<function>-latest`, pointing at its latest run | Gateway routes to the alias |

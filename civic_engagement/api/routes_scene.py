@@ -17,6 +17,7 @@ from civic_engagement.scene import (
     validated_t,
 )
 from civic_engagement.store.state import store
+from civic_engagement.store.storage import restart_needed
 
 router = APIRouter()
 
@@ -32,10 +33,12 @@ def get_scene(t: int = 0, who: Access = Depends(access)) -> SceneResponse:
 
 
 @router.get("/session/revision")
-def get_session_revision(who: Access = Depends(access)) -> dict[str, str]:
+def get_session_revision(who: Access = Depends(access)) -> dict:
     """Cheap to ask: a window checks it when it comes back into focus and
-    fetches the scene only if it differs from its scene's `revision`."""
-    return {"revision": store.revision(who.team)}
+    fetches the scene only if it differs from its scene's `revision`. With
+    `restart_needed`, it says the app must be started again for changes to
+    be saved (store/storage.py)."""
+    return {"revision": store.revision(who.team), "restart_needed": restart_needed()}
 
 
 @router.get("/indicators/descriptors", response_model=IndicatorDescriptors)

@@ -155,6 +155,8 @@ function App() {
   const [pendingGeometry, setPendingGeometry] = useState<GeoJSON.Geometry | null>(null);
   // A short message over the map (a card drawn outside the site), gone by itself.
   const [notice, setNotice] = useState<string | null>(null);
+  // The backend can't save changes any more (see the revision check below).
+  const [restartNeeded, setRestartNeeded] = useState(false);
   const noticeTimerRef = useRef<number | undefined>(undefined);
   const showNotice = useCallback((message: string) => {
     setNotice(message);
@@ -837,7 +839,8 @@ function App() {
       if (!shown) return;
       checking = true;
       fetchSessionRevision()
-        .then(({ revision }) => {
+        .then(({ revision, restart_needed }) => {
+          setRestartNeeded(restart_needed);
           if (revision === shown.revision || sceneRef.current !== shown) return;
           // Numbered like a year change, so a slider drag in the meantime wins.
           const requestSeq = ++timeRequestSeqRef.current;
@@ -905,7 +908,12 @@ function App() {
               )}
         </div>
       )}
-      {notice && <div className="map-notice">{notice}</div>}
+      {restartNeeded && (
+        <div className="restart-banner" role="alert">
+          {tr("L'app deve essere riavviata", "The app needs restarting")}
+        </div>
+      )}
+      {notice && <div className={restartNeeded ? "map-notice map-notice--lower" : "map-notice"}>{notice}</div>}
       {status === "ready" && (
         <>
           {view === "2d" && (

@@ -178,6 +178,16 @@ def test_failed_writes_are_kept_and_retried(tmp_path):
     assert retrying.behind == [] and (tmp_path / "a" / "x.json").read_bytes() == b"2"
 
 
+def test_a_restart_needed_once_writes_keep_failing(tmp_path, monkeypatch):
+    retrying = Retrying(Flaky(tmp_path), interval=3600)
+    monkeypatch.setattr(storage, "state_storage", lambda: retrying)
+    assert retrying.behind_for() == 0 and not storage.restart_needed()
+    retrying.write("a/x.json", b"1")
+    assert 0 < retrying.behind_for() < storage.BEHIND_FOR_S and not storage.restart_needed()
+    monkeypatch.setattr(storage, "BEHIND_FOR_S", 0)
+    assert storage.restart_needed()
+
+
 # The app, with teams.
 
 
@@ -261,6 +271,7 @@ def test_teams_apart_and_viewers_looking(pin_app, tmp_path):
     assert [i["id"] for i in pin_app.get("/api/scene", headers=viewer1).json()["interventions"]] == [card["id"]]
     assert pin_app.get("/api/scene", headers=editor2).json()["interventions"] == []
     assert pin_app.get("/api/session/revision", headers=editor2).json() == revision2
+    assert revision2["restart_needed"] is False
     # Not team 2's card to change.
     assert pin_app.delete(f"/api/interventions/{card['id']}", headers=editor2).status_code == 404
 
@@ -324,7 +335,7 @@ def test_the_manager_runs_the_teams(pin_app):
     assert team["id"] == "team-1" and team["interventions"] == 0
 
     status = pin_app.get("/api/admin/status", headers=ADMIN).json()
-    assert status["teams"] == 3 and status["storage"]["behind"] == []
+    assert status["teams"] == 3 and status["storage"]["behind"] == [] and status["restart_needed"] is False
 
 
 def test_guessing_pins_waits(pin_app):

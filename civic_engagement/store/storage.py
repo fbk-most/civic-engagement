@@ -243,6 +243,8 @@ class Retrying(Storage):
         # name → the data waiting to be written, or None for a delete.
         self._pending: dict[str, bytes | None] = {}
         self._retrier: threading.Thread | None = None
+        # Since when (time.monotonic) writes have been failing, while behind.
+        self._behind_since: float | None = None
         self.last_write: str | None = None
         self.last_error: str | None = None
 
@@ -255,6 +257,11 @@ class Retrying(Storage):
         """The documents not yet written."""
         with self._lock:
             return sorted(self._pending)
+
+    def behind_for(self) -> float:
+        """For how many seconds writes have been failing; 0 if they aren't."""
+        with self._lock:
+            return time.monotonic() - self._behind_since if self._behind_since is not None else 0.0
 
     def read(self, name: str) -> bytes | None:
         with self._lock:
@@ -302,6 +309,8 @@ class Retrying(Storage):
         with self._lock:
             self._pending[name] = data
             self.last_error = f"{name}: {error}"
+            if self._behind_since is None:
+                self._behind_since = time.monotonic()
             if self._retrier is None:
                 self._retrier = threading.Thread(target=self._retry, name="storage-retry", daemon=True)
                 self._retrier.start()
@@ -325,6 +334,7 @@ class Retrying(Storage):
                 if not self._pending:
                     log.warning("The store caught up")
                     self._retrier = None
+                    self._behind_since = None
                     return
 
 
@@ -351,3 +361,19 @@ def storage_at(root: str) -> Storage:
 def state_storage() -> Retrying:
     """The teams', sessions' and saved scenarios' storage (`CIVIC_ENGAGEMENT_STATE`)."""
     return Retrying(storage_at(os.environ.get("CIVIC_ENGAGEMENT_STATE", ".")))
+
+
+# Writes failing for longer than this: not a passing hiccup of the store.
+BEHIND_FOR_S = 60
+
+
+def restart_needed() -> bool:
+    """Whether the app must be started again (a new run, on DigitalHub) for
+    the state to be saved: its writes have been failing for a while, or its
+    S3 credentials can no longer be renewed and are about to expire. The
+    windows show it (GET /session/revision), and the manager's status."""
+    if state_storage().behind_for() > BEHIND_FOR_S:
+        return True
+    from civic_engagement import digitalhub
+
+    return digitalhub.expiring()

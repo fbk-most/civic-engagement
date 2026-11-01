@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
 from civic_engagement.app import create_app
-from civic_engagement.config import SITE, cgroup_quota, cpus
+from civic_engagement.config import SITE, cgroup_quota, cpus, memory
 from civic_engagement.domain import active_pack
 
 
@@ -35,3 +35,22 @@ def test_cpus_from_the_quota(monkeypatch):
     assert cpus() == 3
     monkeypatch.delenv("CIVIC_ENGAGEMENT_CPUS")
     assert cpus() >= 1
+
+
+def test_memory_from_the_cgroup(tmp_path):
+    (tmp_path / "memory.max").write_text(f"{4 * 2**30}\n")
+    (tmp_path / "memory.current").write_text(f"{3 * 2**30}\n")
+    (tmp_path / "memory.stat").write_text(f"file 1000\nanon {2 * 2**30}\n")
+    (tmp_path / "memory.events").write_text("low 0\nhigh 0\nmax 3\noom 1\noom_kill 1\n")
+    (tmp_path / "status").write_text("Name:\tpython\nVmHWM:\t 2097152 kB\nVmRSS:\t 1048576 kB\n")
+    assert memory(str(tmp_path), str(tmp_path / "status")) == {
+        "limit_mib": 4096.0,
+        "used_mib": 3072.0,
+        "anon_mib": 2048.0,
+        "peak_mib": None,
+        "oom_kills": 1,
+        "process_mib": 1024.0,
+        "process_peak_mib": 2048.0,
+    }
+    (tmp_path / "memory.max").write_text("max\n")
+    assert memory(str(tmp_path), str(tmp_path / "missing"))["limit_mib"] is None

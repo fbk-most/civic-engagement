@@ -9,11 +9,11 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from civic_engagement import digitalhub
 from civic_engagement.access import manager, manager_throttle, pin_throttle, team_store
-from civic_engagement.config import SITE
+from civic_engagement.config import SITE, memory
 from civic_engagement.models.schema import AdminMember, AdminTeam, MemberCreate, TeamCreate, TeamRename, TeamScene, ThrottleReset
 from civic_engagement.store.scenarios import ScenarioError, delete_library, library, read_scenario, scenario_documents
 from civic_engagement.store.state import store
-from civic_engagement.store.storage import state_storage
+from civic_engagement.store.storage import restart_needed, state_storage
 from civic_engagement.store.teams import Member, Team, TeamError
 
 router = APIRouter(prefix="/admin", dependencies=[Depends(manager)])
@@ -158,6 +158,7 @@ def get_status() -> dict:
         "site_id": SITE.site_id,
         "teams": len(teams),
         "members": sum(len(team.members) for team in teams),
+        "restart_needed": restart_needed(),
         "storage": {
             "location": storage.location,
             "behind": storage.behind,
@@ -166,6 +167,7 @@ def get_status() -> dict:
             "credentials": digitalhub.status(),
         },
         "throttle": {"pins": pin_throttle.status(), "manager": manager_throttle.status()},
+        "memory": memory(),
     }
 
 

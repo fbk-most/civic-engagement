@@ -11,12 +11,15 @@ With CIVIC_ENGAGEMENT_S3_CREDENTIALS=digitalhub, the state's S3 client comes
 from here (store/storage.py): renewed every CIVIC_ENGAGEMENT_S3_REFRESH_S
 seconds, 2 hours by default — well before they expire, and even while the
 app is idle, as the refresh token too lapses unused (about a month) — and at
-once if S3 answers that they've expired.
+once if S3 answers that they've expired. Renewed on starting too: a dead
+refresh token shows at once.
 
 A restarted container starts again from the run's variables, which the
 platform wrote when the run was created and doesn't update: once renewed,
-those no longer work, and the app can't read its state. The platform ends a
-run at its second restart anyway: deploy it again (docs/deploy-digitalhub.md).
+those no longer work, and the app can't read its state. Then the windows
+and the manager's status say the app needs restarting (`expiring`,
+store/storage.py's `restart_needed`): a new run (docs/deploy-digitalhub.md).
+The platform ends a run at its second restart anyway.
 """
 
 import importlib
@@ -31,6 +34,8 @@ log = logging.getLogger(__name__)
 REFRESH_S = 2 * 3600
 # After a failed renewal, how soon to try again.
 RETRY_S = 300
+# Renewals failing, and the credentials expire within this: time to restart.
+EXPIRING_S = 3600
 
 
 def _now() -> str:
@@ -46,6 +51,7 @@ class Credentials:
         self.interval = interval
         self._lock = threading.Lock()
         self._client = self._sdk.get_s3_client()
+        self.expires = self._expires()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self.renewals = 0
@@ -66,6 +72,7 @@ class Credentials:
             try:
                 self._sdk.refresh_token()
                 self._client = self._sdk.get_s3_client()
+                self.expires = self._expires()
             except Exception as error:
                 self.last_error = f"{_now()}: {type(error).__name__}: {error}"
                 log.error("Couldn't renew the S3 credentials: %s", error)
@@ -85,7 +92,7 @@ class Credentials:
         self._stop.set()
 
     def _renewing(self) -> None:
-        wait = self.interval
+        wait = 0.0
         while not self._stop.wait(wait):
             try:
                 self.renew()
@@ -93,14 +100,31 @@ class Credentials:
             except Exception:  # noqa: BLE001 — logged by renew; tried again soon
                 wait = min(self.interval, RETRY_S)
 
-    def status(self) -> dict:
+    def _expires(self) -> str | None:
+        # Asked once per renewal: the SDK checks its token with the core
+        # first, and may renew it — not for every window's check.
         try:
-            expires = self._sdk.get_credentials_and_config().get("AWS_CREDENTIALS_EXPIRATION")
+            return self._sdk.get_credentials_and_config().get("AWS_CREDENTIALS_EXPIRATION")
         except Exception as error:  # noqa: BLE001
-            expires = f"unknown ({type(error).__name__})"
+            return f"unknown ({type(error).__name__})"
+
+    def expiring(self, within: float = EXPIRING_S) -> bool:
+        """Whether the last renewal failed and the credentials expire within
+        `within` seconds — or when they expire is unknown."""
+        if self.last_error is None:
+            return False
+        try:
+            expires = datetime.fromisoformat(self.expires or "")
+        except ValueError:
+            return True
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+        return (expires - datetime.now(timezone.utc)).total_seconds() < within
+
+    def status(self) -> dict:
         return {
             "source": "digitalhub",
-            "expires": expires,
+            "expires": self.expires,
             "renewed_every_s": self.interval,
             "renewals": self.renewals,
             "last_renewal": self.last_renewal,
@@ -127,3 +151,9 @@ def credentials() -> Credentials:
 def status() -> dict | None:
     """The credentials' status, if they come from here."""
     return _credentials.status() if _credentials is not None else None
+
+
+def expiring() -> bool:
+    """Whether the credentials, if they come from here, can't be renewed
+    and are about to expire."""
+    return _credentials is not None and _credentials.expiring()

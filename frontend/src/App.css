@@ -420,6 +420,26 @@
   pointer-events: none;
 }
 
+.map-notice--lower {
+  top: calc(var(--top-bar-height) + 56px);
+}
+
+/* The backend can't save changes: until a new run, over everything else. */
+.restart-banner {
+  position: absolute;
+  top: calc(var(--top-bar-height) + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  background: #b3261e;
+  color: #fff;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 15px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
 .left-rail {
   position: absolute;
   top: calc(var(--top-bar-height) + 12px);

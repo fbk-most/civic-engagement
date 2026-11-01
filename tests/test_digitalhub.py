@@ -3,6 +3,7 @@ against stand-ins for the SDK and S3."""
 
 import io
 import time
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -47,8 +48,10 @@ class SDK:
     def expire(self):
         self.valid_from = self.generation + 1
 
+    expiration: str | None = None
+
     def get_credentials_and_config(self):
-        return {"AWS_CREDENTIALS_EXPIRATION": f"generation {self.generation}"}
+        return {"AWS_CREDENTIALS_EXPIRATION": self.expiration or f"generation {self.generation}"}
 
 
 class S3:
@@ -132,6 +135,40 @@ def test_a_failed_renewal_is_reported():
     sdk.failing = False
     store.write("a.json", b"1")
     assert credentials.status()["last_error"] is None
+
+
+def test_renewed_on_starting():
+    sdk = SDK()
+    credentials = digitalhub.Credentials(sdk=sdk, interval=3600)
+    credentials.start()
+    try:
+        deadline = time.monotonic() + 5
+        while credentials.renewals < 1 and time.monotonic() < deadline:
+            time.sleep(0.01)
+    finally:
+        credentials.stop()
+    assert sdk.refreshes == 1
+
+
+def test_expiring_once_renewals_fail():
+    sdk = SDK()
+    credentials = digitalhub.Credentials(sdk=sdk)
+    in_hours = lambda h: (datetime.now(timezone.utc) + timedelta(hours=h)).isoformat().replace("+00:00", "Z")  # noqa: E731
+    sdk.expiration = in_hours(0.5)
+    credentials.renew()
+    assert not credentials.expiring()  # renewals haven't failed
+    sdk.failing = True
+    with pytest.raises(RuntimeError):
+        credentials.renew()
+    assert credentials.expiring()
+    for hours, expiring in ((3, False), (-1, True)):
+        credentials.expires = in_hours(hours)
+        assert credentials.expiring() is expiring
+    credentials.expires = "unknown (ClientError)"
+    assert credentials.expiring()
+    sdk.failing = False
+    credentials.renew()
+    assert not credentials.expiring()
 
 
 def test_the_choice_of_credentials(monkeypatch):

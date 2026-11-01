@@ -103,8 +103,9 @@ export function fetchScene(t: number = 0): Promise<SceneResponse> {
   return getJson(`/api/scene?t=${t}`);
 }
 
-/** Changes whenever any window changes the session's interventions. */
-export function fetchSessionRevision(): Promise<{ revision: string }> {
+/** Changes whenever any window changes the session's interventions; with
+ * `restart_needed`, the app must be started again for changes to be saved. */
+export function fetchSessionRevision(): Promise<{ revision: string; restart_needed: boolean }> {
   return getJson("/api/session/revision");
 }
 
