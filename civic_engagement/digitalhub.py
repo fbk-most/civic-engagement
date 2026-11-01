@@ -16,7 +16,9 @@ refresh token shows at once.
 
 A restarted container starts again from the run's variables, which the
 platform wrote when the run was created and doesn't update: once renewed,
-those no longer work, and the app can't read its state. Then the windows
+those no longer work, and the app can't read its state — unless the SDK's
+file, which it reads first and keeps the renewed ones in, is on a volume
+that outlives the container (DH_CONFIG on an `empty_dir`). Else the windows
 and the manager's status say the app needs restarting (`expiring`,
 store/storage.py's `restart_needed`): a new run (docs/deploy-digitalhub.md).
 The platform ends a run at its second restart anyway.
