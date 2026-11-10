@@ -126,34 +126,43 @@ export async function buildScene(
   if (paint) {
     const material = materials.paintedTerrain(paint);
     parts.push({
-      object: buildTerrainSurface(terrain, material, 0),
+      object: named(buildTerrainSurface(terrain, material, 0), "terrain"),
       dispose: () => {
         material.dispose();
         paint.texture.dispose();
       },
     });
   } else {
-    if (!terrain.flat) group.add(buildTerrainSurface(terrain, materials.terrain()));
-    group.add(buildGround(covers, anchor, materials, terrain));
+    if (!terrain.flat) group.add(named(buildTerrainSurface(terrain, materials.terrain()), "terrain"));
+    group.add(named(buildGround(covers, anchor, materials, terrain), "ground"));
   }
   // `buildPaths` is generic on `properties.width`/`properties.material`:
   // whatever the pack draws as ribbons (for the urban one, streets,
   // crossing stripes and lane dividers as well as paths) renders through
   // the exact same ribbon-mesh path, no separate builder needed.
   const ribbonTypes = new Set(scene3d.ribbonTypes);
-  group.add(buildPaths(elements.filter((e) => ribbonTypes.has(e.type)), anchor, materials, terrain));
-  group.add(await ACTIVE_PROVIDER.build(buildings, { anchor, materials, terrain }));
+  group.add(named(buildPaths(elements.filter((e) => ribbonTypes.has(e.type)), anchor, materials, terrain), "paths"));
+  group.add(named(await ACTIVE_PROVIDER.build(buildings, { anchor, materials, terrain }), "buildings"));
   const vegetation = await buildVegetation(elements, anchor, materials, terrain);
-  group.add(vegetation.group);
+  group.add(named(vegetation.group, "trees"));
   // The forest the pack grows from the covers, if it does (see forest.ts).
   const forest = scene3d.treeSource ? buildForest(scene3d.treeSource, covers, elements, anchor, materials, terrain) : null;
-  if (forest) parts.push(forest.part);
+  if (forest) {
+    named(forest.part.object, "forest");
+    parts.push(forest.part);
+  }
 
   for (const build of scene3d.parts) parts.push(await build({ elements, covers, anchor, materials, terrain }));
-  parts.push(buildWater(covers, anchor, terrain));
+  const water = buildWater(covers, anchor, terrain);
+  named(water.object, "water");
+  parts.push(water);
   // Only a surveyed boundary is drawn, as in the 2D map (see map/layers.ts).
-  if (scene.boundary_status === "surveyed") parts.push(buildBoundary(scene.site_boundary, anchor, terrain));
-  for (const part of parts) group.add(part.object);
+  if (scene.boundary_status === "surveyed") {
+    const boundary = buildBoundary(scene.site_boundary, anchor, terrain);
+    named(boundary.object, "boundary");
+    parts.push(boundary);
+  }
+  for (const [i, part] of parts.entries()) group.add(named(part.object, `part ${i + 1}`));
 
   return {
     group,
@@ -168,6 +177,13 @@ export async function buildScene(
     },
     release: vegetation.release,
   };
+}
+
+/** Gives the object a name, unless it has one: the `?perf=1` readout's
+ * breakdown counts triangles by these names (three/perf.ts). */
+function named<T extends THREE.Object3D>(object: T, name: string): T {
+  if (!object.name) object.name = name;
+  return object;
 }
 
 export function buildingFootprints(buildings: DiscreteElement[], anchor: GeoAnchor): Footprint[] {

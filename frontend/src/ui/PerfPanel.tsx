@@ -8,7 +8,9 @@
  * hidden, still and moving — so results from different workshop machines
  * can be compared. The camera slowly circles during the benchmark: at night,
  * camera movement is what makes the nearest streetlights re-render their
- * shadows, and a still camera would hide that cost.
+ * shadows, and a still camera would hide that cost. "Triangles by part"
+ * says where the triangles are: what the scene holds, part by part
+ * (three/perf.ts), and how many shadow passes draw the shadow casters again.
  */
 
 import { useEffect, useRef, useState, type RefObject } from "react";
@@ -19,6 +21,7 @@ import { runResponsiveness, type ResultRow } from "../perf/responsiveness";
 import * as timeline from "../perf/timeline";
 
 type Reading = ReturnType<ViewerHandle["readPerf"]>;
+type Breakdown = ReturnType<ViewerHandle["readBreakdown"]>;
 
 interface Props {
   viewerRef: RefObject<ViewerHandle | null>;
@@ -93,7 +96,13 @@ export function PerfPanel({
     () => timeline.settledInteractions().at(-1) ?? null
   );
   const [running, setRunning] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  // Which table was just copied, for its button's "Copied!".
+  const [copied, setCopied] = useState<"triangles" | "results" | "responsiveness" | null>(null);
+  function showCopied(which: "triangles" | "results" | "responsiveness") {
+    setCopied(which);
+    setTimeout(() => setCopied((current) => (current === which ? null : current)), 1500);
+  }
+  const [breakdown, setBreakdown] = useState<Breakdown | null>(null);
   const cancelledRef = useRef(false);
 
   useEffect(() => timeline.onSettled(setLastChange), []);
@@ -174,8 +183,20 @@ export function PerfPanel({
       [r.label, r.kpi, r.value, r.pass === null ? "n/a" : r.pass ? "OK" : "NO", r.detail].join("\t")
     );
     await navigator.clipboard.writeText([machineInfo(), "", header, ...lines].join("\n"));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    showCopied("responsiveness");
+  }
+
+  function readBreakdown() {
+    setBreakdown(viewerRef.current?.readBreakdown() ?? null);
+  }
+
+  async function copyBreakdown() {
+    if (!breakdown) return;
+    const header = "Part\tMeshes\tCopies\tTriangles\tCasting shadows";
+    const lines = breakdown.rows.map((r) => [r.part, r.meshes, r.copies, r.triangles, r.shadowTriangles].join("\t"));
+    const passes = `Shadow passes when all shadows are redrawn: ${breakdown.shadowPasses}`;
+    await navigator.clipboard.writeText([machineInfo(), "", passes, "", header, ...lines].join("\n"));
+    showCopied("triangles");
   }
 
   async function copyResults() {
@@ -184,8 +205,7 @@ export function PerfPanel({
       [time, mode, f1(r.fps), f1(r.frameMs), f1(r.frameP95Ms), f1(r.simMs), f1(r.renderMs), f0(r.calls), f0(r.triangles), r.people, r.dogs, r.cars].join("\t")
     );
     await navigator.clipboard.writeText([machineInfo(), "", header, ...lines].join("\n"));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    showCopied("results");
   }
 
   return (
@@ -215,17 +235,62 @@ export function PerfPanel({
         <button type="button" onClick={runResponsivenessBenchmark} disabled={running !== null}>
           {running?.startsWith("Responsiveness") ? `${running}…` : "Responsiveness (~2 min)"}
         </button>
+        <button type="button" onClick={readBreakdown} disabled={running !== null}>
+          Triangles by part
+        </button>
+        {breakdown && (
+          <button type="button" onClick={copyBreakdown}>
+            {copied === "triangles" ? "Copied!" : "Copy triangles"}
+          </button>
+        )}
         {rows.length > 0 && !running && (
           <button type="button" onClick={copyResults}>
-            {copied ? "Copied!" : "Copy results"}
+            {copied === "results" ? "Copied!" : "Copy results"}
           </button>
         )}
         {responsiveness.length > 0 && !running && (
           <button type="button" onClick={copyResponsiveness}>
-            {copied ? "Copied!" : "Copy responsiveness"}
+            {copied === "responsiveness" ? "Copied!" : "Copy responsiveness"}
           </button>
         )}
       </div>
+      {breakdown && (
+        <table className="perf-panel__table">
+          <caption>
+            What the scene holds now, by part (before culling) · shadow passes when all shadows are redrawn:{" "}
+            {breakdown.shadowPasses}
+          </caption>
+          <thead>
+            <tr>
+              <th>Part</th>
+              <th>Meshes</th>
+              <th>Copies</th>
+              <th>M triangles</th>
+              <th>Casting shadows</th>
+            </tr>
+          </thead>
+          <tbody>
+            {breakdown.rows.map((row) => (
+              <tr key={row.part}>
+                <td>{row.part}</td>
+                <td>{row.meshes}</td>
+                <td>{row.copies}</td>
+                <td>{(row.triangles / 1e6).toFixed(2)}</td>
+                <td>{(row.shadowTriangles / 1e6).toFixed(2)}</td>
+              </tr>
+            ))}
+            <tr>
+              <td>
+                <strong>Total</strong>
+              </td>
+              <td>{breakdown.rows.reduce((n, r) => n + r.meshes, 0)}</td>
+              <td>{breakdown.rows.reduce((n, r) => n + r.copies, 0)}</td>
+              <td>{(breakdown.rows.reduce((n, r) => n + r.triangles, 0) / 1e6).toFixed(2)}</td>
+              <td>{(breakdown.rows.reduce((n, r) => n + r.shadowTriangles, 0) / 1e6).toFixed(2)}</td>
+            </tr>
+          </tbody>
+        </table>
+      )}
       {responsiveness.length > 0 && (
         <table className="perf-panel__table perf-panel__table--responsiveness">
           <thead>

@@ -1,5 +1,6 @@
 import base64
 import json
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -336,6 +337,7 @@ def test_the_manager_runs_the_teams(pin_app):
 
     status = pin_app.get("/api/admin/status", headers=ADMIN).json()
     assert status["teams"] == 3 and status["storage"]["behind"] == [] and status["restart_needed"] is False
+    assert datetime.fromisoformat(status["started"]) <= datetime.now(UTC)
 
 
 def test_guessing_pins_waits(pin_app):

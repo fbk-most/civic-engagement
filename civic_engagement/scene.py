@@ -20,7 +20,7 @@ from typing import Any
 
 from fastapi import HTTPException
 
-from civic_engagement.config import SITE
+from civic_engagement.config import SITE, release_memory
 from civic_engagement.domain import active_pack
 from civic_engagement.models.schema import (
     BaselineScene,
@@ -58,7 +58,10 @@ def load_baseline() -> BaselineScene:
 
 
 def _evaluate(interventions: list[Intervention]) -> Any:
-    return active_pack().evaluate(load_baseline(), interventions)
+    try:
+        return active_pack().evaluate(load_baseline(), interventions)
+    finally:
+        release_memory()
 
 
 @lru_cache(maxsize=1)

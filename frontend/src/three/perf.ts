@@ -6,6 +6,8 @@
  * queries); a GPU-bound view shows up as long frames with little CPU time.
  */
 
+import * as THREE from "three";
+
 export interface PerfSample {
   /** Time since the previous frame, ms — what the viewer actually sees. */
   interval: number;
@@ -58,4 +60,71 @@ export class PerfRecorder {
       triangles: mean("triangles"),
     };
   }
+}
+
+/** One row of the scene's breakdown: what a named part of it draws. */
+export interface BreakdownRow {
+  part: string;
+  /** Meshes drawn, each at least one draw call per pass. */
+  meshes: number;
+  /** Copies drawn by those meshes (instancing: one call, many copies). */
+  copies: number;
+  /** Triangles in one pass over the part (all its copies). */
+  triangles: number;
+  /** Of those, the ones casting shadows: drawn again for each shadow map
+   * (the sun's, and each streetlight casting real shadows at night). */
+  shadowTriangles: number;
+}
+
+function partName(object: THREE.Object3D, root: THREE.Object3D): string {
+  // The outermost named ancestor below the root, going one level deeper
+  // through the scene's own group ("civic-scene"), whose children are the
+  // parts (SceneBuilder.ts names them).
+  const chain: THREE.Object3D[] = [];
+  for (let o: THREE.Object3D | null = object; o && o !== root; o = o.parent) chain.unshift(o);
+  const top = chain[0];
+  const part = top?.name === "civic-scene" ? chain[1] : top;
+  return part?.name || part?.type || "?";
+}
+
+function trianglesOf(mesh: THREE.Mesh): number {
+  const geometry = mesh.geometry as THREE.BufferGeometry;
+  const vertices = geometry.index ? geometry.index.count : (geometry.attributes.position?.count ?? 0);
+  return Math.floor(Math.min(vertices, geometry.drawRange.count) / 3);
+}
+
+/** What the scene holds, by part: the visible meshes, their copies and
+ * triangles (before the camera's culling: everything in the scene). For
+ * the readout's breakdown, computed when asked. */
+export function sceneBreakdown(root: THREE.Object3D): BreakdownRow[] {
+  const rows = new Map<string, BreakdownRow>();
+  root.traverseVisible((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const instanced = object as THREE.InstancedMesh;
+    const copies = instanced.isInstancedMesh ? instanced.count : 1;
+    if (copies === 0) return;
+    const triangles = trianglesOf(mesh) * copies;
+    const part = partName(object, root);
+    const row = rows.get(part) ?? { part, meshes: 0, copies: 0, triangles: 0, shadowTriangles: 0 };
+    row.meshes += 1;
+    row.copies += copies;
+    row.triangles += triangles;
+    if (mesh.castShadow) row.shadowTriangles += triangles;
+    rows.set(part, row);
+  });
+  return [...rows.values()].sort((a, b) => b.triangles - a.triangles);
+}
+
+/** Shadow-map passes when all the shadows are redrawn: one per sun or spot
+ * light casting shadows, six per point light (a cube). Each draws the
+ * parts' `shadowTriangles` again. */
+export function shadowPasses(root: THREE.Object3D): number {
+  let passes = 0;
+  root.traverseVisible((object) => {
+    const light = object as THREE.Light;
+    if (!light.isLight || !light.castShadow) return;
+    passes += (object as THREE.PointLight).isPointLight ? 6 : 1;
+  });
+  return passes;
 }

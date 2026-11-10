@@ -1,8 +1,12 @@
+import logging
+
 from fastapi.testclient import TestClient
 
 from civic_engagement.app import create_app
-from civic_engagement.config import SITE, cgroup_quota, cpus, memory
+from civic_engagement.config import SITE, cgroup_quota, cpus, memory, release_memory
 from civic_engagement.domain import active_pack
+from civic_engagement.fields import ComputeCache
+from civic_engagement.serve import QuietPolls, log_config
 
 
 def test_serves_the_built_frontend_beside_the_api(tmp_path):
@@ -54,3 +58,26 @@ def test_memory_from_the_cgroup(tmp_path):
     }
     (tmp_path / "memory.max").write_text("max\n")
     assert memory(str(tmp_path), str(tmp_path / "missing"))["limit_mib"] is None
+
+
+def test_the_polls_left_out_of_the_access_log():
+    def access(path: str) -> logging.LogRecord:
+        args = ("10.0.0.1:5000", "GET", path, "1.1", 200)
+        return logging.LogRecord("uvicorn.access", logging.INFO, "", 0, '%s - "%s %s HTTP/%s" %d', args, None)
+
+    quiet = QuietPolls()
+    assert not quiet.filter(access("/api/session/revision"))
+    assert quiet.filter(access("/api/scene?t=3"))
+    config = log_config()
+    assert config["handlers"]["access"]["filters"] == ["quiet_polls"]
+    assert config["loggers"]["civic_engagement"]["level"] == "INFO"
+
+
+def test_memory_released_and_logged_after_each_computation(caplog):
+    release_memory()  # glibc or not, never fails
+    cache: ComputeCache[int] = ComputeCache(2, 1, name="field")
+    with caplog.at_level(logging.INFO, logger="civic_engagement.fields"):
+        assert cache.get("a", lambda: 1) == 1
+        assert cache.get("a", lambda: 2) == 1  # kept: computed once
+    lines = [r.getMessage() for r in caplog.records]
+    assert len(lines) == 1 and lines[0].startswith("field computed in") and "(1 kept); memory (MiB): container anon" in lines[0]

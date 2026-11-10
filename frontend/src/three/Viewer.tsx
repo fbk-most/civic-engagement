@@ -26,7 +26,7 @@ import { buildWalkNetwork, type WalkNetwork } from "./people/network";
 import { planWalkers } from "./people/walkers";
 import { buildRoadNetwork, Traffic, type RoadNetwork } from "./people/traffic";
 import type { CrowdActivity, LifeMode } from "./people/activity";
-import { PerfRecorder, type PerfSummary } from "./perf";
+import { PerfRecorder, sceneBreakdown, shadowPasses, type BreakdownRow, type PerfSummary } from "./perf";
 import { OVERLAY_HEIGHT_M, ThermalOverlay } from "./thermalOverlay";
 import { layerAt, summaryAt, valueAt, type ThermalField, type ThermalReading } from "../thermal/field";
 import {
@@ -71,6 +71,9 @@ export interface ViewerHandle {
   /** Frame timings since the last reset (see three/perf.ts), plus what's
    * in the scene right now. */
   readPerf: (reset: boolean) => PerfSummary & { people: number; dogs: number; cars: number };
+  /** What the scene holds now, by part, and the shadow passes (see
+   * three/perf.ts). */
+  readBreakdown: () => { rows: BreakdownRow[]; shadowPasses: number };
   /** Slowly circles the camera (orbit mode only) — for measuring, since at
    * night camera movement is what triggers streetlight shadow updates. */
   setAutoRotate: (on: boolean) => void;
@@ -493,6 +496,7 @@ export function Viewer({
     crowdRef.current = crowd;
     trafficRef.current = traffic;
     const thermalOverlay = new ThermalOverlay(renderer.toneMappingExposure);
+    thermalOverlay.mesh.name ||= "felt-temperature overlay";
     threeScene.add(thermalOverlay.mesh);
     thermalOverlayRef.current = thermalOverlay;
 
@@ -1009,6 +1013,10 @@ export function Viewer({
       ...(lifeModeRef.current !== "off" && crowdRef.current ? crowdRef.current.counts() : { people: 0, dogs: 0 }),
       cars: lifeModeRef.current !== "off" ? (trafficRef.current?.carCount ?? 0) : 0,
     }),
+    readBreakdown: () => {
+      const root = threeSceneRef.current;
+      return root ? { rows: sceneBreakdown(root), shadowPasses: shadowPasses(root) } : { rows: [], shadowPasses: 0 };
+    },
     readView: () => {
       const camera = cameraRef.current;
       const built = builtRef.current;

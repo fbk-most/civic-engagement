@@ -10,7 +10,10 @@ means relaunching with a different `CIVIC_ENGAGEMENT_SITE` env var (the pack's
 default site if unset), not a live in-app switcher.
 """
 
+import ctypes
+import ctypes.util
 import os
+import time
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
@@ -170,6 +173,31 @@ def memory(cgroup: str = "/sys/fs/cgroup", process: str = "/proc/self/status") -
         "process_mib": mib(field(status, "VmRSS", 1024)),
         "process_peak_mib": mib(field(status, "VmHWM", 1024)),
     }
+
+
+# When this process started (Unix seconds), for the manager's status: a
+# container restarted by the platform starts it over.
+STARTED = time.time()
+
+
+@cache
+def _malloc_trim():
+    """glibc's `malloc_trim`, or None (not glibc: macOS, musl)."""
+    try:
+        return ctypes.CDLL(ctypes.util.find_library("c") or "libc.so.6").malloc_trim
+    except (OSError, AttributeError):
+        return None
+
+
+def release_memory() -> None:
+    """Hands the memory freed by a large computation back to the system.
+    glibc keeps what is freed for reuse, per thread: after fields computed
+    side by side by many threads, a process held ten times what it used
+    (measured: 13 GB for about 0.4) and was killed for it. The image also
+    caps glibc's pools (`MALLOC_ARENA_MAX`); this returns what remains."""
+    trim = _malloc_trim()
+    if trim is not None:
+        trim(0)
 
 
 MECHANISMS = ("open", "pin")

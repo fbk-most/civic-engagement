@@ -4,12 +4,13 @@ credentials (access.manager);
 the CLI, civic_engagement/admin.py, calls it."""
 
 import json
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from civic_engagement import digitalhub
 from civic_engagement.access import manager, manager_throttle, pin_throttle, team_store
-from civic_engagement.config import SITE, memory
+from civic_engagement.config import SITE, STARTED, memory
 from civic_engagement.models.schema import AdminMember, AdminTeam, MemberCreate, TeamCreate, TeamRename, TeamScene, ThrottleReset
 from civic_engagement.store.scenarios import ScenarioError, delete_library, library, read_scenario, scenario_documents
 from civic_engagement.store.state import store
@@ -156,6 +157,7 @@ def get_status() -> dict:
     storage = state_storage()
     return {
         "site_id": SITE.site_id,
+        "started": datetime.fromtimestamp(STARTED, UTC).isoformat(timespec="seconds"),
         "teams": len(teams),
         "members": sum(len(team.members) for team in teams),
         "restart_needed": restart_needed(),

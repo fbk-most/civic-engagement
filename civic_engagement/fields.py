@@ -4,7 +4,9 @@ several requests ask for it together, and the compact encoding they're
 served in."""
 
 import base64
+import logging
 import threading
+import time
 from collections import OrderedDict
 from collections.abc import Callable, Hashable
 from concurrent.futures import Future
@@ -12,7 +14,10 @@ from typing import Generic, TypeVar
 
 import numpy as np
 
+from civic_engagement.config import memory, release_memory
+
 V = TypeVar("V")
+log = logging.getLogger(__name__)
 
 
 class ComputeCache(Generic[V]):
@@ -21,8 +26,9 @@ class ComputeCache(Generic[V]):
     at most `at_once` are computed side by side (each may take a lot of
     memory while it runs)."""
 
-    def __init__(self, size: int, at_once: int) -> None:
+    def __init__(self, size: int, at_once: int, name: str = "value") -> None:
         self._size = size
+        self._name = name  # for the log
         self._cache: OrderedDict[Hashable, V] = OrderedDict()
         # Guards the cache and the values being computed, briefly: the
         # computing itself runs outside it, so values asked for together
@@ -45,21 +51,38 @@ class ComputeCache(Generic[V]):
                 mine = False
         if not mine:
             return pending.result()
+        started = time.monotonic()
         try:
             with self._slots:
-                value = compute()
+                started = time.monotonic()  # the time computing, not waiting for a slot
+                try:
+                    value = compute()
+                finally:
+                    release_memory()
         except BaseException as error:
             with self._lock:
                 del self._computing[key]
             pending.set_exception(error)
+            log_memory(f"{self._name} failed after {time.monotonic() - started:.1f} s")
             raise
         with self._lock:
             self._cache[key] = value
             if len(self._cache) > self._size:
                 self._cache.popitem(last=False)
             del self._computing[key]
+            kept = len(self._cache)
         pending.set_result(value)
+        log_memory(f"{self._name} computed in {time.monotonic() - started:.1f} s ({kept} kept)")
         return value
+
+
+def log_memory(what: str) -> None:
+    """One line in the log: what happened, and the memory after it (MiB)."""
+    m = memory()
+    log.info(
+        "%s; memory (MiB): container anon %s, peak %s, limit %s; process %s",
+        what, m["anon_mib"], m["peak_mib"], m["limit_mib"], m["process_mib"],
+    )
 
 
 def encode_bytes(values: np.ndarray, scale: float, offset: float, nodata: int = 255) -> str:
