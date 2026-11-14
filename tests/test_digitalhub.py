@@ -185,3 +185,24 @@ def test_the_choice_of_credentials(monkeypatch):
     monkeypatch.setenv("CIVIC_ENGAGEMENT_S3_CREDENTIALS", "aws")
     with pytest.raises(RuntimeError, match="only digitalhub"):
         storage.storage_at("s3://bucket/state")
+
+
+def test_credentials_refused_on_starting_asked_again_then_given_up():
+    attempts = []
+
+    def refused_then_given():
+        attempts.append(1)
+        if len(attempts) < 3:
+            raise RuntimeError("401 Client Error")
+        return "credentials"
+
+    assert digitalhub.first_credentials(refused_then_given, wait=1, pause=0.01) == "credentials"
+    assert len(attempts) == 3
+
+    def refused():
+        raise RuntimeError("400 Client Error: Bad Request")
+
+    started = time.monotonic()
+    with pytest.raises(digitalhub.CredentialsUnavailable, match="400 Client Error"):
+        digitalhub.first_credentials(refused, wait=0.1, pause=0.03)
+    assert time.monotonic() - started < 1

@@ -18,10 +18,18 @@ A restarted container starts again from the run's variables, which the
 platform wrote when the run was created and doesn't update: once renewed,
 those no longer work, and the app can't read its state — unless the SDK's
 file, which it reads first and keeps the renewed ones in, is on a volume
-that outlives the container (DH_CONFIG on an `empty_dir`). Else the windows
-and the manager's status say the app needs restarting (`expiring`,
-store/storage.py's `restart_needed`): a new run (docs/deploy-digitalhub.md).
-The platform ends a run at its second restart anyway.
+that outlives the container (DH_CONFIG on an `empty_dir`).
+
+Credentials the platform refuses on starting — the platform briefly
+unreachable, or its tokens cancelled (seen on an instance at night, the
+file's too) — are asked for again for CIVIC_ENGAGEMENT_S3_STARTUP_WAIT_S
+seconds (180); then the app stops, with one line saying why, before reading
+any state (serve.py): a new run is needed (docs/deploy-digitalhub.md).
+Rather than serving without its state: nothing written meanwhile could then
+overwrite the saved state, were the credentials to come back. Renewals
+failing later, while it runs: the windows and the manager's status say the
+app needs restarting (`expiring`, store/storage.py's `restart_needed`). The
+platform ends a run at its second restart anyway.
 """
 
 import importlib
@@ -38,6 +46,15 @@ REFRESH_S = 2 * 3600
 RETRY_S = 300
 # Renewals failing, and the credentials expire within this: time to restart.
 EXPIRING_S = 3600
+# On starting, credentials refused: asked for again every this many seconds,
+# for CIVIC_ENGAGEMENT_S3_STARTUP_WAIT_S seconds.
+STARTUP_WAIT_S = 180
+STARTUP_PAUSE_S = 15
+
+
+class CredentialsUnavailable(RuntimeError):
+    """The platform refused the run's credentials on starting, for as long
+    as the app waited: a new run is needed."""
 
 
 def _now() -> str:
@@ -145,9 +162,25 @@ def credentials() -> Credentials:
     with _created:
         if _credentials is None:
             interval = float(os.environ.get("CIVIC_ENGAGEMENT_S3_REFRESH_S") or REFRESH_S)
-            _credentials = Credentials(interval=interval)
+            wait = float(os.environ.get("CIVIC_ENGAGEMENT_S3_STARTUP_WAIT_S") or STARTUP_WAIT_S)
+            _credentials = first_credentials(lambda: Credentials(interval=interval), wait)
             _credentials.start()
         return _credentials
+
+
+def first_credentials(make, wait: float, pause: float = STARTUP_PAUSE_S):
+    """`make()`, asked again every `pause` seconds while it fails, for
+    `wait` seconds; then CredentialsUnavailable, with the last error."""
+    deadline = time.monotonic() + wait
+    while True:
+        try:
+            return make()
+        except Exception as error:  # noqa: BLE001 — whatever the SDK raises
+            reason = f"{type(error).__name__}: {error}"
+            if time.monotonic() + pause > deadline:
+                raise CredentialsUnavailable(reason) from error
+            log.warning("The platform refused the S3 credentials (%s): asking again in %g s", reason, pause)
+            time.sleep(pause)
 
 
 def status() -> dict | None:

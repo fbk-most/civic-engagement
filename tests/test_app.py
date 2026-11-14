@@ -1,12 +1,13 @@
 import logging
 
+import pytest
 from fastapi.testclient import TestClient
 
 from civic_engagement.app import create_app
 from civic_engagement.config import SITE, cgroup_quota, cpus, memory, release_memory
 from civic_engagement.domain import active_pack
 from civic_engagement.fields import ComputeCache
-from civic_engagement.serve import QuietPolls, log_config
+from civic_engagement.serve import STARTUP_FAILURE, QuietPolls, log_config, serve
 
 
 def test_serves_the_built_frontend_beside_the_api(tmp_path):
@@ -71,6 +72,48 @@ def test_the_polls_left_out_of_the_access_log():
     config = log_config()
     assert config["handlers"]["access"]["filters"] == ["quiet_polls"]
     assert config["loggers"]["civic_engagement"]["level"] == "INFO"
+
+
+def test_the_exits_of_the_launcher(monkeypatch):
+    import signal
+
+    import uvicorn
+
+    from civic_engagement.digitalhub import CredentialsUnavailable
+
+    class Config:
+        def __init__(self, error=None):
+            self.error = error
+
+        def load_app(self):
+            if self.error:
+                raise self.error
+
+    # Credentials refused for good: status 3, not a traceback.
+    assert serve(Config(CredentialsUnavailable("400"))) == STARTUP_FAILURE
+
+    class Server:
+        """uvicorn's server, shut down by a SIGTERM; sending it again to
+        itself refused, as in some containers."""
+
+        def __init__(self, config):
+            self.should_exit, self.started, self._captured_signals = False, True, []
+
+        def run(self):
+            self.should_exit = True
+            self._captured_signals.append(signal.SIGTERM)
+            raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(uvicorn, "Server", Server)
+    assert serve(Config()) == 143
+
+    class Failing(Server):
+        def run(self):  # a PermissionError of its own, no signal
+            raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(uvicorn, "Server", Failing)
+    with pytest.raises(PermissionError):
+        serve(Config())
 
 
 def test_memory_released_and_logged_after_each_computation(caplog):
