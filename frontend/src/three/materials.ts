@@ -26,6 +26,7 @@ import { hashString } from "./hash";
 import { daylightFraction } from "./sun";
 import { activePack } from "../pack";
 import type { CoverPaint } from "./builders/coverPaint";
+import { createTreeLod, disposeTreeLod, withBarkLod, withFoliageLod } from "./treeLod";
 
 export interface Surface {
   color: number;
@@ -124,6 +125,8 @@ export function roofColor(tint?: string): THREE.Color {
   return new THREE.Color(tint ? parseInt(tint.slice(1), 16) : ROOF_COLOR);
 }
 
+const BARK: Surface = { color: 0x6b5340, roughness: 0.95 };
+
 /** Cut-off for foliage cards. Below 0.5 so crowns don't thin out as the mip
  * chain averages alpha down with distance, above the atlas's deepest-mip alpha
  * so they don't turn into solid blocks either. */
@@ -172,6 +175,10 @@ export function setAutumnMix(material: THREE.Material, mix: number): void {
 
 export class MaterialLibrary {
   private cache = new Map<string, THREE.MeshStandardMaterial>();
+  /** The trees' detail by distance, which `foliage()`, `needles()` and
+   * `branches()` draw with: set every frame (see builders/vegetation.ts);
+   * until it is, a tree is drawn whole. */
+  readonly treeLod = createTreeLod();
   private ground = new Map<string, GroundTextureSet>();
   // Facade materials are cached (and shared across every building of that
   // colour) by `color`, same as everything else in `cache` — but their
@@ -413,18 +420,21 @@ export class MaterialLibrary {
    */
   foliage(atlas: THREE.Texture): THREE.MeshStandardMaterial {
     return this.get(`foliage:${atlas.uuid}`, () =>
-      withAutumnBlend(
-        toMaterial(
-          { color: 0xffffff, roughness: 0.9 },
-          {
-            map: atlas,
-            vertexColors: true,
-            alphaTest: FOLIAGE_ALPHA_TEST,
-            // Clusters are thin planes seen from both sides as the camera
-            // moves through a crown.
-            side: THREE.DoubleSide,
-          }
-        )
+      withFoliageLod(
+        withAutumnBlend(
+          toMaterial(
+            { color: 0xffffff, roughness: 0.9 },
+            {
+              map: atlas,
+              vertexColors: true,
+              alphaTest: FOLIAGE_ALPHA_TEST,
+              // Clusters are thin planes seen from both sides as the camera
+              // moves through a crown.
+              side: THREE.DoubleSide,
+            }
+          )
+        ),
+        this.treeLod.leaves
       )
     );
   }
@@ -438,15 +448,23 @@ export class MaterialLibrary {
    * its back face. */
   needles(): THREE.MeshStandardMaterial {
     return this.get("needles", () =>
-      toMaterial({ color: 0xffffff, roughness: 0.95 }, { vertexColors: true, side: THREE.DoubleSide })
+      withFoliageLod(toMaterial({ color: 0xffffff, roughness: 0.95 }, { vertexColors: true, side: THREE.DoubleSide }), this.treeLod.needles)
     );
   }
 
   bark(): THREE.MeshStandardMaterial {
-    return this.get("bark", () => toMaterial({ color: 0x6b5340, roughness: 0.95 }));
+    return this.get("bark", () => toMaterial(BARK));
+  }
+
+  /** The bark of a tree's branches (`builders/branches.ts`, in its `lod`
+   * form), thinned by distance: not the trunks', which have no branch to
+   * thin. */
+  branches(): THREE.MeshStandardMaterial {
+    return this.get("branches", () => withBarkLod(toMaterial(BARK), this.treeLod.bark));
   }
 
   dispose(): void {
+    disposeTreeLod(this.treeLod);
     for (const material of this.cache.values()) material.dispose();
     this.cache.clear();
     // Ground textures are process-wide and cached in `assets.ts`; they outlive

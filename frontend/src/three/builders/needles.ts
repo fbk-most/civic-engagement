@@ -141,6 +141,13 @@ export function buildNeedleGeometry(
   const positions: number[] = [];
   const normals: number[] = [];
   const colors: number[] = [];
+  // For thinning by distance (see `treeLod.ts`): each needle's place in a
+  // random order (a draw of its own, so that the needles themselves stay as
+  // they were), and what its vertices are scaled about — the twig for its
+  // foot, the tip for itself, so that a needle widens without lengthening.
+  const ranks: number[] = [];
+  const centers: number[] = [];
+  const rankOf = mulberry32(seed ^ 0x5bd1e995);
 
   const widthDir = new THREE.Vector3();
   const needleDir = new THREE.Vector3();
@@ -182,6 +189,9 @@ export function buildNeedleGeometry(
       positions.push(left.x, left.y, left.z, right.x, right.y, right.z, tip.x, tip.y, tip.z);
       normals.push(normal.x, normal.y, normal.z, normal.x, normal.y, normal.z, normal.x, normal.y, normal.z);
       colors.push(color.r, color.g, color.b, color.r, color.g, color.b, color.r, color.g, color.b);
+      const rank = rankOf();
+      ranks.push(rank, rank, rank);
+      centers.push(twig.position.x, twig.position.y, twig.position.z, twig.position.x, twig.position.y, twig.position.z, tip.x, tip.y, tip.z);
     }
   }
 
@@ -189,5 +199,7 @@ export function buildNeedleGeometry(
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute("normal", new THREE.Float32BufferAttribute(normals, 3));
   geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+  geometry.setAttribute("rank", new THREE.Float32BufferAttribute(ranks, 1));
+  geometry.setAttribute("center", new THREE.Float32BufferAttribute(centers, 3));
   return geometry;
 }

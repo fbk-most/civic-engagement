@@ -22,6 +22,18 @@ import type { Terrain } from "../terrain";
 import type { CrownForm } from "./treeStructure";
 import type { BarkAttributes, FoliageAttributes, TreeJob } from "../workers/treeJobs";
 import { buildTreesInWorkers, treeJobKey } from "../workers/treeWorkerPool";
+import { readDebugParams } from "../../debugParams";
+import {
+  barkOrder,
+  barkTriangles,
+  foliageOrder,
+  foliageTriangles,
+  LOD_BUCKETS,
+  LOD_MARGIN_M,
+  sortTrianglesByKey,
+  updateTreeLod,
+  type TreeLodSettings,
+} from "../treeLod";
 
 /** Fraction of total height at which the crown starts. Real broadleaf street
  * trees (plane, oak, linden...) are pruned to clear pedestrians, so their
@@ -46,16 +58,36 @@ function pointPosition(anchor: GeoAnchor, element: DiscreteElement): [number, nu
  * structure is genuinely unique. */
 function merged(geometries: THREE.BufferGeometry[]): THREE.BufferGeometry | null {
   if (geometries.length === 0) return null;
-  const geometry = mergeGeometries(geometries, false);
+  return mergeGeometries(geometries, false);
+}
+
+/** A chunk's merged geometry with its triangles in the order they are left
+ * out by from afar (see `treeLod.ts`), and how many each step of that order
+ * holds. */
+interface Sorted {
+  geometry: THREE.BufferGeometry;
+  below: Uint32Array;
+}
+
+function sorted(geometry: THREE.BufferGeometry | null, order: (geometry: THREE.BufferGeometry) => (vertex: number) => number): Sorted | null {
   if (!geometry) return null;
+  const below = sortTrianglesByKey(geometry, order(geometry));
   releaseAfterUpload(geometry);
-  return geometry;
+  return { geometry, below };
 }
 
 /** A mesh over a tree chunk's geometry, which outlives the scene it's
- * built for (see `TreeChunk`): `disposeGroup` leaves it alone. */
-function chunkMesh(geometry: THREE.BufferGeometry, material: THREE.Material, name: string): THREE.Mesh {
+ * built for (see `TreeChunk`): `disposeGroup` leaves it alone. Its shadow
+ * is cast by `shadow`'s materials, which thin it as the view's do. */
+function chunkMesh(
+  geometry: THREE.BufferGeometry,
+  material: THREE.Material,
+  shadow: { depth: THREE.Material; distance: THREE.Material },
+  name: string
+): THREE.Mesh {
   const mesh = new THREE.Mesh(geometry, material);
+  mesh.customDepthMaterial = shadow.depth;
+  mesh.customDistanceMaterial = shadow.distance;
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   mesh.name = name;
@@ -71,6 +103,9 @@ function chunkMesh(geometry: THREE.BufferGeometry, material: THREE.Material, nam
 function releaseAfterUpload(geometry: THREE.BufferGeometry): void {
   geometry.computeBoundingSphere();
   geometry.computeBoundingBox();
+  // Thinning moves vertices a little out of where they were built.
+  geometry.boundingSphere!.radius += LOD_MARGIN_M;
+  geometry.boundingBox!.expandByScalar(LOD_MARGIN_M);
   for (const attribute of Object.values(geometry.attributes)) (attribute as THREE.BufferAttribute).onUpload(releaseArray);
   geometry.index?.onUpload(releaseArray);
 }
@@ -89,6 +124,9 @@ function barkGeometryFromAttributes(bark: BarkAttributes): THREE.BufferGeometry 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(bark.position, 3));
   geometry.setAttribute("normal", new THREE.BufferAttribute(bark.normal, 3));
+  geometry.setAttribute("center", new THREE.BufferAttribute(bark.center, 3));
+  geometry.setAttribute("radius", new THREE.BufferAttribute(bark.radius, 1));
+  geometry.setAttribute("rank", new THREE.BufferAttribute(bark.rank, 1));
   geometry.setIndex(new THREE.BufferAttribute(bark.index, 1));
   return geometry;
 }
@@ -98,48 +136,14 @@ function foliageGeometryFromAttributes(foliage: FoliageAttributes): THREE.Buffer
   geometry.setAttribute("position", new THREE.BufferAttribute(foliage.position, 3));
   geometry.setAttribute("normal", new THREE.BufferAttribute(foliage.normal, 3));
   geometry.setAttribute("color", new THREE.BufferAttribute(foliage.color, 3));
+  geometry.setAttribute("rank", new THREE.BufferAttribute(foliage.rank, 1));
+  geometry.setAttribute("center", new THREE.BufferAttribute(foliage.center, 3));
   if (foliage.kind === "leaf") {
     geometry.setAttribute("uv", new THREE.BufferAttribute(foliage.uv, 2));
     geometry.setAttribute("autumnColor", new THREE.BufferAttribute(foliage.autumnColor, 3));
-    geometry.setAttribute("rank", new THREE.BufferAttribute(foliage.rank, 1));
     geometry.setIndex(new THREE.BufferAttribute(foliage.index, 1));
   }
   return geometry;
-}
-
-// Resolution of the leaf order (see `sortLeavesByRank`): a month's density
-// is matched to 1/RANK_BUCKETS, far finer than the eye can tell.
-const RANK_BUCKETS = 1024;
-
-/** Reorders the merged leaves' triangles by their cluster `rank`, every
- * tree's together, so the leaves of any density are a prefix of the index
- * buffer: drawing a month's leaves is setting a draw range, with no new
- * geometry and nothing sent to the GPU. Returns, per bucket b, how many
- * triangles have a rank under b / RANK_BUCKETS. (A counting sort, linear in
- * the leaves.) The `rank` attribute itself is then dropped: it isn't drawn. */
-function sortLeavesByRank(geometry: THREE.BufferGeometry): Uint32Array {
-  const index = geometry.index!.array;
-  const rank = geometry.getAttribute("rank").array;
-  const triangles = index.length / 3;
-  const bucketOf = new Uint16Array(triangles);
-  const below = new Uint32Array(RANK_BUCKETS + 1);
-  for (let t = 0; t < triangles; t++) {
-    const bucket = Math.min(RANK_BUCKETS - 1, Math.floor(rank[index[t * 3]] * RANK_BUCKETS));
-    bucketOf[t] = bucket;
-    below[bucket + 1]++;
-  }
-  for (let b = 1; b <= RANK_BUCKETS; b++) below[b] += below[b - 1];
-  const cursor = below.slice(0, RANK_BUCKETS);
-  const sorted = new (index.constructor as Uint32ArrayConstructor)(index.length);
-  for (let t = 0; t < triangles; t++) {
-    const to = cursor[bucketOf[t]]++ * 3;
-    sorted[to] = index[t * 3];
-    sorted[to + 1] = index[t * 3 + 1];
-    sorted[to + 2] = index[t * 3 + 2];
-  }
-  geometry.setIndex(new THREE.BufferAttribute(sorted, 1).onUpload(releaseArray));
-  geometry.deleteAttribute("rank");
-  return below;
 }
 
 /** The merged trees come in chunks, so that a rebuild re-merges (and sends
@@ -147,21 +151,30 @@ function sortLeavesByRank(geometry: THREE.BufferGeometry): Uint32Array {
  * fifth of them — the ones still growing, spread all over the site — and a
  * card elsewhere none; merging every tree each time took about a second.
  *
- * Chunks are grouped by how trees change, not by place: a chunk is reused
+ * Chunks are grouped by how trees change and by place: a chunk is reused
  * whole when all its trees are unchanged, and the trees left over are packed
  * anew — growing trees (saplings, young ones, the planted ones: changed
- * every year) apart from grown ones (changed only when cut), and the ones
- * that changed this time apart from the ones that didn't. A chunk lives as long
- * as a scene drawing it (`users`): the one shown and the one being built
- * share the chunks they have in common. */
+ * every year) apart from grown ones (changed only when cut), the ones that
+ * changed this time apart from the ones that didn't, and tile by tile, so
+ * that a chunk's distance to the camera says how much of it to send (see
+ * `frame`). A chunk lives as long as a scene drawing it (`users`): the one
+ * shown and the one being built share the chunks they have in common. */
 interface TreeChunk {
   keys: string[];
-  bark: THREE.BufferGeometry | null;
-  leaves: THREE.BufferGeometry | null;
-  /** See `sortLeavesByRank`. */
-  leavesBelow: Uint32Array | null;
-  needles: THREE.BufferGeometry | null;
+  /** Its trees' extent, crowns included. */
+  box: THREE.Box3;
+  bark: Sorted | null;
+  leaves: Sorted | null;
+  needles: Sorted | null;
   users: number;
+}
+
+// A tile of trees: small enough for its distance to the camera to be near
+// each of its trees'.
+const TILE_M = 30;
+
+function tileKey(job: TreeJob): string {
+  return `${Math.floor(job.x / TILE_M)},${Math.floor(job.z / TILE_M)}`;
 }
 
 // Small enough that a cut tree invalidates few others; few enough chunks
@@ -180,9 +193,9 @@ const liveChunks = new Set<TreeChunk>();
 function releaseChunk(chunk: TreeChunk): void {
   if (--chunk.users > 0) return;
   liveChunks.delete(chunk);
-  chunk.bark?.dispose();
-  chunk.leaves?.dispose();
-  chunk.needles?.dispose();
+  chunk.bark?.geometry.dispose();
+  chunk.leaves?.geometry.dispose();
+  chunk.needles?.geometry.dispose();
 }
 
 /** Splits `jobs` into chunks of at most CHUNK_TREES, in a stable order. */
@@ -207,9 +220,12 @@ async function treeChunks(jobs: TreeJob[], growing: Set<string>): Promise<TreeCh
     }
   }
   const rest = [...wanted].map(([key, job]) => ({ job, key }));
-  const groups = [true, false].flatMap((changed) =>
-    [true, false].flatMap((grows) =>
-      packed(rest.filter(({ job, key }) => known.has(key) !== changed && growing.has(job.id) === grows))
+  const tiles = new Set(rest.map(({ job }) => tileKey(job)));
+  const groups = [...tiles].flatMap((tile) =>
+    [true, false].flatMap((changed) =>
+      [true, false].flatMap((grows) =>
+        packed(rest.filter(({ job, key }) => tileKey(job) === tile && known.has(key) !== changed && growing.has(job.id) === grows))
+      )
     )
   );
 
@@ -218,6 +234,7 @@ async function treeChunks(jobs: TreeJob[], growing: Set<string>): Promise<TreeCh
     const bark: THREE.BufferGeometry[] = [];
     const leaves: THREE.BufferGeometry[] = [];
     const needles: THREE.BufferGeometry[] = [];
+    const box = new THREE.Box3();
     for (const { job } of group) {
       const result = results.get(job.id);
       // A build superseded in the pool comes back empty (see
@@ -226,14 +243,16 @@ async function treeChunks(jobs: TreeJob[], growing: Set<string>): Promise<TreeCh
       bark.push(barkGeometryFromAttributes(result.bark));
       if (result.foliage?.kind === "needle") needles.push(foliageGeometryFromAttributes(result.foliage));
       else if (result.foliage) leaves.push(foliageGeometryFromAttributes(result.foliage));
+      const reach = job.canopyDiameter / 2;
+      box.expandByPoint(new THREE.Vector3(job.x - reach, job.y, job.z - reach));
+      box.expandByPoint(new THREE.Vector3(job.x + reach, job.y + job.height, job.z + reach));
     }
-    const leafGeometry = merged(leaves);
     chunks.push({
       keys: group.map(({ key }) => key),
-      bark: merged(bark),
-      leaves: leafGeometry,
-      leavesBelow: leafGeometry ? sortLeavesByRank(leafGeometry) : null,
-      needles: merged(needles),
+      box,
+      bark: sorted(merged(bark), barkOrder),
+      leaves: sorted(merged(leaves), foliageOrder),
+      needles: sorted(merged(needles), foliageOrder),
       users: 0,
     });
   }
@@ -247,12 +266,42 @@ async function treeChunks(jobs: TreeJob[], growing: Set<string>): Promise<TreeCh
 
 export interface Vegetation {
   group: THREE.Group;
+  /** Every frame: sets the trees' detail for the camera (see `treeLod.ts`)
+   * and, when it has moved, how much of each chunk is sent. */
+  frame: (camera: THREE.Camera) => void;
   /** Shows the trees as in `season`: leaves thinned to its density, tinted
    * by its autumn mix. Instant — nothing is rebuilt. */
   applySeason: (season: SeasonState) => void;
   /** Lets go of the tree chunks, once the scene is no longer drawn (the
    * rest of the group is disposed by `disposeGroup`). */
   release: () => void;
+}
+
+// `?detail=`: how fine the trees stay with distance (see `treeLod.ts`).
+// Under 0.5 the thinning shows.
+const DETAIL = Math.min(4, Math.max(0.5, readDebugParams().detail ?? 1));
+// The camera moves this much before the chunks' draw ranges are set again;
+// they are set for a camera that much nearer, so that they hold meanwhile.
+const RECHECK_M = 3;
+
+/** A chunk mesh and how much of it to send. */
+interface Thinned {
+  mesh: THREE.Mesh;
+  below: Uint32Array;
+  box: THREE.Box3;
+  /** The triangles to send for the view and for a shadow. */
+  count: (settings: TreeLodSettings, nearest: number, density: number) => number;
+  view: number;
+  shadow: number;
+}
+
+function thinned(mesh: THREE.Mesh, part: Sorted, box: THREE.Box3, count: Thinned["count"]): Thinned {
+  const item: Thinned = { mesh, below: part.below, box, count, view: part.below[LOD_BUCKETS], shadow: part.below[LOD_BUCKETS] };
+  // A shadow is cast by fewer triangles than the view draws (the geometry
+  // is the chunk's, shared: the range is put back after).
+  mesh.onBeforeShadow = () => mesh.geometry.setDrawRange(0, item.shadow * 3);
+  mesh.onAfterShadow = () => mesh.geometry.setDrawRange(0, item.view * 3);
+  return item;
 }
 
 export async function buildVegetation(
@@ -342,27 +391,54 @@ export async function buildVegetation(
   if (trunkMesh) group.add(trunkMesh);
 
   const foliageMaterial = materials.foliage(broadleafAtlas);
-  const leafMeshes: { mesh: THREE.Mesh; below: Uint32Array }[] = [];
+  const lod = materials.treeLod;
+  const meshes: Thinned[] = [];
+  const add = (item: Thinned) => {
+    meshes.push(item);
+    group.add(item.mesh);
+  };
   for (const chunk of chunks) {
-    if (chunk.bark) group.add(chunkMesh(chunk.bark, materials.bark(), "tree-bark"));
-    if (chunk.leaves && chunk.leavesBelow) {
-      const mesh = chunkMesh(chunk.leaves, foliageMaterial, "tree-leaves-broadleaf");
-      leafMeshes.push({ mesh, below: chunk.leavesBelow });
-      group.add(mesh);
+    if (chunk.bark) {
+      const mesh = chunkMesh(chunk.bark.geometry, materials.branches(), lod.barkShadow, "tree-bark");
+      add(thinned(mesh, chunk.bark, chunk.box, (settings, nearest) => barkTriangles(chunk.bark!.below, settings, nearest)));
     }
-    if (chunk.needles) group.add(chunkMesh(chunk.needles, materials.needles(), "tree-needles"));
+    if (chunk.leaves) {
+      const mesh = chunkMesh(chunk.leaves.geometry, foliageMaterial, lod.leafShadow, "tree-leaves-broadleaf");
+      add(thinned(mesh, chunk.leaves, chunk.box, (settings, nearest, density) => foliageTriangles(chunk.leaves!.below, settings.leaves, nearest, density)));
+    }
+    if (chunk.needles) {
+      const mesh = chunkMesh(chunk.needles.geometry, materials.needles(), lod.needleShadow, "tree-needles");
+      add(thinned(mesh, chunk.needles, chunk.box, (settings, nearest) => foliageTriangles(chunk.needles!.below, settings.needles, nearest)));
+    }
   }
 
   const stumpMesh = instanced(stumpGeometry, materials.bark(), stumps, "tree-stumps");
   if (stumpMesh) group.add(stumpMesh);
 
-  const applySeason = (season: SeasonState) => {
-    const density = Math.max(0, Math.min(1, season.leafDensity));
-    for (const { mesh, below } of leafMeshes) {
-      const triangles = below[Math.round(density * RANK_BUCKETS)];
-      mesh.geometry.setDrawRange(0, triangles * 3);
-      mesh.visible = triangles > 0;
+  let leafDensity = 1;
+  // What the draw ranges were last set for: the camera's place, and the
+  // rest of what they depend on (the view's scale, the season).
+  const setAt = new THREE.Vector3(Infinity, Infinity, Infinity);
+  let setFor = "";
+  const frame = (camera: THREE.Camera) => {
+    const { view, shadow } = updateTreeLod(lod, camera, DETAIL, leafDensity);
+    const state = `${view.leaves.d0}|${view.barkSlope}|${shadow.barkFloor}|${leafDensity}`;
+    if (state === setFor && lod.eye.value.distanceTo(setAt) < RECHECK_M) return;
+    setFor = state;
+    setAt.copy(lod.eye.value);
+    for (const item of meshes) {
+      const nearest = Math.max(0, item.box.distanceToPoint(setAt) - RECHECK_M);
+      item.view = item.count(view, nearest, leafDensity);
+      // Never more than the view's: the range isn't swapped for the pond's
+      // reflection, which draws the view's.
+      item.shadow = Math.min(item.view, item.count(shadow, nearest, leafDensity));
+      item.mesh.geometry.setDrawRange(0, item.view * 3);
+      item.mesh.visible = item.view > 0;
     }
+  };
+
+  const applySeason = (season: SeasonState) => {
+    leafDensity = Math.max(0, Math.min(1, season.leafDensity));
     setAutumnMix(foliageMaterial, season.autumnMix);
   };
   let released = false;
@@ -371,5 +447,5 @@ export async function buildVegetation(
     released = true;
     for (const chunk of chunks) releaseChunk(chunk);
   };
-  return { group, applySeason, release };
+  return { group, frame, applySeason, release };
 }

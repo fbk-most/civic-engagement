@@ -119,6 +119,9 @@ function shuffled<T>(items: T[], random: () => number): T[] {
  * - `autumnColor`: the cluster's autumn tint, blended over its summer
  *   `color` by the season's `autumnMix`.
  *
+ * And `center`, the cluster's twig: what its planes are scaled about when
+ * the tree is thinned by distance (see `treeLod.ts`, which uses `rank` too).
+ *
  * One cluster is placed per selected twig — real leaf clusters sit at real
  * twig tips, not tiled over an implicit surface.
  *
@@ -148,6 +151,7 @@ export function buildLeafGeometry(
   const colors: number[] = [];
   const autumnColors: number[] = [];
   const ranks: number[] = [];
+  const centers: number[] = [];
   const indices: number[] = [];
 
   const outward = new THREE.Vector3();
@@ -220,6 +224,7 @@ export function buildLeafGeometry(
         colors.push(color.r, color.g, color.b);
         autumnColors.push(autumnColor.r, autumnColor.g, autumnColor.b);
         ranks.push(rank);
+        centers.push(twig.position.x, twig.position.y, twig.position.z);
       }
       indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
     }
@@ -232,6 +237,7 @@ export function buildLeafGeometry(
   geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
   geometry.setAttribute("autumnColor", new THREE.Float32BufferAttribute(autumnColors, 3));
   geometry.setAttribute("rank", new THREE.Float32BufferAttribute(ranks, 1));
+  geometry.setAttribute("center", new THREE.Float32BufferAttribute(centers, 3));
   geometry.setIndex(indices);
   return geometry;
 }

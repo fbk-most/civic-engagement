@@ -27,6 +27,10 @@ import type { BranchSegment, TreeStructure } from "./treeStructure";
  * read correctly. */
 const RADIAL_SEGMENTS = 4;
 
+/** The `radius` given to what is never thinned away (see `addSegment`):
+ * wider than any distance asks for. */
+const ALWAYS_DRAWN_RADIUS_M = 1000;
+
 /** Appends one tapered cylinder (sides + two end caps, matching what the
  * old per-segment `CylinderGeometry` produced) directly into the shared
  * position/normal/index arrays — see module docstring for why this replaced
@@ -35,7 +39,8 @@ function addSegment(
   positions: number[],
   normals: number[],
   indices: number[],
-  segment: BranchSegment
+  segment: BranchSegment,
+  lod: { centers: number[]; radii: number[]; ranks: number[]; rank: number } | null
 ): void {
   const { start, end, radiusStart, radiusEnd } = segment;
   const length = start.distanceTo(end);
@@ -68,6 +73,14 @@ function addSegment(
       point.copy(centre).addScaledVector(normal, radius);
       positions.push(point.x, point.y, point.z);
       normals.push(normal.x, normal.y, normal.z);
+      if (lod) {
+        lod.centers.push(centre.x, centre.y, centre.z);
+        // The stem (a broadleaf's first limb, a conifer's leader) carries
+        // the trunk on into the crown: it's drawn as long as the trunk is,
+        // whatever its width on screen, or the crown would float over it.
+        lod.radii.push(segment.level === 0 ? ALWAYS_DRAWN_RADIUS_M : radius);
+        lod.ranks.push(lod.rank);
+      }
     }
   }
 
@@ -78,6 +91,15 @@ function addSegment(
     const tl = ringBase + RADIAL_SEGMENTS + i;
     const tr = ringBase + RADIAL_SEGMENTS + next;
     indices.push(bl, br, tr, bl, tr, tl);
+  }
+
+  // The light form (see `BarkOptions.lod`): the tip closed with the tip
+  // ring's own four vertices, and no cap at the base, which sits in the
+  // parent's tip (or the trunk's top).
+  if (lod) {
+    const tip = ringBase + RADIAL_SEGMENTS;
+    for (let i = 1; i < RADIAL_SEGMENTS - 1; i++) indices.push(tip, tip + i, tip + i + 1);
+    return;
   }
 
   // End caps — small triangle fans, flat-shaded along the segment's own
@@ -102,24 +124,61 @@ function addSegment(
   }
 }
 
+/** Each segment's place, in [0, 1), in the order the thin branches are
+ * left out by from afar (the highest first): a draw for a segment without
+ * children, and for the others the lowest of their children's — a branch
+ * is drawn as long as one growing from it is, so that none floats. (A
+ * child starts at its parent's own end point, as `treeStructure.ts` grows
+ * them; a conifer's secondary branches start along their parent, and so
+ * are on their own.) The same on every build. */
+function segmentRanks(segments: BranchSegment[]): Float32Array {
+  const ranks = new Float32Array(segments.length).fill(Infinity);
+  const endingAt = new Map<THREE.Vector3, number>();
+  segments.forEach((segment, i) => endingAt.set(segment.end, i));
+  // Parents come before their children (see `growLevels`).
+  for (let i = segments.length - 1; i >= 0; i--) {
+    if (ranks[i] === Infinity) ranks[i] = (Math.imul(i + 1, 0x9e3779b1) >>> 0) / 4294967296;
+    const parent = endingAt.get(segments[i].start);
+    if (parent !== undefined && parent !== i) ranks[parent] = Math.min(ranks[parent], ranks[i]);
+  }
+  return ranks;
+}
+
+export interface BarkOptions {
+  /** The bark for a tree thinned by distance (see `treeLod.ts`): each
+   * vertex also carries its branch's axis point (`center`), its radius
+   * there (`radius`) and the branch's `rank` (see `segmentRanks`), and a segment is 10 triangles, not 16 — one cap, of
+   * two triangles, instead of two fans of four. */
+  lod?: boolean;
+}
+
 /** Builds the visible (coarse) part of a tree's structure into one bark
  * geometry. `renderMaxLevel` is the same cutoff the original bare-winter-only
  * version of this file used (3) — kept as a parameter rather than a
  * constant so callers stay explicit about why it's bounded (finer twigs
  * below this level exist only as leaf anchors, see `treeStructure.ts`, and
  * would be visual clutter/wasted triangles to also render as bark). */
-export function buildBarkGeometry(structure: TreeStructure, renderMaxLevel: number): THREE.BufferGeometry {
+export function buildBarkGeometry(structure: TreeStructure, renderMaxLevel: number, options?: BarkOptions): THREE.BufferGeometry {
   const positions: number[] = [];
   const normals: number[] = [];
   const indices: number[] = [];
+  const lod = options?.lod ? { centers: [] as number[], radii: [] as number[], ranks: [] as number[], rank: 0 } : null;
+  const ranks = lod ? segmentRanks(structure.segments) : null;
 
-  for (const segment of structure.segments) {
-    if (segment.level <= renderMaxLevel) addSegment(positions, normals, indices, segment);
-  }
+  structure.segments.forEach((segment, i) => {
+    if (segment.level > renderMaxLevel) return;
+    if (lod && ranks) lod.rank = ranks[i];
+    addSegment(positions, normals, indices, segment, lod);
+  });
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute("normal", new THREE.Float32BufferAttribute(normals, 3));
+  if (lod) {
+    geometry.setAttribute("center", new THREE.Float32BufferAttribute(lod.centers, 3));
+    geometry.setAttribute("radius", new THREE.Float32BufferAttribute(lod.radii, 1));
+    geometry.setAttribute("rank", new THREE.Float32BufferAttribute(lod.ranks, 1));
+  }
   geometry.setIndex(indices);
   return geometry;
 }

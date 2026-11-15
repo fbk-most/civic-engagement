@@ -252,6 +252,7 @@ pack may read its own: see its README.
 | `terrainScale` | e.g. `3` | Testing only: the terrain's heights multiplied by this, to see it on gentle ground. |
 | `treeFar` | metres | Testing only: beyond this distance from the camera, a forest's trees are thinned out to a tenth, with wider crowns (default: never). |
 | `treeShadows` | metres, or `off` | Testing only: how far from the camera a forest's trees cast shadows (default `1200`); `off`, nowhere. |
+| `detail` | number, `0.5` to `4` | How fine the trees stay with distance (default `1`): from afar a tree is drawn with fewer leaves, needles and twigs, each larger. Lower is lighter for weak graphics; under `0.5` the thinning would show. |
 | `depth` | `reversed`, `log` | Testing only: the depth buffer, whatever the pack's choice (`scene3d.reversedDepth`). Reversed needs the browser's `EXT_clip_control` (the console says which one is used) and breaks the reflection of water (three's `Water.js`). |
 
 The active site is not a URL parameter: it's chosen when starting the backend

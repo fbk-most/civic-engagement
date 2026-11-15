@@ -173,6 +173,13 @@ export class Lighting {
     this.sky.material.uniforms.time.value = elapsedSeconds;
   }
 
+  /** The side of a texel of the sun's shadow map on the ground, in metres
+   * (after `fitTo`). */
+  get shadowTexelM(): number {
+    const camera = this.sun.shadow.camera;
+    return (camera.right - camera.left) / this.sun.shadow.mapSize.x;
+  }
+
   /** Fits the shadow camera to the site so shadow texels aren't spent on empty
    * space. Call once per scene rebuild. `heights`: the ground's lowest and
    * highest point over it (both 0 on a flat site). */

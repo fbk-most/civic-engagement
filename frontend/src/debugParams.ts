@@ -57,6 +57,9 @@ export interface DebugParams {
   /** `?treeShadows=N|off`: how far from the camera a forest's trees cast
    * shadows (see three/builders/forest.ts); "off", nowhere — for testing. */
   treeShadows: number | "off" | null;
+  /** `?detail=N`: how fine the trees stay with distance (see
+   * three/treeLod.ts): 1 by default, 0.5 (lighter) to 4. */
+  detail: number | null;
   /** `?depth=reversed|log`: the depth buffer, whatever the pack's choice
    * (`FrontendPack.scene3d.reversedDepth`) — for testing. */
   depth: "log" | "reversed" | null;
@@ -111,6 +114,7 @@ export function readDebugParams(search: string = window.location.search): DebugP
     terrainScale: num(params, "terrainScale"),
     treeFar: params.get("treeFar") === "off" ? "off" : num(params, "treeFar"),
     treeShadows: params.get("treeShadows") === "off" ? "off" : num(params, "treeShadows"),
+    detail: num(params, "detail"),
     depth: params.get("depth") === "reversed" ? "reversed" : params.get("depth") === "log" ? "log" : null,
   };
 }

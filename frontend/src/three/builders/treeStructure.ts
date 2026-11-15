@@ -59,6 +59,18 @@ const MAX_LEVEL = 6;
  * constant at a time, against the full demo scene. */
 const NODE_BUDGET = 1200;
 
+/** A crown this wide (m) or wider gets the whole NODE_BUDGET; a smaller one
+ * a budget in proportion to its area — a sapling has fewer twigs and
+ * leaves, not only smaller ones — and never under MIN_NODE_BUDGET. */
+const FULL_BUDGET_CANOPY_M = 8;
+const MIN_NODE_BUDGET = 120;
+
+/** The node budget of a broadleaf tree by the size of its crown. */
+export function nodeBudgetFor(canopyDiameterM: number): number {
+  const share = (canopyDiameterM / FULL_BUDGET_CANOPY_M) ** 2;
+  return Math.round(Math.min(NODE_BUDGET, Math.max(MIN_NODE_BUDGET, NODE_BUDGET * share)));
+}
+
 /** How wide the dichotomous (round/broadleaf) form spreads its branches:
  * `tiltDeg` is the per-split cone angle away from the parent direction,
  * `childCountRange` how many children each split makes. Conical/columnar
@@ -205,11 +217,20 @@ function growLevels(
   root: PendingBranch,
   nodeBudget: number,
   maxLevel: number,
-  leafMinLevel: number
+  leafMinLevel: number,
+  evenTrim: boolean
 ): void {
   let frontier: PendingBranch[] = [root];
 
   while (frontier.length > 0 && structure.segments.length < nodeBudget) {
+    // The level the budget runs out in: in a random order, so that the
+    // branches left out are spread over the crown (see `evenTrim`).
+    if (evenTrim && structure.segments.length + frontier.length > nodeBudget) {
+      for (let i = frontier.length - 1; i > 0; i--) {
+        const j = Math.floor(random() * (i + 1));
+        [frontier[i], frontier[j]] = [frontier[j], frontier[i]];
+      }
+    }
     const next: PendingBranch[] = [];
     for (const branch of frontier) {
       if (structure.segments.length >= nodeBudget) break;
@@ -411,6 +432,14 @@ function growConiferLevels(
   }
 }
 
+/** How a tree is grown in the scene: a broadleaf with a crown too small
+ * for the whole budget gets its own (`nodeBudgetFor`), trimmed evenly; the
+ * others are grown as ever. */
+export function sizedStructureOptions(crownForm: CrownForm, canopyDiameterM: number): TreeStructureOptions | undefined {
+  const budget = nodeBudgetFor(canopyDiameterM);
+  return crownForm === "round" && budget < NODE_BUDGET ? { nodeBudget: budget, evenTrim: true } : undefined;
+}
+
 /** Overrides for the parameters that actually determine how rich a
  * generated structure is — see `frontend/src/treeLab.ts`, the tool this
  * exists for. All optional; omitting them (as every real call site except
@@ -439,6 +468,12 @@ export interface TreeStructureOptions {
   nodeBudget?: number;
   maxLevel?: number;
   leafMinLevel?: number;
+  /** Broadleaf only. The level in which the budget runs out is grown in
+   * the order its branches come, so the first limbs get all their twigs
+   * and the last ones none: unnoticed at the full budget, where that level
+   * is the finest, but lopsided at a sapling's small one (`nodeBudgetFor`).
+   * With this, that level's branches are picked at random instead. */
+  evenTrim?: boolean;
   roundGrowth?: RoundGrowthOverrides;
   conifer?: ConiferOverrides;
 }
@@ -486,7 +521,8 @@ export function buildTreeStructure(
     },
     nodeBudget,
     maxLevel,
-    leafMinLevel
+    leafMinLevel,
+    options?.evenTrim ?? false
   );
 
   return structure;

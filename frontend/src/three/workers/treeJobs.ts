@@ -32,6 +32,10 @@ export interface TreeJob {
 export interface BarkAttributes {
   position: Float32Array;
   normal: Float32Array;
+  /** For thinning by distance (see `treeLod.ts`), as `rank` below. */
+  center: Float32Array;
+  radius: Float32Array;
+  rank: Float32Array;
   index: Uint16Array | Uint32Array;
 }
 
@@ -46,6 +50,7 @@ export type FoliageAttributes =
        * order clusters thin out by season (see `buildLeafGeometry`). */
       autumnColor: Float32Array;
       rank: Float32Array;
+      center: Float32Array;
       index: Uint16Array | Uint32Array;
     }
   | {
@@ -53,6 +58,8 @@ export type FoliageAttributes =
       position: Float32Array;
       normal: Float32Array;
       color: Float32Array;
+      rank: Float32Array;
+      center: Float32Array;
     };
 
 export interface TreeBuildResult {

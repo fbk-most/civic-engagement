@@ -704,6 +704,8 @@ export function Viewer({
       }
       lighting.update(clock.elapsedTime);
       updateShadowCasters(performance.now());
+      // What the trees' detail by distance is worked out from (treeLod.ts).
+      if (materialsRef.current) materialsRef.current.treeLod.viewHeightPx = renderer.domElement.height;
       for (const part of builtRef.current?.parts ?? []) part.frame?.(camera, clock.elapsedTime);
       if (placardsRef.current) facePlacards(placardsRef.current, camera);
       const ground = builtRef.current?.terrain.heightAt(camera.position.x, camera.position.z) ?? 0;
@@ -865,6 +867,7 @@ export function Viewer({
     // fitTo moves the shadow camera's centre, so the sun has to be re-placed
     // relative to it afterwards.
     lighting.fitTo(built.bounds, [built.terrain.minHeight, built.terrain.maxHeight]);
+    if (materialsRef.current) materialsRef.current.treeLod.shadowTexelM = lighting.shadowTexelM;
     // Zooming out stops where the whole site is still comfortably in view,
     // and the far plane lies beyond that: the site is never cut off, however
     // large (Piazza Dante is a few hundred metres across, a valley

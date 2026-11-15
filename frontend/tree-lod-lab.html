@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Tree detail lab</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: #f2f2f0;
+        font-family: system-ui, sans-serif;
+        font-size: 13px;
+      }
+      h1 {
+        font-size: 16px;
+        margin: 0 0 4px;
+      }
+      p {
+        margin: 0 0 10px;
+        max-width: 900px;
+        color: #444;
+      }
+      #controls {
+        display: grid;
+        grid-template-columns: repeat(4, max-content);
+        gap: 6px 22px;
+        margin-bottom: 12px;
+        align-items: center;
+      }
+      #controls label {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+      #controls output {
+        font-family: ui-monospace, monospace;
+        min-width: 64px;
+      }
+      #grid {
+        position: relative;
+        background: #fff;
+        border: 1px solid #ccc;
+      }
+      #grid canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+      }
+      .caption {
+        position: absolute;
+        margin: 0;
+        padding: 4px 6px;
+        box-sizing: border-box;
+        font-size: 11px;
+        line-height: 1.3;
+        white-space: pre-wrap;
+        font-family: ui-monospace, monospace;
+        background: rgba(255, 255, 255, 0.8);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Tree detail lab — dev-only, not part of the shipped app</h1>
+    <p>
+      Left: the tree as drawn today, whatever the distance. Right: the same tree thinned for that distance (see
+      src/three/treeLod.ts). Top: as it shows on a screen of the given height, pixel for pixel. Bottom: the same view
+      magnified. "Sweep" moves the distance back and forth: look for anything popping.
+    </p>
+    <div id="controls"></div>
+    <div id="grid"></div>
+    <script type="module" src="/src/treeLodLab.ts"></script>
+  </body>
+</html>

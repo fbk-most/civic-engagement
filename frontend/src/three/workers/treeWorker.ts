@@ -21,9 +21,10 @@
 // shadows the ambient DOM-typed `self` within this module's own scope only.
 declare const self: DedicatedWorkerGlobalScope;
 
+import type * as THREE from "three";
 import { buildBarkGeometry } from "../builders/branches";
 import { buildLeafGeometry, SUMMER_PALETTE } from "../builders/foliageCards";
-import { buildTreeStructure } from "../builders/treeStructure";
+import { buildTreeStructure, sizedStructureOptions } from "../builders/treeStructure";
 import { hashString } from "../hash";
 import { buildNeedleGeometry } from "../builders/needles";
 import type { FoliageAttributes, TreeBuildResult, TreeJob, TreeWorkerRequest, TreeWorkerResponse } from "./treeJobs";
@@ -35,14 +36,36 @@ import type { FoliageAttributes, TreeBuildResult, TreeJob, TreeWorkerRequest, Tr
  * constant, not something `treeStructure.ts`/`branches.ts` export. */
 const BARK_RENDER_MAX_LEVEL = 6;
 
-function buildOne(job: TreeJob): TreeBuildResult {
-  const structure = buildTreeStructure(hashString(job.id), job.trunkTop, job.height, job.canopyDiameter, job.crownForm);
+/** Moves a tree's geometry to its place: its vertices, and the points they
+ * are scaled about when the tree is thinned (`center`, see `treeLod.ts`). */
+function place(geometry: THREE.BufferGeometry, job: TreeJob): void {
+  geometry.translate(job.x, job.y, job.z);
+  const center = geometry.attributes.center.array as Float32Array;
+  for (let i = 0; i < center.length; i += 3) {
+    center[i] += job.x;
+    center[i + 1] += job.y;
+    center[i + 2] += job.z;
+  }
+}
 
-  const barkGeometry = buildBarkGeometry(structure, BARK_RENDER_MAX_LEVEL);
-  barkGeometry.translate(job.x, job.y, job.z);
+function buildOne(job: TreeJob): TreeBuildResult {
+  const structure = buildTreeStructure(
+    hashString(job.id),
+    job.trunkTop,
+    job.height,
+    job.canopyDiameter,
+    job.crownForm,
+    sizedStructureOptions(job.crownForm, job.canopyDiameter)
+  );
+
+  const barkGeometry = buildBarkGeometry(structure, BARK_RENDER_MAX_LEVEL, { lod: true });
+  place(barkGeometry, job);
   const bark = {
     position: barkGeometry.attributes.position.array as Float32Array,
     normal: barkGeometry.attributes.normal.array as Float32Array,
+    center: barkGeometry.attributes.center.array as Float32Array,
+    radius: barkGeometry.attributes.radius.array as Float32Array,
+    rank: barkGeometry.attributes.rank.array as Float32Array,
     index: barkGeometry.index!.array as Uint16Array | Uint32Array,
   };
 
@@ -52,18 +75,20 @@ function buildOne(job: TreeJob): TreeBuildResult {
   if (job.isEvergreen) {
     const needleGeometry = buildNeedleGeometry(structure, hashString(`${job.id}:needles`), 1);
     if (needleGeometry) {
-      needleGeometry.translate(job.x, job.y, job.z);
+      place(needleGeometry, job);
       foliage = {
         kind: "needle",
         position: needleGeometry.attributes.position.array as Float32Array,
         normal: needleGeometry.attributes.normal.array as Float32Array,
         color: needleGeometry.attributes.color.array as Float32Array,
+        rank: needleGeometry.attributes.rank.array as Float32Array,
+        center: needleGeometry.attributes.center.array as Float32Array,
       };
     }
   } else {
     const leafGeometry = buildLeafGeometry(structure, hashString(`${job.id}:leaves`), job.canopyDiameter, SUMMER_PALETTE);
     if (leafGeometry) {
-      leafGeometry.translate(job.x, job.y, job.z);
+      place(leafGeometry, job);
       foliage = {
         kind: "leaf",
         position: leafGeometry.attributes.position.array as Float32Array,
@@ -72,6 +97,7 @@ function buildOne(job: TreeJob): TreeBuildResult {
         color: leafGeometry.attributes.color.array as Float32Array,
         autumnColor: leafGeometry.attributes.autumnColor.array as Float32Array,
         rank: leafGeometry.attributes.rank.array as Float32Array,
+        center: leafGeometry.attributes.center.array as Float32Array,
         index: leafGeometry.index!.array as Uint16Array | Uint32Array,
       };
     }
@@ -92,19 +118,23 @@ function collectTransferables(results: TreeBuildResult[]): ArrayBuffer[] {
     buffers.push(
       result.bark.position.buffer as ArrayBuffer,
       result.bark.normal.buffer as ArrayBuffer,
+      result.bark.center.buffer as ArrayBuffer,
+      result.bark.radius.buffer as ArrayBuffer,
+      result.bark.rank.buffer as ArrayBuffer,
       result.bark.index.buffer as ArrayBuffer
     );
     if (result.foliage) {
       buffers.push(
         result.foliage.position.buffer as ArrayBuffer,
         result.foliage.normal.buffer as ArrayBuffer,
-        result.foliage.color.buffer as ArrayBuffer
+        result.foliage.color.buffer as ArrayBuffer,
+        result.foliage.rank.buffer as ArrayBuffer,
+        result.foliage.center.buffer as ArrayBuffer
       );
       if (result.foliage.kind === "leaf") {
         buffers.push(
           result.foliage.uv.buffer as ArrayBuffer,
           result.foliage.autumnColor.buffer as ArrayBuffer,
-          result.foliage.rank.buffer as ArrayBuffer,
           result.foliage.index.buffer as ArrayBuffer
         );
       }

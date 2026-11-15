@@ -144,7 +144,8 @@ export async function buildScene(
   group.add(named(buildPaths(elements.filter((e) => ribbonTypes.has(e.type)), anchor, materials, terrain), "paths"));
   group.add(named(await ACTIVE_PROVIDER.build(buildings, { anchor, materials, terrain }), "buildings"));
   const vegetation = await buildVegetation(elements, anchor, materials, terrain);
-  group.add(named(vegetation.group, "trees"));
+  named(vegetation.group, "trees");
+  parts.push({ object: vegetation.group, frame: vegetation.frame });
   // The forest the pack grows from the covers, if it does (see forest.ts).
   const forest = scene3d.treeSource ? buildForest(scene3d.treeSource, covers, elements, anchor, materials, terrain) : null;
   if (forest) {
