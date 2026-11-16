@@ -19,11 +19,11 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from civic_twin.domains.urban.parameters import (
-    CULTIVATION_COVER_BY_PURPOSE,
-    DEFAULT_CULTIVATION_PURPOSE,
+    CULTIVATION_BUFFER_M,
+    DEFAULT_CULTIVATION,
     GROVE_PLANTING_DIAMETER,
 )
-from civic_twin.geo_utils import centroid_point, grove_points_within
+from civic_twin.geo_utils import buffered, centroid_point, grove_points_within
 from civic_twin.models.schema import BaselineScene, CoverPolygon, DiscreteElement, Intervention
 
 # A grove's trees are counted per grove for its cost (see encode.py).
@@ -89,10 +89,10 @@ def _element(
     )
 
 
-def _cover(intervention: Intervention, cover_type: str) -> CoverPolygon:
+def _cover(intervention: Intervention, cover_type: str, geometry=None) -> CoverPolygon:
     return CoverPolygon(
         id=f"cover-{intervention.id}",
-        geometry=intervention.geometry,
+        geometry=geometry if geometry is not None else intervention.geometry,
         cover_type=cover_type,
         source="intervention",
         intervention_id=intervention.id,
@@ -114,11 +114,12 @@ def _planted_tree(
     )
 
 
-def cultivation_cover(params: dict) -> str:
-    """The cover a "coltiva il terreno" card turns its area into, from its
-    `purpose` (an unknown or missing one falls back to the default)."""
-    purpose = params.get("purpose", DEFAULT_CULTIVATION_PURPOSE)
-    return CULTIVATION_COVER_BY_PURPOSE.get(purpose, CULTIVATION_COVER_BY_PURPOSE[DEFAULT_CULTIVATION_PURPOSE])
+def cultivation_area(geometry: dict) -> dict:
+    """The area a "coltiva il terreno" card works on (GeoJSON): the one drawn,
+    widened by `CULTIVATION_BUFFER_M`. The one place that margin is applied:
+    the check, the clearing, the cover it leaves and its cost all start from
+    this, so they cannot disagree about where the field is."""
+    return buffered(geometry, CULTIVATION_BUFFER_M)
 
 
 def _add_intervention(layout: Layout, intervention: Intervention) -> None:
@@ -144,7 +145,9 @@ def _add_intervention(layout: Layout, intervention: Intervention) -> None:
     elif card == "change_ground_cover":
         cover(params.get("cover_type", "meadow"))
     elif card == "cultivate_terrain":
-        cover(cultivation_cover(params))
+        cover_type = params.get("cover_type", DEFAULT_CULTIVATION)
+        field = _cover(intervention, cover_type, cultivation_area(intervention.geometry))
+        layout.entries.append(Entry(start=start, cover=field))
     elif card == "plant_grove":
         # The area always converts to lawn, with small trees scattered in it.
         cover("lawn")

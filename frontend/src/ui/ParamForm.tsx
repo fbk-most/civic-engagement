@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { CardSpec, InterventionCheck } from "../api/types";
+import type { CardSpec, InterventionCheck, ParamSpec } from "../api/types";
 import { optionLabel, yearLabel } from "../i18n/labels";
 import { CheckReport } from "./CheckReport";
 
@@ -19,9 +19,24 @@ interface Props {
    * way, and needs a confirmation when there are warnings. */
   check?: InterventionCheck | null;
   checking?: boolean;
+  /** Why the backend refused the parameters last submitted. */
+  error?: string | null;
   onSubmit: (params: Record<string, unknown>) => void;
   onCancel: () => void;
   onDelete?: () => void;
+}
+
+const REPOSITION_LABEL = {
+  point: "Scegli un altro punto",
+  polyline: "Ridisegna il percorso",
+  area: "Ridisegna l'area",
+};
+
+function numberProblem(param: ParamSpec, value: unknown): string | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "Inserisci un numero";
+  if (param.min !== null && value < param.min) return `Minimo: ${param.min}`;
+  if (param.max !== null && value > param.max) return `Massimo: ${param.max}`;
+  return null;
 }
 
 export function ParamForm({
@@ -31,6 +46,7 @@ export function ParamForm({
   plantedYear,
   check = null,
   checking = false,
+  error = null,
   onSubmit,
   onCancel,
   onDelete,
@@ -41,6 +57,16 @@ export function ParamForm({
   const [confirmed, setConfirmed] = useState(false);
   // A new answer is a new thing to confirm.
   useEffect(() => setConfirmed(false), [check]);
+
+  // The same limits the backend enforces (from the spec): an empty or
+  // out-of-range number is said here, before anything is sent.
+  const fieldErrors = Object.fromEntries(
+    card.params
+      .filter((p) => p.type === "number")
+      .map((p) => [p.key, numberProblem(p, values[p.key])] as const)
+      .filter(([, problem]) => problem)
+  );
+  const invalid = Object.keys(fieldErrors).length > 0;
 
   const blocked = (check?.blocking.length ?? 0) > 0;
   const needsConfirmation = !blocked && (check?.warnings.length ?? 0) > 0 && !confirmed;
@@ -89,17 +115,27 @@ export function ParamForm({
               }
             />
           )}
+          {fieldErrors[param.key] && (
+            <span className="param-form__error" role="alert">
+              {fieldErrors[param.key]}
+            </span>
+          )}
         </label>
       ))}
+      {error && (
+        <p className="param-form__error" role="alert">
+          {error}
+        </p>
+      )}
       <CheckReport check={check} checking={checking} confirmed={confirmed} onConfirmedChange={setConfirmed} />
       <div className="param-form__actions">
         {blocked ? (
           <button type="button" className="param-form__redraw" onClick={onCancel}>
-            Ridisegna l'area
+            {REPOSITION_LABEL[card.placement_type]}
           </button>
         ) : (
           <>
-            <button type="submit" disabled={checking || needsConfirmation}>
+            <button type="submit" disabled={checking || needsConfirmation || invalid}>
               {submitLabel}
             </button>
             <button type="button" onClick={onCancel}>

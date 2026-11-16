@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 ElementType = Literal[
     "building", "tree", "bench", "water_feature", "path",
@@ -78,6 +78,11 @@ class InterventionCreate(BaseModel):
     geometry: dict[str, Any]
     params: dict[str, Any]
     replaces_element_id: str | None = None
+    acknowledged_warnings: list[str] = Field(
+        default=[],
+        description="The `key` of each warning of the check the user has confirmed. A card "
+        "that clears its area is refused (409) while a warning it raises is not listed here.",
+    )
 
 
 class InterventionUpdate(BaseModel):
@@ -85,19 +90,42 @@ class InterventionUpdate(BaseModel):
 
 
 class CheckBlocking(BaseModel):
-    """A protected object (a building, a street...) under the area of a card
-    that clears its area: the card is refused while it is there."""
+    """What stands on the ground a card would take (another object, a card's
+    area, a building, water...): the card is refused while it is there."""
 
     id: str
-    type: ElementType
+    type: ElementType | CoverType | Literal["cultivated_area", "grove"]
 
 
-class CheckWarning(BaseModel):
-    """Something the user should confirm before going on."""
+class CoverReplacedWarning(BaseModel):
+    """A cover that is not just built over will be replaced (none is, for now)."""
 
-    code: Literal["cover_replaced"]  # a cover that is not just built over (the pond) will be replaced
+    code: Literal["cover_replaced"] = "cover_replaced"
     cover_type: CoverType
     area_m2: float
+
+    @computed_field
+    @property
+    def key(self) -> str:
+        return f"{self.code}:{self.cover_type}"
+
+
+class ElementRemovedWholeWarning(BaseModel):
+    """Objects that reach beyond the area (a path) are removed whole, not just
+    where the area is."""
+
+    code: Literal["element_removed_whole"] = "element_removed_whole"
+    element_type: ElementType
+    count: int
+    length_m: float  # of what lies outside the area, in total
+
+    @computed_field
+    @property
+    def key(self) -> str:
+        return f"{self.code}:{self.element_type}"
+
+
+CheckWarning = CoverReplacedWarning | ElementRemovedWholeWarning
 
 
 class ClearingSummary(BaseModel):
@@ -111,6 +139,16 @@ class InterventionCheck(BaseModel):
     """What would happen if a card were placed, without placing it: the same
     answer the placement itself is refused or accepted on."""
 
+    area: dict[str, Any] | None = Field(
+        default=None,
+        description="The area the card works on, when it clears one: the area drawn plus its margin "
+        "(GeoJSON), so it can be shown before the card is placed.",
+    )
+    area_m2: float = 0.0
+    margin_m: float = Field(
+        default=0.0,
+        description="How far `area` goes beyond the area drawn, all round, in metres.",
+    )
     blocking: list[CheckBlocking] = []
     warnings: list[CheckWarning] = []
     clearing: ClearingSummary = ClearingSummary()

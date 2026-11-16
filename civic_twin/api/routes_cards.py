@@ -1,7 +1,9 @@
-from fastapi import APIRouter
+from math import isfinite
 
-from civic_twin.domains.urban.parameters import CULTIVATION_COVER_BY_PURPOSE, DEFAULT_CULTIVATION_PURPOSE
-from civic_twin.models.schema import CardSpec
+from fastapi import APIRouter, HTTPException
+
+from civic_twin.domains.urban.parameters import CULTIVATION_COVER, DEFAULT_CULTIVATION
+from civic_twin.models.schema import CardSpec, ParamSpec
 
 router = APIRouter()
 
@@ -74,11 +76,11 @@ CARDS: list[CardSpec] = [
         placement_type="area",
         params=[
             {
-                "key": "purpose",
-                "label": "Scopo",
+                "key": "cover_type",
+                "label": "Coltura",
                 "type": "select",
-                "default": DEFAULT_CULTIVATION_PURPOSE,
-                "options": list(CULTIVATION_COVER_BY_PURPOSE),
+                "default": DEFAULT_CULTIVATION,
+                "options": list(CULTIVATION_COVER),
             },
         ],
     ),
@@ -177,3 +179,39 @@ CARDS: list[CardSpec] = [
 @router.get("/cards", response_model=list[CardSpec])
 def get_cards() -> list[CardSpec]:
     return CARDS
+
+
+def _problem(spec: ParamSpec, value: object) -> str | None:
+    """Why `value` is not allowed for this parameter, or None if it is."""
+    if spec.type == "select":
+        if value not in (spec.options or []):
+            return f"{spec.key}: {value!r} is not one of {spec.options}"
+    elif spec.type == "number":
+        # A bool is an int in Python, but it is not a number here.
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not isfinite(value):
+            return f"{spec.key}: {value!r} is not a number"
+        if (spec.min is not None and value < spec.min) or (spec.max is not None and value > spec.max):
+            return f"{spec.key}: {value} is not between {spec.min} and {spec.max}"
+    elif not isinstance(value, str):
+        return f"{spec.key}: {value!r} is not text"
+    return None
+
+
+def validate_params(card_type: str, params: dict) -> None:
+    """Refuses (422) parameters the card's spec does not allow: a parameter
+    the card does not have, a value of the wrong type, a select value outside
+    its options, a number outside its range. A parameter left out is fine: the
+    layout takes its default. The spec is the one source of what is valid, so
+    a new card is checked as soon as it is declared in `CARDS`, and nothing
+    invalid is stored for the scene to fail on later."""
+    card = next((c for c in CARDS if c.card_type == card_type), None)
+    if card is None:
+        raise HTTPException(status_code=422, detail=f"unknown card: {card_type}")
+    specs = {spec.key: spec for spec in card.params}
+    problems = [
+        f"{key}: not a parameter of {card_type}" if key not in specs else _problem(specs[key], value)
+        for key, value in params.items()
+    ]
+    problems = [problem for problem in problems if problem]
+    if problems:
+        raise HTTPException(status_code=422, detail="; ".join(problems))

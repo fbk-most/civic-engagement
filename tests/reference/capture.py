@@ -119,12 +119,10 @@ def _cultivation_session() -> list[dict]:
     """Cards that get cleared, placed around the same point as the synthetic
     session's, and the cards that clear them: a first one at year 4 over most
     of them, a bench placed at year 8 inside its area, and a second one at
-    year 12 that clears the bench and replaces part of the first one's cover.
-    A site with a pond also gets it drained at year 6."""
+    year 12 that clears the bench and replaces part of the first one's cover."""
     baseline = load_baseline()
     site = to_projected(baseline.site_boundary)
     layout = build_layout(baseline, [])
-    pond = next((to_projected(cv.geometry) for cv in baseline.covers if cv.cover_type == "water"), None)
 
     def cards_around(c: Point):
         """The cards laid out around `c`, or None if one falls outside the site."""
@@ -147,13 +145,10 @@ def _cultivation_session() -> list[dict]:
             ("add_playground", square(4, 2, 7), {"age_range": "mixed"}, 0),
             ("plant_grove", square(-12, -8, 10), {"species": "birch", "spacing": 4.0}, 0),
             ("new_path", LineString(ends), {"width": 2.0, "material": "gravel"}, 0),
-            ("cultivate_terrain", square(-10, -4, 18), {"purpose": "botanical"}, 4),
+            ("cultivate_terrain", square(-10, -4, 18), {"cover_type": "flowerbed"}, 4),
             ("add_bench", at(0, 0), {}, 8),
-            ("cultivate_terrain", square(-4, -2, 8), {"purpose": "gardening"}, 12),
+            ("cultivate_terrain", square(-4, -2, 8), {"cover_type": "vegetable_garden"}, 12),
         ]
-        if pond is not None:
-            p = pond.representative_point()
-            cards.append(("cultivate_terrain", box(p.x - 7, p.y - 7, p.x + 7, p.y + 7), {"purpose": "commercial"}, 6))
         return cards
 
     def free(cards) -> bool:

@@ -19,6 +19,12 @@ def to_projected(geojson: dict) -> BaseGeometry:
     return gpd.GeoSeries([geom], crs=WGS84_CRS).to_crs(PROJECTED_CRS).iloc[0]
 
 
+def buffered(geojson: dict, metres: float) -> dict:
+    """The geometry widened by `metres` all round (GeoJSON, WGS84)."""
+    widened = gpd.GeoSeries([to_projected(geojson).buffer(metres)], crs=PROJECTED_CRS).to_crs(WGS84_CRS)
+    return mapping(widened.iloc[0])
+
+
 def area_m2(geojson: dict) -> float:
     return to_projected(geojson).area
 

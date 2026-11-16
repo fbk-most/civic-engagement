@@ -182,7 +182,7 @@
    ]
   },
   "params": {
-   "purpose": "botanical"
+   "cover_type": "flowerbed"
   },
   "deleted": false,
   "created_at": "2026-09-30T00:00:00+00:00",
@@ -236,49 +236,11 @@
    ]
   },
   "params": {
-   "purpose": "gardening"
+   "cover_type": "vegetable_garden"
   },
   "deleted": false,
   "created_at": "2026-09-30T00:00:00+00:00",
   "replaces_element_id": null,
   "planted_year": 12
- },
- {
-  "id": "int-cultivation-09",
-  "card_type": "cultivate_terrain",
-  "geometry": {
-   "type": "Polygon",
-   "coordinates": [
-    [
-     [
-      11.12063401921135,
-      46.0705412864797
-     ],
-     [
-      11.120638843730399,
-      46.07066720330894
-     ],
-     [
-      11.120457934218235,
-      46.07067056114414
-     ],
-     [
-      11.12045311011001,
-      46.07054464430024
-     ],
-     [
-      11.12063401921135,
-      46.0705412864797
-     ]
-    ]
-   ]
-  },
-  "params": {
-   "purpose": "commercial"
-  },
-  "deleted": false,
-  "created_at": "2026-09-30T00:00:00+00:00",
-  "replaces_element_id": null,
-  "planted_year": 6
  }
 ]

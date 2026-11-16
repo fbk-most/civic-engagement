@@ -4,7 +4,7 @@ import type { TerraDraw } from "terra-draw";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./App.css";
 import { createMap } from "./map/mapSetup";
-import { renderScene, setCameraView, setHighlight } from "./map/layers";
+import { renderScene, setCameraView, setFieldPreview, setHighlight } from "./map/layers";
 import { mapToView, readMapFraming, sameFraming, sameView, viewToMap, type MapFraming } from "./map/viewSync";
 import { frustumWedge, type CameraPose } from "./three/camera";
 import { anchorFromPolygon } from "./three/geo";
@@ -17,6 +17,7 @@ import {
   fetchCards,
   fetchScene,
   InterventionBlockedError,
+  InvalidParamsError,
   updateIntervention,
 } from "./api/client";
 import type { CardSpec, InterventionCheck, InterventionDisplayMode, PlacementType, SceneResponse } from "./api/types";
@@ -68,6 +69,8 @@ function App() {
   cardsRef.current = cards;
   const [selectedCard, setSelectedCard] = useState<CardSpec | null>(null);
   const [pendingGeometry, setPendingGeometry] = useState<GeoJSON.Geometry | null>(null);
+  // The backend's reason for refusing the parameters last submitted.
+  const [formError, setFormError] = useState<string | null>(null);
   // What the backend says about the area just drawn, before the card is placed.
   const [check, setCheck] = useState<InterventionCheck | null>(null);
   const [checking, setChecking] = useState(false);
@@ -287,6 +290,9 @@ function App() {
     setHighlight(mapRef.current, iv ? iv.geometry : null);
   }, [selectedInterventionId, scene]);
 
+  // A refusal belongs to the form it came from.
+  useEffect(() => setFormError(null), [pendingGeometry, selectedInterventionId]);
+
   // Asks the backend about a freshly drawn area as soon as there is one, so the
   // form can say what is in the way, what to confirm and what will be cleared
   // before anything is placed. A check that fails is not a reason to block the
@@ -310,6 +316,12 @@ function App() {
         if (seq === checkSeqRef.current) setChecking(false);
       });
   }, [pendingGeometry, selectedCard, t]);
+
+  // Shows the area a card that clears its ground will work on, margin included.
+  useEffect(() => {
+    if (!mapRef.current || !scene) return;
+    setFieldPreview(mapRef.current, check?.area ?? null);
+  }, [check, scene]);
 
   function rearmDrawing() {
     // clear() throws if the instance is currently stopped (it is, after
@@ -369,12 +381,16 @@ function App() {
   }
 
   function handleUpdateIntervention(id: string, params: Record<string, unknown>) {
+    setFormError(null);
     updateIntervention(id, params, t)
       .then((scene) => {
         applyScene(scene);
         setSelectedInterventionId(null);
       })
-      .catch(console.error);
+      .catch((error) => {
+        if (error instanceof InvalidParamsError) setFormError(error.message);
+        else console.error(error);
+      });
   }
 
   function handleDeleteIntervention(id: string) {
@@ -388,8 +404,13 @@ function App() {
 
   function handleSubmit(params: Record<string, unknown>) {
     if (!pendingGeometry || !selectedCard || !mapRef.current) return;
+    setFormError(null);
     createIntervention(
-      { card_type: selectedCard.card_type, geometry: pendingGeometry, params, replaces_element_id: replantTargetId },
+      { card_type: selectedCard.card_type, geometry: pendingGeometry, params,
+        replaces_element_id: replantTargetId,
+        // The form only submits once the user has confirmed what the check warned of.
+        acknowledged_warnings: check?.warnings.map((w) => w.key) ?? [],
+      },
       t
     )
       .then((scene) => {
@@ -399,6 +420,7 @@ function App() {
       .catch((error) => {
         // Something protected is under the area: say what, and keep it drawn.
         if (error instanceof InterventionBlockedError) setCheck(error.check);
+        else if (error instanceof InvalidParamsError) setFormError(error.message);
         else console.error(error);
       });
   }
@@ -480,6 +502,7 @@ function App() {
                     plantedYear={t}
                     check={check}
                     checking={checking}
+                    error={formError}
                     onSubmit={handleSubmit}
                     onCancel={rearmDrawing}
                   />
@@ -489,6 +512,7 @@ function App() {
                     initialValues={selectedIntervention.params}
                     plantedYear={selectedIntervention.planted_year}
                     submitLabel="Salva"
+                    error={formError}
                     onSubmit={(params) => handleUpdateIntervention(selectedIntervention.id, params)}
                     onCancel={() => setSelectedInterventionId(null)}
                     onDelete={() => handleDeleteIntervention(selectedIntervention.id)}

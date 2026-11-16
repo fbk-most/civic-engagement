@@ -623,6 +623,12 @@
   font-size: 13px;
 }
 
+.param-form__error {
+  margin: 0;
+  font-size: 12px;
+  color: #b3261e;
+}
+
 .param-form__actions {
   display: flex;
   gap: 8px;

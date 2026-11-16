@@ -18,18 +18,21 @@ import numpy as np
 
 from civic_twin.config import SITE
 from civic_twin.domains.urban.clearing import CLEARING_CARDS, analyse, apply_clearing
+from civic_twin.domains.urban.occupancy import blocking_occupants
 from civic_twin.domains.urban.encode import encode
-from civic_twin.domains.urban.layout import Layout, TreeSlot, build_layout
+from civic_twin.domains.urban.layout import Layout, TreeSlot, build_layout, cultivation_area
 from civic_twin.domains.urban.model import COVER_TYPES, INCLUSION_GROUPS, UrbanEvaluator, UrbanOutput, build_model
-from civic_twin.domains.urban.parameters import HORIZON_YEARS
+from civic_twin.domains.urban.parameters import CULTIVATION_BUFFER_M, HORIZON_YEARS
 from civic_twin.domains.urban.trees import species_traits
+from civic_twin.geo_utils import area_m2
 from civic_twin.models.schema import (
     BaselineScene,
     CheckBlocking,
-    CheckWarning,
     ClearingSummary,
     CoverPolygon,
+    CoverReplacedWarning,
     DiscreteElement,
+    ElementRemovedWholeWarning,
     IndicatorSeries,
     Intervention,
     InterventionCheck,
@@ -227,25 +230,47 @@ def current_scene(t: int = 0, session_id: str = "default") -> SceneResponse:
     )
 
 
-def check_intervention(data: InterventionCreate, t: int, session_id: str = "default") -> InterventionCheck:
+def check_intervention(
+    data: InterventionCreate, t: int, session_id: str = "default", own_id: str | None = None
+) -> InterventionCheck:
     """What placing this card at year `t` would do, without placing it.
 
-    Only a card that clears its area has anything to say (see clearing.py);
-    any other gets an empty answer. It is looked at against the scenario as
-    it is now, earlier clearings included, and it is the same analysis the
-    clearing is then applied from, so what is shown is what happens."""
+    Every card is refused over what already stands on its ground (see
+    occupancy.py); a card that clears its area also says what it would clear
+    and what to confirm (see clearing.py). It is looked at against the
+    scenario as it is now, earlier clearings included, and it is the same
+    analysis the clearing is then applied from, so what is shown is what
+    happens. `own_id` is the card itself, when it is being edited."""
+    layout = _scenario(store.list_interventions(session_id)).layout
+    standing = blocking_occupants(
+        layout, data.card_type, data.geometry, data.params, t,
+        own_id=own_id, replaces_element_id=data.replaces_element_id,
+    )
     if data.card_type not in CLEARING_CARDS:
-        return InterventionCheck()
-    report = analyse(_scenario(store.list_interventions(session_id)).layout, data.geometry, t)
+        return InterventionCheck(blocking=[CheckBlocking(id=i, type=k) for i, k in standing])
+    area = cultivation_area(data.geometry)
+    report = analyse(layout, area, t, own_id=own_id)
     replaced: dict[str, float] = {}
     for covered in report.covers:
         if covered.needs_warning:
             replaced[covered.cover_type] = replaced.get(covered.cover_type, 0.0) + covered.region.area
     return InterventionCheck(
-        blocking=[CheckBlocking(id=b.id, type=b.type) for b in report.blocking],
+        area=area,
+        area_m2=round(area_m2(area), 1),
+        margin_m=CULTIVATION_BUFFER_M,
+        blocking=[
+            CheckBlocking(id=i, type=k)
+            for i, k in dict.fromkeys([(b.id, b.type) for b in report.blocking] + standing)
+        ],
         warnings=[
-            CheckWarning(code="cover_replaced", cover_type=cover_type, area_m2=round(area, 1))
-            for cover_type, area in sorted(replaced.items())
+            *(
+                CoverReplacedWarning(cover_type=cover_type, area_m2=round(area, 1))
+                for cover_type, area in sorted(replaced.items())
+            ),
+            *(
+                ElementRemovedWholeWarning(element_type=element_type, count=count, length_m=round(beyond, 1))
+                for element_type, (count, beyond) in sorted(report.whole_removals.items())
+            ),
         ],
         clearing=ClearingSummary(
             elements_by_type=dict(sorted(report.elements_by_type.items())),

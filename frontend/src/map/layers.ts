@@ -221,6 +221,7 @@ export function renderScene(
     ]));
   }
   setOrCreateSource(map, "highlight", featureCollection([]));
+  setOrCreateSource(map, "field_preview", featureCollection([]));
   setOrCreateSource(map, "camera", featureCollection([]));
 
   const markers: GeoJSON.Feature[] = [];
@@ -294,6 +295,15 @@ export function renderScene(
  * source with fill/line/circle layers so it works for any placement type. */
 export function setHighlight(map: MapLibreMap, geometry: GeoJSON.Geometry | null): void {
   setOrCreateSource(map, "highlight", featureCollection(
+    geometry ? [{ type: "Feature", geometry, properties: {} }] : []
+  ));
+}
+
+/** Outlines the area a card that clears its ground will work on (the area
+ * drawn plus its margin, from the check) before the card is placed. Pass null
+ * to clear. */
+export function setFieldPreview(map: MapLibreMap, geometry: GeoJSON.Geometry | null): void {
+  setOrCreateSource(map, "field_preview", featureCollection(
     geometry ? [{ type: "Feature", geometry, properties: {} }] : []
   ));
 }
@@ -628,6 +638,18 @@ function ensureLayers(map: MapLibreMap, latDeg: number, showBoundary: boolean): 
     type: "line",
     source: "highlight",
     paint: { "line-color": "#ff9900", "line-width": 4 },
+  });
+  map.addLayer({
+    id: "field-preview-fill",
+    type: "fill",
+    source: "field_preview",
+    paint: { "fill-color": "#8bc34a", "fill-opacity": 0.2 },
+  });
+  map.addLayer({
+    id: "field-preview-line",
+    type: "line",
+    source: "field_preview",
+    paint: { "line-color": "#558b2f", "line-width": 2, "line-dasharray": [3, 2] },
   });
   map.addLayer({
     id: "highlight-circle",

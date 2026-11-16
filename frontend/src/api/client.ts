@@ -31,7 +31,7 @@ export function fetchIndicatorSeries(): Promise<IndicatorSeries> {
 }
 
 /** A placement the backend refused because something protected is under it
- * (a 422 carrying the same answer as the check): what is in the way. */
+ * (a 409 carrying the same answer as the check): what is in the way. */
 export class InterventionBlockedError extends Error {
   readonly check: InterventionCheck;
 
@@ -39,6 +39,16 @@ export class InterventionBlockedError extends Error {
     super("Placement refused: something protected is under the area");
     this.check = check;
   }
+}
+
+/** A request the backend refused as invalid (422): `message` is its own
+ * explanation of what is wrong with the parameters, fit to show the user. */
+export class InvalidParamsError extends Error {}
+
+async function failIfInvalid(res: Response): Promise<void> {
+  if (res.status !== 422) return;
+  const body = await res.json().catch(() => null);
+  if (typeof body?.detail === "string") throw new InvalidParamsError(body.detail);
 }
 
 export async function checkIntervention(data: InterventionCreate, t: number = 0): Promise<InterventionCheck> {
@@ -57,10 +67,11 @@ export async function createIntervention(data: InterventionCreate, t: number = 0
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  if (res.status === 422) {
+  if (res.status === 409) {
     const body = await res.json().catch(() => null);
     if (Array.isArray(body?.detail?.blocking)) throw new InterventionBlockedError(body.detail);
   }
+  await failIfInvalid(res);
   if (!res.ok) throw new Error(`POST /api/interventions failed: ${res.status}`);
   return res.json();
 }
@@ -75,6 +86,7 @@ export async function updateIntervention(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ params }),
   });
+  await failIfInvalid(res);
   if (!res.ok) throw new Error(`PATCH /api/interventions/${id} failed: ${res.status}`);
   return res.json();
 }

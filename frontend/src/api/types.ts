@@ -168,13 +168,28 @@ export interface InterventionCreate {
   geometry: GeoJSON.Geometry;
   params: Record<string, unknown>;
   replaces_element_id?: string | null;
+  /** The `key` of each warning of the check the user has confirmed. */
+  acknowledged_warnings?: string[];
 }
+
+/** Something to confirm before a card is placed. */
+export type CheckWarning =
+  | { code: "cover_replaced"; key: string; cover_type: CoverType; area_m2: number }
+  /** Objects reaching beyond the area (a path) go whole; `length_m` is what lies outside it. */
+  | { code: "element_removed_whole"; key: string; element_type: ElementType; count: number; length_m: number };
 
 /** What placing a card would do, without placing it (POST /api/interventions/check):
  * what is in the way (it is refused), what to confirm first, what it clears. */
 export interface InterventionCheck {
-  blocking: { id: string; type: ElementType }[];
-  warnings: { code: "cover_replaced"; cover_type: CoverType; area_m2: number }[];
+  /** The area a card that clears its ground works on: the one drawn plus a
+   * margin all round. Null for a card that has nothing to check. */
+  area: GeoJSON.Geometry | null;
+  area_m2: number;
+  /** How far `area` goes beyond the drawn one, all round, in metres. */
+  margin_m: number;
+  /** A protected object (a building, a street...) or cover (water) under the area. */
+  blocking: { id: string; type: ElementType | CoverType | "cultivated_area" | "grove" }[];
+  warnings: CheckWarning[];
   clearing: {
     elements_by_type: Record<string, number>;
     cover_area_m2_by_type: Record<string, number>;

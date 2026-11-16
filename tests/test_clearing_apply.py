@@ -6,10 +6,12 @@ import pytest
 from shapely.geometry import Point, box
 
 from civic_twin import scene
-from civic_twin.domains.urban.clearing import SEAM_M, analyse, apply_clearing, project, to_wgs84
-from civic_twin.domains.urban.layout import build_layout
+from civic_twin.domains.urban import clearing
+from civic_twin.domains.urban.clearing import analyse, apply_clearing, project, to_wgs84
+from civic_twin.domains.urban.layout import build_layout, cultivation_area
 from civic_twin.geo_utils import to_projected
 from civic_twin.models.schema import Intervention
+from tests.helpers import busy_polygon
 
 CLEAR_YEAR = 5
 
@@ -43,13 +45,7 @@ def square(centre, half: float) -> dict:
 
 
 def cultivate(geometry: dict, year: int = CLEAR_YEAR, id: str = "int-cultivate") -> Intervention:
-    return card("cultivate_terrain", geometry, year, id, {"purpose": "botanical"})
-
-
-def across_pond(baseline) -> dict:
-    """60 x 40 m over the pond, the lawn around it and a few paths."""
-    pond = to_projected(next(c for c in baseline.covers if c.cover_type == "water").geometry)
-    return to_wgs84(box(pond.centroid.x - 30, pond.centroid.y - 20, pond.centroid.x + 30, pond.centroid.y + 20))
+    return card("cultivate_terrain", geometry, year, id, {"cover_type": "flowerbed"})
 
 
 def free_spots(baseline, half: float):
@@ -86,65 +82,57 @@ def ids(s) -> tuple[set[str], set[str]]:
 def test_nothing_changes_before_the_year_of_the_card(baseline, session):
     session([])
     before = scene.current_scene(CLEAR_YEAR - 1)
-    session([cultivate(across_pond(baseline))])
+    session([cultivate(busy_polygon(baseline))])
     s = scene.current_scene(CLEAR_YEAR - 1)
     assert ids(s) == ids(before)
     assert s.indicators == before.indicators
 
 
 def test_cleared_objects_are_gone_from_the_year_of_the_card(baseline, session):
-    polygon = across_pond(baseline)
+    polygon = busy_polygon(baseline)
     layout = build_layout(baseline, [])
-    report = analyse(layout, polygon, CLEAR_YEAR)
+    report = analyse(layout, cultivation_area(polygon), CLEAR_YEAR)
     assert report.elements_by_type.keys() >= {"tree", "bench", "path"}
-    cleared = {element_id(layout, c.entry) for c in report.elements if c.type != "path"}
+    cleared = {element_id(layout, c.entry) for c in report.elements}
     session([cultivate(polygon)])
     assert cleared <= ids(scene.current_scene(CLEAR_YEAR - 1))[0]
     assert not cleared & ids(scene.current_scene(CLEAR_YEAR))[0]
     assert not cleared & ids(scene.current_scene(CLEAR_YEAR + 10))[0]
 
 
-def test_the_pond_is_replaced_by_the_cover_around_it(baseline, session):
-    polygon = across_pond(baseline)
-    pond = next(c for c in baseline.covers if c.cover_type == "water")
-    inside = to_projected(pond.geometry).intersection(to_projected(polygon)).area
-    assert inside > 1000
+def test_a_cover_that_needs_a_warning_is_filled_with_the_one_around_it(baseline, session, monkeypatch):
+    """No cover needs a warning for now (the pond is protected); the mechanism
+    is tried on the lawn."""
+    monkeypatch.setattr(clearing, "CLEARED_COVER_WARNING_TYPES", {"lawn"})
+    polygon = square(next(free_spots(baseline, 6.0)), 6.0)
+    layout = build_layout(baseline, [])
+    lawn = [c for c in analyse(layout, cultivation_area(polygon), CLEAR_YEAR).covers if c.cover_type == "lawn"]
+    assert lawn and all(c.needs_warning for c in lawn)
     session([cultivate(polygon)])
 
     at = scene.current_scene(CLEAR_YEAR)
-    flagged = [c for c in at.covers if c.id == pond.id]
-    assert flagged and flagged[0].cleared_by == "int-cultivate"  # still served, for the views of the current situation
-    assert pond.id not in ids(at)[1]  # but not part of the simulation
-    area = to_projected(polygon)
-    water = [to_projected(c.geometry) for c in at.covers if c.cover_type == "water" and not c.cleared_by]
-    # None of it is left under the area, but for the seam it tucks under the new cover by.
-    assert water and sum(w.intersection(area.buffer(-SEAM_M - 0.01)).area for w in water) == 0
-    seam = sum(w.intersection(area).area for w in water)
-    assert 0 < seam <= area.length * SEAM_M
-    left = to_projected(pond.geometry).area - inside
-    assert sum(w.area for w in water) == pytest.approx(left + seam, rel=0.001)
-    fill = [c for c in at.covers if c.id == "cover-int-cultivate-fill-1"]
-    assert fill and fill[0].cover_type == "lawn"  # the lawn the pond sits in
-    assert to_projected(fill[0].geometry).area == pytest.approx(inside, rel=0.01)
+    fills = [c for c in at.covers if c.id.startswith("cover-int-cultivate-fill-")]
+    assert len(fills) == len(lawn)
+    assert all(f.cover_type != "lawn" for f in fills)  # the cover around, not the one replaced
+    assert sum(to_projected(f.geometry).area for f in fills) == pytest.approx(sum(c.region.area for c in lawn), rel=0.01)
     assert any(c.cover_type == "flowerbed" for c in at.covers)  # and the cultivation on top
 
-    before = scene.current_scene(CLEAR_YEAR - 1)
-    assert pond.id in {c.id for c in before.covers}
-    assert at.indicators.space_use_pct["water"] < before.indicators.space_use_pct["water"]
-    assert at.indicators.space_use_pct["flowerbed"] > 0
+
+def test_the_pond_is_left_alone_by_a_card_beside_it(baseline, session):
+    pond = next(c for c in baseline.covers if c.cover_type == "water")
+    polygon = busy_polygon(baseline)
+    assert not to_projected(pond.geometry).intersects(to_projected(cultivation_area(polygon)))
+    session([cultivate(polygon)])
+    at = scene.current_scene(CLEAR_YEAR)
+    assert pond.id in ids(at)[1]
 
 
-def test_a_path_is_cut_not_removed(baseline, session):
-    polygon = across_pond(baseline)
+def test_a_path_is_removed_whole(baseline, session):
+    polygon = busy_polygon(baseline)
     layout = build_layout(baseline, [])
-    cut = [c for c in analyse(layout, polygon, CLEAR_YEAR).elements if c.type == "path"]
-    assert cut
-    def removed(c) -> float:
-        original = project([layout.entries[c.entry].element.geometry])[0].length
-        return original - (c.remainder.length if c.remainder is not None else 0)
-
-    expected = sum(removed(c) for c in cut)
-    assert expected > 0
+    cut = [c for c in analyse(layout, cultivation_area(polygon), CLEAR_YEAR).elements if c.type == "path"]
+    assert cut and any(c.needs_warning for c in cut)
+    expected = sum(project([layout.entries[c.entry].element.geometry])[0].length for c in cut)
     session([cultivate(polygon)])
 
     def length(t: int) -> float:
@@ -152,14 +140,14 @@ def test_a_path_is_cut_not_removed(baseline, session):
         return sum(to_projected(e.geometry).length for e in paths)
 
     assert length(CLEAR_YEAR - 1) - length(CLEAR_YEAR) == pytest.approx(expected, rel=0.001)
-    pieces = [e for e in scene.current_scene(CLEAR_YEAR).elements if e.id.endswith("~int-cultivate")]
-    assert pieces and all(e.source == "intervention" for e in pieces)
+    assert not [e for e in scene.current_scene(CLEAR_YEAR).elements if e.id.endswith("~int-cultivate")]
 
 
 def test_cleared_baseline_objects_are_still_served_flagged(baseline, session):
-    polygon = across_pond(baseline)
+    polygon = busy_polygon(baseline)
     layout = build_layout(baseline, [])
-    cleared = {element_id(layout, c.entry) for c in analyse(layout, polygon, CLEAR_YEAR).elements if c.type != "path"}
+    report = analyse(layout, cultivation_area(polygon), CLEAR_YEAR)
+    cleared = {element_id(layout, c.entry) for c in report.elements}
     session([])
     plain = {e.id: e for e in scene.current_scene(CLEAR_YEAR + 3).elements}
     session([cultivate(polygon)])
@@ -171,7 +159,7 @@ def test_cleared_baseline_objects_are_still_served_flagged(baseline, session):
         assert served[id].cleared_by == "int-cultivate" and served[id].source == "baseline"
         # drawn as it is without the card (a tree keeps growing, or is cut, as it would have)
         assert served[id].properties == plain[id].properties
-    assert not [e for e in served.values() if e.cleared_by and e.id not in cleared and e.type != "path"]
+    assert not [e for e in served.values() if e.cleared_by and e.id not in cleared]
 
 
 def test_what_a_card_placed_is_gone_not_flagged(baseline, session):
@@ -185,7 +173,7 @@ def test_what_a_card_placed_is_gone_not_flagged(baseline, session):
 def test_cleared_trees_stop_cooling_and_absorbing(baseline, session):
     session([])
     plain = scene.current_scene(CLEAR_YEAR + 5)
-    session([cultivate(across_pond(baseline))])
+    session([cultivate(busy_polygon(baseline))])
     cleared = scene.current_scene(CLEAR_YEAR + 5)
     assert cleared.indicators.co2.annual_rate_kg < plain.indicators.co2.annual_rate_kg
     assert cleared.indicators.thermal_comfort.cooling_delta_c > plain.indicators.thermal_comfort.cooling_delta_c
@@ -254,7 +242,7 @@ def test_a_clearing_of_a_clearing(baseline, session):
     """A second card over the first one's cultivated cover replaces that too."""
     spot = next(free_spots(baseline, 6.0))
     first = cultivate(square(spot, 6.0), 3, "int-first")
-    second = card("cultivate_terrain", square(spot, 3.0), 8, "int-second", {"purpose": "gardening"})
+    second = card("cultivate_terrain", square(spot, 3.0), 8, "int-second", {"cover_type": "vegetable_garden"})
     session([first, second])
     def intervention_covers(t: int) -> dict[str, str]:
         return {c.id: c.cover_type for c in scene.current_scene(t).covers if c.source == "intervention"}
@@ -272,3 +260,20 @@ def test_without_a_clearing_card_nothing_has_an_end(baseline):
     apply_clearing(layout)
     assert all(e.end is None and e.cleared_by is None for e in layout.entries)
     assert all(t.clear_year is None for t in layout.trees)
+
+
+def test_the_margin_around_the_drawn_area_is_cleared_too(baseline, session):
+    """A bench 1 m outside the drawn line is inside the field (2 m margin);
+    one 3 m outside is not. The cover it leaves has the margin too."""
+    spot = next(free_spots(baseline, 8.0))
+    near = to_wgs84(Point(spot.x + 5.0 + 1.0, spot.y))
+    far = to_wgs84(Point(spot.x + 5.0 + 3.0, spot.y))
+    session([card("add_bench", near, 0, "int-near"), card("add_bench", far, 0, "int-far")])
+    session([card("add_bench", near, 0, "int-near"), card("add_bench", far, 0, "int-far"),
+             cultivate(square(spot, 5.0))])
+    at = scene.current_scene(CLEAR_YEAR)
+    served = {e.id for e in at.elements}  # what a card placed is simply gone once cleared
+    assert "element-int-near" not in served and "element-int-far" in served
+    field = next(c for c in at.covers if c.id == "cover-int-cultivate")
+    drawn = to_projected(square(spot, 5.0))
+    assert to_projected(field.geometry).area == pytest.approx(drawn.buffer(2.0).area, rel=0.001)

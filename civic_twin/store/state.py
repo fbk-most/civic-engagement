@@ -7,6 +7,7 @@ runtime source of truth.
 """
 
 import json
+import logging
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,6 +18,8 @@ from civic_twin.models.schema import Intervention, InterventionCreate
 # One session file per site — see config.SiteConfig.session_json_path.
 SESSION_JSON_PATH = Path(SITE.session_json_path)
 DEFAULT_SESSION_ID = "default"
+
+logger = logging.getLogger(__name__)
 
 
 class SessionStore:
@@ -42,6 +45,11 @@ class SessionStore:
         self._sessions.setdefault(session_id, []).append(intervention)
         self._save()
         return intervention
+
+    def get_intervention(
+        self, intervention_id: str, session_id: str = DEFAULT_SESSION_ID
+    ) -> Intervention | None:
+        return next((i for i in self.list_interventions(session_id) if i.id == intervention_id), None)
 
     def update_intervention(
         self, intervention_id: str, params: dict, session_id: str = DEFAULT_SESSION_ID
@@ -77,11 +85,26 @@ class SessionStore:
     def _load(self) -> None:
         if not SESSION_JSON_PATH.exists():
             return
+        # Imported here: the api package imports this store.
+        from fastapi import HTTPException
+
+        from civic_twin.api.routes_cards import validate_params
+
         payload = json.loads(SESSION_JSON_PATH.read_text())
-        self._sessions = {
-            session_id: [Intervention(**i) for i in interventions]
-            for session_id, interventions in payload.items()
-        }
+        self._sessions = {}
+        for session_id, interventions in payload.items():
+            kept = []
+            for data in interventions:
+                intervention = Intervention(**data)
+                try:
+                    validate_params(intervention.card_type, intervention.params)
+                except HTTPException as error:
+                    # Saved by an older version of the card: skip it, so it cannot
+                    # break every scene request. The file is rewritten on next save.
+                    logger.warning("Skipping saved card %s: %s", intervention.id, error.detail)
+                    continue
+                kept.append(intervention)
+            self._sessions[session_id] = kept
 
 
 store = SessionStore()

@@ -141,32 +141,67 @@ STUMP_HEIGHT = 0.3
 # Canopy diameter of every tree of a grove at planting time.
 GROVE_PLANTING_DIAMETER = 1.0
 
-# What the "coltiva il terreno" card turns its area into, by the purpose the
-# user picks: a commercial field, a flowerbed or a (small-scale) vegetable
-# garden. Each is its own cover type, since a cover carries nothing but its
-# type (space use, colours, prices and 3D materials all key on it).
-CULTIVATION_COVER_BY_PURPOSE = {
-    "commercial": "crop_field",
-    "botanical": "flowerbed",
-    "gardening": "vegetable_garden",
-}
-DEFAULT_CULTIVATION_PURPOSE = "commercial"
+# What the user can turn the area of a "coltiva il terreno" card into: a
+# commercial field, a flowerbed or a (small-scale) vegetable garden. Each is
+# its own cover type, since a cover carries nothing but its type (space use,
+# colours, prices and 3D materials all key on it). A tuple, for the order the
+# options are listed in.
+CULTIVATION_COVER = ("crop_field", "flowerbed", "vegetable_garden")
+DEFAULT_CULTIVATION = "vegetable_garden"
+# TODO: the other cards repeat their default as a literal in routes_cards.py,
+# layout.py and encode.py; give each a constant like this one, so the three
+# cannot drift apart.
+# The card works on the area the user drew plus this margin all round, so a
+# bench or a lamp just outside the drawn line is not left standing in the field.
+CULTIVATION_BUFFER_M = 2.0
 
 # What a clearing (the first half of the "coltiva il terreno" card) does to
 # what is already on its area. Plain tables, so a new site (the Giudicarie, with
 # stones, say) only adds a line here.
 #
 # Objects that may be removed; everything else is either protected or left
-# alone. Paths are cut at the edge of the area rather than removed whole.
+# alone. An object is removed whole, even where it reaches beyond the area.
 CLEARABLE_ELEMENT_TYPES = {
-    "tree", "bench", "streetlight", "pergola", "kiosk", "playground", "fitness_area", "water_feature", "path",
+    "tree", "stump", "bench", "streetlight", "pergola", "kiosk", "playground", "fitness_area", "water_feature", "path",
 }
 # Objects that must not be under the area: it is refused if it overlaps one.
 PROTECTED_ELEMENT_TYPES = {"building", "street", "crossing", "lane_divider", "traffic_signal"}
+# Covers that must not be under the area either (a pond, a lake, a river): it
+# is refused if it overlaps one.
+PROTECTED_COVER_TYPES = {"water"}
+# Clearable objects whose removal needs a warning when they reach beyond the
+# area: a path is one long object, so a garden cutting through it removes it all.
+WARNED_ELEMENT_TYPES = {"path"}
 # Covers that are not simply built over: clearing one needs a warning, and its
-# cleared area is filled with the cover around it (a drained pond becomes the
-# lawn it sat in). Any other cover is just replaced by the new one.
-CLEARED_COVER_WARNING_TYPES = {"water"}
+# cleared area is filled with the cover around it. Any other cover is just
+# replaced by the new one. Empty for now (the pond, the one cover that was here,
+# is protected); the mechanism is kept for the covers a new site may add.
+CLEARED_COVER_WARNING_TYPES: set[str] = set()
+
+# ---------------------------------------------------------------------------
+# What stands where: the ground each thing occupies (see occupancy.py)
+# ---------------------------------------------------------------------------
+#
+# Two things cannot stand on the same ground. The radius, in metres, of the
+# ground a point object takes (a tree's is its trunk, not its canopy: a bench
+# may stand under one). Placeholders, to be reviewed.
+FOOTPRINT_RADIUS_M = {
+    "tree": 0.3, "stump": 0.3, "bench": 0.6, "streetlight": 0.3, "kiosk": 2.5,
+    "traffic_signal": 0.3, "water_feature": 1.5,
+}
+DEFAULT_FOOTPRINT_RADIUS_M = 0.3
+PERGOLA_FOOTPRINT_RADIUS_M = {"small": 1.5, "medium": 2.5, "large": 3.5}
+# A path or a street is a line with a width; this is a path's when it has none.
+DEFAULT_PATH_WIDTH_M = 2.0
+# The cards whose whole area is occupied, and what the UI calls it when it is in the way.
+OCCUPYING_AREA_CARDS = {
+    "cultivate_terrain": "cultivated_area",
+    "plant_grove": "grove",
+    "add_playground": "playground",
+    "add_fitness_area": "fitness_area",
+}
+# Objects a new object of the same type may cross (two paths make a junction).
+CROSSABLE_ELEMENT_TYPES = {"path"}
 
 # ---------------------------------------------------------------------------
 # Indicators

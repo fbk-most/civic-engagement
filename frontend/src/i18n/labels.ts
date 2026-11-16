@@ -66,6 +66,7 @@ export const TARGET_AGE_LABELS_IT: Record<string, string> = {
 /** [singular, plural] of every element type, for "3 alberi, 1 panchina". */
 const ELEMENT_TYPE_LABELS_IT: Record<string, [string, string]> = {
   tree: ["albero", "alberi"],
+  stump: ["ceppo", "ceppi"],
   bench: ["panchina", "panchine"],
   streetlight: ["lampione", "lampioni"],
   pergola: ["pergola", "pergole"],
@@ -79,6 +80,9 @@ const ELEMENT_TYPE_LABELS_IT: Record<string, [string, string]> = {
   crossing: ["attraversamento pedonale", "attraversamenti pedonali"],
   lane_divider: ["linea di mezzeria", "linee di mezzeria"],
   traffic_signal: ["semaforo", "semafori"],
+  cultivated_area: ["terreno coltivato", "terreni coltivati"], // an area of a card, in the way like an object
+  grove: ["boschetto", "boschetti"],
+  water: ["specchio d'acqua", "specchi d'acqua"], // a cover, but it can block a card like an object
 };
 
 /** "1 albero" / "3 alberi". */
@@ -87,12 +91,6 @@ export function countLabel(elementType: string, count: number): string {
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
-export const CULTIVATION_PURPOSE_LABELS_IT: Record<string, string> = {
-  commercial: "Commerciale (campo coltivato)",
-  botanical: "Botanico (aiuola fiorita)",
-  gardening: "Giardinaggio (orto)",
-};
-
 const OPTION_LABEL_MAPS: Record<string, Record<string, string>> = {
   species: SPECIES_LABELS_IT,
   material: MATERIAL_LABELS_IT,
@@ -100,7 +98,6 @@ const OPTION_LABEL_MAPS: Record<string, Record<string, string>> = {
   size: PERGOLA_SIZE_LABELS_IT,
   age_range: AGE_RANGE_LABELS_IT,
   target_age: TARGET_AGE_LABELS_IT,
-  purpose: CULTIVATION_PURPOSE_LABELS_IT,
 };
 
 export function optionLabel(paramKey: string, value: string): string {
