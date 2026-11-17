@@ -1,6 +1,6 @@
 :root {
   font: 16px/1.4 system-ui, "Segoe UI", Roboto, sans-serif;
-  color-scheme: light dark;
+  color-scheme: light;
 }
 
 html, body, #root {
