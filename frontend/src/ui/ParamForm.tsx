@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { CardSpec } from "../api/types";
-import { tr } from "../i18n/lang";
+import type { CardSpec, ParamSpec } from "../api/types";
+import { locale, tr } from "../i18n/lang";
 import { authorsLabel, cardLabel, optionLabel, paramLabel, yearLabel } from "../i18n/labels";
 
 interface Props {
@@ -71,12 +71,17 @@ export function ParamForm({
               min={param.min ?? undefined}
               max={param.max ?? undefined}
               step={param.type === "number" ? 0.1 : undefined}
-              onChange={(e) =>
+              required={param.type === "number"}
+              // The browser checks the bounds before the form is sent, in
+              // its own language: the message is the interface's instead.
+              onInvalid={(e) => e.currentTarget.setCustomValidity(invalidNumber(param, e.currentTarget.validity))}
+              onChange={(e) => {
+                e.target.setCustomValidity("");
                 setValues((v) => ({
                   ...v,
                   [param.key]: param.type === "number" ? e.target.valueAsNumber : e.target.value,
-                }))
-              }
+                }));
+              }}
             />
           )}
         </label>
@@ -94,4 +99,14 @@ export function ParamForm({
       </div>
     </form>
   );
+}
+
+/** Why a number field's value can't be sent, in the interface's language. */
+function invalidNumber(param: ParamSpec, validity: ValidityState): string {
+  // With the interface's decimal separator ("0,5" in Italian).
+  const bound = (value: number | null | undefined) => (value ?? 0).toLocaleString(locale());
+  if (validity.rangeUnderflow) return tr(`Il valore minimo è ${bound(param.min)}.`, `The minimum is ${bound(param.min)}.`);
+  if (validity.rangeOverflow) return tr(`Il valore massimo è ${bound(param.max)}.`, `The maximum is ${bound(param.max)}.`);
+  if (validity.stepMismatch) return tr("Al più un decimale.", "At most one decimal.");
+  return tr("Inserisci un numero.", "Enter a number.");
 }
