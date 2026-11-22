@@ -114,9 +114,18 @@ def read_scenario(
     if data is None:
         raise FileNotFoundError(scenario)
     try:
-        return _parse(scenario, data)
+        info, interventions = _parse(scenario, data)
     except (ValueError, KeyError, TypeError) as error:
         raise ScenarioError(f"Scenario {scenario!r} can't be read: {error}") from error
+    # Listed all the same, but not loaded: a single card (CardSpec.single)
+    # twice, from a hand-edited file.
+    from civic_engagement.domain import active_pack
+
+    singles = [i.card_type for i in interventions if any(c.single and c.card_type == i.card_type for c in active_pack().cards)]
+    doubled = sorted({s for s in singles if singles.count(s) > 1})
+    if doubled:
+        raise ScenarioError(f"Scenario {scenario!r} has more than one {', '.join(doubled)}")
+    return info, interventions
 
 
 def save_scenario(

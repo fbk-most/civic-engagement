@@ -18,6 +18,7 @@ import type {
   Uncontrollables,
   UncontrollableSpec,
 } from "./types";
+import { tr } from "../i18n/lang";
 
 // With teams (CIVIC_ENGAGEMENT_AUTH=pin), the token a PIN was exchanged for
 // (see civic_engagement/access.py): kept across reloads and tabs, sent on
@@ -162,17 +163,35 @@ export async function createIntervention(data: InterventionCreate, t: number = 0
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new HttpError(`POST /api/interventions failed: ${res.status}`, res.status);
+  if (!res.ok) throw await refusal(res, "POST /api/interventions");
   return res.json();
+}
+
+/** A failed response as an HttpError, with the backend's reason for the
+ * team if it gives one (`{message, message_en}`, in the interface's
+ * language). */
+async function refusal(res: Response, what: string): Promise<HttpError> {
+  const detail = await res
+    .json()
+    .then((body) => {
+      const d = body?.detail;
+      return typeof d?.message === "string" && typeof d?.message_en === "string" ? tr(d.message, d.message_en) : null;
+    })
+    .catch(() => null);
+  return new HttpError(`${what} failed: ${res.status}`, res.status, detail);
 }
 
 /** A failed request, with its HTTP status. */
 export class HttpError extends Error {
   readonly status: number;
+  /** The backend's reason for the team, when it gives one (a 409 or
+   * 422's), in the interface's language. */
+  readonly detail: string | null;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, detail: string | null = null) {
     super(message);
     this.status = status;
+    this.detail = detail;
   }
 }
 
@@ -186,7 +205,7 @@ export async function updateIntervention(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ params }),
   });
-  if (!res.ok) throw new Error(`PATCH /api/interventions/${id} failed: ${res.status}`);
+  if (!res.ok) throw await refusal(res, `PATCH /api/interventions/${id}`);
   return res.json();
 }
 

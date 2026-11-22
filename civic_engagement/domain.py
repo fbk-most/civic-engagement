@@ -29,6 +29,7 @@ from civic_engagement.models.schema import (
     IndicatorDescriptors,
     IndicatorValues,
     Intervention,
+    InterventionCreate,
     Uncontrollables,
     UncontrollableSpec,
 )
@@ -88,6 +89,14 @@ class DomainPack(ABC):
     @abstractmethod
     def indicator_values(self, evaluation: Any, t: int) -> IndicatorValues:
         """Every indicator but the deferred ones, at year t."""
+
+    def refused_intervention(self, intervention: InterventionCreate) -> tuple[str, str] | None:
+        """Why the pack refuses a card about to be placed, or its new
+        parameters (say, a card for houses on a barn): in Italian and in
+        English, shown to the team as is; or None. The core has already
+        checked what it can: the card type, the boundary, the buildings
+        picked."""
+        return None
 
     def deferred_values(self, interventions: list[Intervention], t: int) -> IndicatorValues:
         """The deferred indicators at year t (see IndicatorDescriptor), too

@@ -38,6 +38,14 @@ def within_boundary(geojson: dict, boundary: dict) -> bool:
     return geometry.within(area.buffer(BOUNDARY_TOLERANCE_M))
 
 
+def footprints(geometries: list[dict]) -> dict:
+    """Polygons and multipolygons (WGS84 GeoJSON) as one MultiPolygon."""
+    polygons = []
+    for g in geometries:
+        polygons += [g["coordinates"]] if g["type"] == "Polygon" else list(g["coordinates"])
+    return {"type": "MultiPolygon", "coordinates": polygons}
+
+
 def area_m2(geojson: dict) -> float:
     return to_projected(geojson).area
 

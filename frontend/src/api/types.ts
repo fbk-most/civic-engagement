@@ -164,7 +164,9 @@ export interface ScenarioInfo {
 
 export type CardType = string;
 export type CardCategory = string;
-export type PlacementType = "point" | "polyline" | "area";
+/** Drawn on the map ("point", "polyline", "area"), picked among the
+ * baseline's buildings ("building"), or without a place, a policy ("none"). */
+export type PlacementType = "point" | "polyline" | "area" | "building" | "none";
 
 /** How placed interventions render on the 2D map: `hidden` shows only the
  * baseline (current situation), `cards` shows a colored marker at each
@@ -193,12 +195,18 @@ export interface CardSpec {
   category: CardCategory;
   placement_type: PlacementType;
   params: ParamSpec[];
+  /** At most one in a scenario (a policy, say): picking it again edits the one there. */
+  single?: boolean;
 }
 
 export interface Intervention {
   id: string;
   card_type: CardType;
-  geometry: GeoJSON.Geometry;
+  /** The buildings' footprints for a card on buildings; null for a card
+   * without a place. */
+  geometry: GeoJSON.Geometry | null;
+  /** The buildings a card on buildings picked. */
+  element_ids?: string[] | null;
   params: Record<string, unknown>;
   deleted: boolean;
   created_at: string;
@@ -212,7 +220,10 @@ export interface Intervention {
 
 export interface InterventionCreate {
   card_type: CardType;
-  geometry: GeoJSON.Geometry;
+  /** As drawn; null for a card without a place (the backend computes a card
+   * on buildings' from `element_ids`). */
+  geometry: GeoJSON.Geometry | null;
+  element_ids?: string[] | null;
   params: Record<string, unknown>;
   replaces_element_id?: string | null;
 }

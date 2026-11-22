@@ -40,6 +40,7 @@ import type {
 } from "./api/types";
 import { CardPalette } from "./ui/CardPalette";
 import { ParamForm } from "./ui/ParamForm";
+import { BuildingPicker } from "./ui/BuildingPicker";
 import { TimeSlider } from "./ui/TimeSlider";
 import { IndicatorsView } from "./ui/IndicatorsView";
 import { activePack } from "./pack";
@@ -95,6 +96,18 @@ const KPI_DEFERRED_CACHE_SIZE = 40;
 const REVISION_POLL_MS = 3000;
 // How long a notice over the map stays.
 const NOTICE_MS = 4000;
+
+/** The picked buildings' footprints, as one MultiPolygon (as the backend
+ * keeps them). */
+function buildingFootprints(scene: SceneResponse, ids: string[]): GeoJSON.MultiPolygon {
+  const coordinates: GeoJSON.Position[][][] = [];
+  for (const id of ids) {
+    const geometry = scene.elements.find((el) => el.id === id)?.geometry;
+    if (geometry?.type === "Polygon") coordinates.push(geometry.coordinates);
+    else if (geometry?.type === "MultiPolygon") coordinates.push(...geometry.coordinates);
+  }
+  return { type: "MultiPolygon", coordinates };
+}
 
 function outsideMessage(): string {
   return tr("Le carte vanno posizionate dentro il confine del sito.", "Cards go within the site’s boundary.");
@@ -163,6 +176,8 @@ function App() {
   cardsRef.current = cards;
   const [selectedCard, setSelectedCard] = useState<CardSpec | null>(null);
   const [pendingGeometry, setPendingGeometry] = useState<GeoJSON.Geometry | null>(null);
+  // A card on buildings: the buildings picked so far on the map (by id).
+  const [pickedBuildings, setPickedBuildings] = useState<string[]>([]);
   // A short message over the map (a card drawn outside the site), gone by itself.
   const [notice, setNotice] = useState<string | null>(null);
   // The backend can't save changes any more (see the revision check below).
@@ -301,6 +316,26 @@ function App() {
         draw.stop();
       });
 
+      // A card on buildings armed: a click on one of the site's buildings
+      // picks it, or unpicks it (a building past a surveyed boundary is
+      // context, not the site's).
+      map.on("click", (e) => {
+        const card = selectedCardRef.current;
+        if (card?.placement_type !== "building") return;
+        const hit = map
+          .queryRenderedFeatures(e.point)
+          .find((f) => f.properties?.elementType === "building" && f.properties?.source === "baseline");
+        const id = hit?.properties?.elementId as string | undefined;
+        const current = sceneRef.current;
+        const building = current?.elements.find((el) => el.id === id);
+        if (!id || !building || !current) return;
+        if (current.boundary_status === "surveyed" && !withinBoundary(building.geometry, current.site_boundary)) {
+          showNotice(outsideMessage());
+          return;
+        }
+        setPickedBuildings((picked) => (picked.includes(id) ? picked.filter((p) => p !== id) : [...picked, id]));
+      });
+
       // Makes every tree (baseline or placed) clickable: baseline trees open
       // a read-only identity card, placed trees jump to their existing
       // intervention edit flow (selected via the InterventionList already).
@@ -401,12 +436,13 @@ function App() {
     selectedCardRef.current = selectedCard;
     const draw = drawRef.current;
     if (!draw) return;
-    if (selectedCard) {
-      const mode = modeForPlacementRef.current[selectedCard.placement_type];
-      if (mode) {
-        draw.start();
-        draw.setMode(mode);
-      }
+    setPickedBuildings([]);
+    // Only the drawn placements draw: a card on buildings picks them, a
+    // policy has no place.
+    const mode = selectedCard ? modeForPlacementRef.current[selectedCard.placement_type] : undefined;
+    if (mode) {
+      draw.start();
+      draw.setMode(mode);
     } else {
       draw.stop();
     }
@@ -461,9 +497,14 @@ function App() {
     // event — which is also when the first scene fetch resolves — so using
     // `scene` as the readiness signal avoids calling addSource too early.
     if (!mapRef.current || !scene) return;
+    // The buildings being picked, or the selected card's place.
+    if (pickedBuildings.length > 0) {
+      setHighlight(mapRef.current, buildingFootprints(scene, pickedBuildings));
+      return;
+    }
     const iv = scene.interventions.find((i) => i.id === selectedInterventionId) ?? null;
-    setHighlight(mapRef.current, iv ? iv.geometry : null);
-  }, [selectedInterventionId, scene]);
+    setHighlight(mapRef.current, iv?.geometry ?? null);
+  }, [selectedInterventionId, scene, pickedBuildings]);
 
   // The felt-temperature field for the year and day shown, with the
   // interventions or without: for the layer when it's on (without only in
@@ -697,13 +738,13 @@ function App() {
     drawRef.current?.start();
     drawRef.current?.clear();
     setPendingGeometry(null);
+    setPickedBuildings([]);
     setReplantTargetId(null);
-    if (selectedCard) {
-      const mode = modeForPlacementRef.current[selectedCard.placement_type];
-      if (mode) drawRef.current?.setMode(mode);
-    } else {
-      drawRef.current?.stop();
-    }
+    // Only the drawn placements draw: left on in its last mode, a click
+    // picking a building would draw too.
+    const mode = selectedCard ? modeForPlacementRef.current[selectedCard.placement_type] : undefined;
+    if (mode) drawRef.current?.setMode(mode);
+    else drawRef.current?.stop();
   }
 
   function handleViewTabChange(next: AppView) {
@@ -726,9 +767,23 @@ function App() {
   }
 
   function handleSelectCard(card: CardSpec | null) {
-    setSelectedInterventionId(null);
     setSelectedTreeElementId(null);
+    // A single card already in the scenario (a policy, say): edit that one.
+    const existing = card?.single ? scene?.interventions.find((i) => i.card_type === card.card_type) : undefined;
+    if (existing) {
+      setSelectedCard(null);
+      setPendingGeometry(null);
+      setSelectedInterventionId(existing.id);
+      return;
+    }
+    setSelectedInterventionId(null);
     setSelectedCard(card);
+  }
+
+  // A card on buildings: on to its parameters, over the buildings picked.
+  function handleConfirmBuildings() {
+    if (!scene || pickedBuildings.length === 0) return;
+    setPendingGeometry(buildingFootprints(scene, pickedBuildings));
   }
 
   function handleSelectIntervention(id: string | null) {
@@ -759,6 +814,8 @@ function App() {
       .catch((err) => {
         console.error(err);
         timeline.end("scene");
+        // Refused by the pack (its reason): the form stays open.
+        if (err instanceof HttpError && err.status === 422 && err.detail) showNotice(err.detail);
       });
   }
 
@@ -813,24 +870,39 @@ function App() {
   }
 
   function handleSubmit(params: Record<string, unknown>) {
-    if (!pendingGeometry || !selectedCard || !mapRef.current) return;
+    if (!selectedCard || !mapRef.current) return;
+    const placement = selectedCard.placement_type;
+    if (placement !== "none" && !pendingGeometry) return;
     timeline.markInput("card added");
     timeline.begin("scene");
     createIntervention(
-      { card_type: selectedCard.card_type, geometry: pendingGeometry, params, replaces_element_id: replantTargetId },
+      {
+        card_type: selectedCard.card_type,
+        geometry: placement === "none" ? null : pendingGeometry,
+        element_ids: placement === "building" ? pickedBuildings : null,
+        params,
+        replaces_element_id: replantTargetId,
+      },
       t
     )
       .then((scene) => {
         applyScene(scene);
-        rearmDrawing();
+        // A policy is placed once: the card is put down.
+        if (placement === "none") setSelectedCard(null);
+        else rearmDrawing();
       })
       .catch((err) => {
         console.error(err);
         timeline.end("scene");
-        // Past the boundary somewhere between the vertices the map checked.
-        if (err instanceof HttpError && err.status === 422) {
-          showNotice(outsideMessage());
-          rearmDrawing();
+        if (err instanceof HttpError && (err.status === 422 || err.status === 409)) {
+          // Past the boundary somewhere between the vertices the map
+          // checked, refused by the pack, a single card already there: the
+          // backend's reason.
+          showNotice(err.detail ?? outsideMessage());
+          // Back to the picker with the buildings still picked (one can be
+          // unpicked), or to drawing; a policy's form stays open.
+          if (placement === "building") setPendingGeometry(null);
+          else if (placement !== "none") rearmDrawing();
         }
       });
   }
@@ -1037,8 +1109,20 @@ function App() {
                 />
               )}
               {view === "2d" &&
-                (pendingGeometry && selectedCard ? (
-                  <ParamForm card={selectedCard} plantedYear={t} onSubmit={handleSubmit} onCancel={rearmDrawing} />
+                (selectedCard && (pendingGeometry || selectedCard.placement_type === "none") ? (
+                  <ParamForm
+                    card={selectedCard}
+                    plantedYear={t}
+                    onSubmit={handleSubmit}
+                    onCancel={selectedCard.placement_type === "none" ? () => setSelectedCard(null) : rearmDrawing}
+                  />
+                ) : selectedCard?.placement_type === "building" ? (
+                  <BuildingPicker
+                    card={selectedCard}
+                    picked={pickedBuildings.length}
+                    onConfirm={handleConfirmBuildings}
+                    onCancel={() => setSelectedCard(null)}
+                  />
                 ) : selectedIntervention && selectedInterventionCard && canEdit ? (
                   <ParamForm
                     card={selectedInterventionCard}

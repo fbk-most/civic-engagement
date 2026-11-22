@@ -32,6 +32,10 @@ from civic_engagement.store.storage import Storage, state_storage
 DEFAULT_TEAM = "default"
 
 
+class AlreadyPlaced(Exception):
+    """A single card (CardSpec.single) the session already has."""
+
+
 def session_name(team: str) -> str:
     """The team's session document — see config.SiteConfig.session_json_path."""
     if auth_mechanism() == "open":
@@ -94,12 +98,21 @@ class SessionStore:
             self._save(team)
 
     def add_intervention(
-        self, data: InterventionCreate, planted_year: int = 0, team: str = DEFAULT_TEAM, author: str | None = None
+        self,
+        data: InterventionCreate,
+        planted_year: int = 0,
+        team: str = DEFAULT_TEAM,
+        author: str | None = None,
+        single: bool = False,
     ) -> Intervention:
+        """Adds the card to the team's session; with `single`, only if the
+        session has none of its type yet (else AlreadyPlaced), checked and
+        added at once, so two windows can't both add it."""
         intervention = Intervention(
             id=f"int-{uuid.uuid4().hex[:12]}",
             card_type=data.card_type,
             geometry=data.geometry,
+            element_ids=data.element_ids,
             params=data.params,
             created_at=datetime.now(timezone.utc).isoformat(),
             replaces_element_id=data.replaces_element_id,
@@ -107,6 +120,8 @@ class SessionStore:
             created_by=author,
         )
         with self._lock:
+            if single and any(i.card_type == data.card_type for i in self.list_interventions(team)):
+                raise AlreadyPlaced(data.card_type)
             self._session(team).append(intervention)
             self._save(team)
         return intervention

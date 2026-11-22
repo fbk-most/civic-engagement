@@ -9,7 +9,9 @@ CoverType = str
 CardType = str
 CardCategory = str
 Source = Literal["baseline", "intervention"]
-PlacementType = Literal["point", "polyline", "area"]
+# Drawn on the map ("point", "polyline", "area"), picked among the
+# baseline's buildings ("building"), or without a place, a policy ("none").
+PlacementType = Literal["point", "polyline", "area", "building", "none"]
 
 
 class DiscreteElement(BaseModel):
@@ -41,7 +43,11 @@ class BaselineScene(BaseModel):
 class Intervention(BaseModel):
     id: str
     card_type: CardType
-    geometry: dict[str, Any]
+    geometry: dict[str, Any] | None = Field(
+        description="Where it is (WGS84 GeoJSON): the buildings' footprints for a card on buildings; "
+        "None for a card without a place"
+    )
+    element_ids: list[str] | None = Field(default=None, description="The buildings a card on buildings picked")
     params: dict[str, Any]
     deleted: bool = False
     created_at: str
@@ -63,7 +69,10 @@ class Intervention(BaseModel):
 
 class InterventionCreate(BaseModel):
     card_type: CardType
-    geometry: dict[str, Any]
+    geometry: dict[str, Any] | None = Field(
+        default=None, description="As drawn; ignored for a card on buildings (their footprints) or without a place"
+    )
+    element_ids: list[str] | None = Field(default=None, description="For a card on buildings: the buildings picked")
     params: dict[str, Any]
     replaces_element_id: str | None = None
 
@@ -141,6 +150,9 @@ class CardSpec(BaseModel):
     category: CardCategory
     placement_type: PlacementType
     params: list[ParamSpec]
+    single: bool = Field(
+        default=False, description="At most one in a scenario (a policy, say): placing it again edits the one there"
+    )
 
 
 IndicatorValue = float | dict[str, bool] | dict[str, float] | None

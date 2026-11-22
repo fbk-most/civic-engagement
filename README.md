@@ -85,6 +85,18 @@ through the API (`GET /api/scenarios`, `POST /api/scenarios`,
 `POST /api/session/clear` starts again with no cards). Whatever a load
 replaces is kept as `data/<site>/session.<timestamp>.json`.
 
+A card is placed by its `placement_type`: drawn on the 2D map (`point`,
+`polyline`, `area`); picked among the baseline's buildings (`building`:
+a click picks a building, or unpicks it; the intervention keeps their
+`element_ids` and their footprints as its geometry); or without a place,
+a policy (`none`, no geometry, listed apart). A card with `single` is
+at most one in a scenario: picking it again edits the one there. The core
+checks the card type, the buildings and the site's boundary; a pack
+refuses what it wants on top, a card or its new parameters
+(`DomainPack.refused_intervention`, a reason in Italian and English). What
+the team is refused comes back as a 409 or 422 whose `detail` is
+`{"message": ..., "message_en": ...}`, shown in the interface's language.
+
 A pack can declare **uncontrollables**: what a scenario assumes but nobody
 at the table decides, such as the climate or a market
 (`DomainPack.uncontrollables`, each with its values and a default;

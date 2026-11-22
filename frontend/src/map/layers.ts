@@ -227,7 +227,8 @@ export function renderScene(
     // Same rule the model applies to the full geometry: an intervention
     // placed while previewing a later year doesn't exist yet at this t.
     for (const iv of scene.interventions) {
-      if (scene.t < iv.planted_year) continue;
+      // A policy has no place: no marker.
+      if (scene.t < iv.planted_year || !iv.geometry) continue;
       const card = cards.find((c) => c.card_type === iv.card_type);
       const point = representativePoint(iv.geometry);
       const rotationDeg = cardRotationDeg(iv.id);

@@ -1,5 +1,6 @@
 """A toy domain pack, for the core's tests: a square of about 300 m with a
-building, a lawn and a paving, one card (a bench), an indicator of each
+building, a lawn and a paving, a card of each kind of placement (a bench,
+a mural on buildings, a seating policy without a place), an indicator of each
 kind, a deferred one included, and an uncontrollable (the weather, which
 changes how many sit on the benches and on the building's steps). Not an
 example, nor an app: just enough to run the core without a real pack (see
@@ -93,7 +94,13 @@ class ToyPack(DomainPack):
     default_site = SITE.site_id
     horizon_years = 10
     cards = [
-        CardSpec(card_type="add_bench", label="Panchina", label_en="Bench", category="arredo", placement_type="point", params=[])
+        CardSpec(card_type="add_bench", label="Panchina", label_en="Bench", category="arredo", placement_type="point", params=[]),
+        CardSpec(card_type="mural", label="Murale", label_en="Mural", category="arredo", placement_type="building", params=[]),
+        CardSpec(
+            card_type="seating_policy", label="Sedute libere", label_en="Free seating", category="arredo",
+            placement_type="none", single=True,
+            params=[{"key": "rate", "label": "Quota", "label_en": "Rate", "type": "number", "default": 10, "min": 0, "max": 100}],
+        ),
     ]
     element_types = frozenset({"building", "bench"})
     cover_types = frozenset({"lawn", "paving"})
@@ -104,6 +111,12 @@ class ToyPack(DomainPack):
         self, baseline: BaselineScene, interventions: list[Intervention], uncontrollables: Uncontrollables | None = None
     ) -> Evaluated:
         return Evaluated(baseline, _benches(interventions), (uncontrollables or {}).get("weather", WEATHER.default))
+
+    def refused_intervention(self, intervention) -> tuple[str, str] | None:
+        # A pack's own rule: no mural with a rate in its parameters.
+        if intervention.card_type == "mural" and "rate" in intervention.params:
+            return "Un murale non ha una quota.", "A mural has no rate."
+        return None
 
     def assemble(self, evaluation: Evaluated, t: int) -> tuple[list[DiscreteElement], list[CoverPolygon]]:
         return [*evaluation.baseline.elements, *evaluation.benches], list(evaluation.baseline.covers)

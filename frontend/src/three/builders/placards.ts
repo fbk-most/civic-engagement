@@ -62,7 +62,8 @@ export function buildPlacards(
   for (const iv of interventions) {
     // Same rule the model applies to the full geometry: an intervention
     // placed while previewing a later year doesn't exist yet at this t.
-    if (t < iv.planted_year) continue;
+    // A policy has no place: no placard.
+    if (t < iv.planted_year || !iv.geometry) continue;
     const card = cards.find((c) => c.card_type === iv.card_type);
     const color = card ? categoryColor(card.category, "#5b6472") : "#5b6472";
 
