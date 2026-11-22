@@ -1,4 +1,4 @@
-import type { CardSpec, ParamSpec } from "../api/types";
+import type { CardSpec, ParamSpec, Uncontrollables, UncontrollableSpec } from "../api/types";
 import { activePack, type Pair } from "../pack";
 import { tr } from "./lang";
 
@@ -36,6 +36,23 @@ export function optionLabel(paramKey: string, value: string): string {
 /** A card's name, from the backend's catalog (GET /api/cards). */
 export function cardLabel(card: CardSpec): string {
   return tr(card.label, card.label_en);
+}
+
+/** An uncontrollable's name, from the backend's catalog. */
+export function uncontrollableLabel(spec: UncontrollableSpec): string {
+  return tr(spec.label, spec.label_en);
+}
+
+/** The name of one of its values (`value` missing: its default's). */
+export function uncontrollableValueLabel(spec: UncontrollableSpec, value: string | undefined): string {
+  const found = spec.values.find((v) => v.id === (value ?? spec.default));
+  return found ? tr(found.label, found.label_en) : (value ?? "");
+}
+
+/** "Riscaldamento: rapido · Mercato: stabile": the values in one line, for
+ * where there's no room for their panel. */
+export function uncontrollablesSummary(specs: UncontrollableSpec[], values: Uncontrollables): string {
+  return specs.map((spec) => `${uncontrollableLabel(spec)}: ${uncontrollableValueLabel(spec, values[spec.id])}`).join(" · ");
 }
 
 /** A card parameter's name, from the backend's catalog. */

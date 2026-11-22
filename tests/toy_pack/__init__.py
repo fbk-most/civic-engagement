@@ -1,6 +1,7 @@
 """A toy domain pack, for the core's tests: a square of about 300 m with a
-building, a lawn and a paving, one card (a bench) and an indicator of each
-kind, a deferred one included. Not an example, nor an app: just enough to
+building, a lawn and a paving, one card (a bench), an indicator of each
+kind, a deferred one included, and an uncontrollable (the weather, which
+changes how many sit on the benches and on the building's steps). Not an example, nor an app: just enough to
 run the core without a real pack (see civic_engagement/domain.py)."""
 
 from civic_engagement.config import SiteConfig
@@ -16,6 +17,9 @@ from civic_engagement.models.schema import (
     IndicatorPart,
     IndicatorValues,
     Intervention,
+    Uncontrollables,
+    UncontrollableSpec,
+    UncontrollableValue,
 )
 
 DATA_DIR = "tests/toy_pack/data"
@@ -47,6 +51,7 @@ DESCRIPTORS = IndicatorDescriptors(
             id="seating", group="square", kind="flags", label="Sedute", label_en="Seating",
             parts=[IndicatorPart(id="any", label="Almeno una", label_en="At least one")],
         ),
+        IndicatorDescriptor(id="sitters", group="square", kind="number", label="Persone sedute", label_en="Sitters"),
         IndicatorDescriptor(
             id="benches_slow", group="square", kind="number", label="Panchine (lento)", label_en="Benches (slow)",
             deferred=True,
@@ -55,10 +60,22 @@ DESCRIPTORS = IndicatorDescriptors(
 )
 
 
+WEATHER = UncontrollableSpec(
+    id="weather",
+    label="Tempo",
+    label_en="Weather",
+    values=[UncontrollableValue(id="sunny", label="sole", label_en="sunny"),
+            UncontrollableValue(id="rainy", label="pioggia", label_en="rainy")],
+    default="sunny",
+)
+SITTERS_PER_BENCH = {"sunny": 4, "rainy": 1}  # the building's steps seat as many
+
+
 class Evaluated:
-    def __init__(self, baseline: BaselineScene, benches: list[DiscreteElement]):
+    def __init__(self, baseline: BaselineScene, benches: list[DiscreteElement], weather: str):
         self.baseline = baseline
         self.benches = benches
+        self.weather = weather
 
 
 def _benches(interventions: list[Intervention]) -> list[DiscreteElement]:
@@ -80,16 +97,24 @@ class ToyPack(DomainPack):
     element_types = frozenset({"building", "bench"})
     cover_types = frozenset({"lawn", "paving"})
     indicators = DESCRIPTORS
+    uncontrollables = [WEATHER]
 
-    def evaluate(self, baseline: BaselineScene, interventions: list[Intervention]) -> Evaluated:
-        return Evaluated(baseline, _benches(interventions))
+    def evaluate(
+        self, baseline: BaselineScene, interventions: list[Intervention], uncontrollables: Uncontrollables | None = None
+    ) -> Evaluated:
+        return Evaluated(baseline, _benches(interventions), (uncontrollables or {}).get("weather", WEATHER.default))
 
     def assemble(self, evaluation: Evaluated, t: int) -> tuple[list[DiscreteElement], list[CoverPolygon]]:
         return [*evaluation.baseline.elements, *evaluation.benches], list(evaluation.baseline.covers)
 
     def indicator_values(self, evaluation: Evaluated, t: int) -> IndicatorValues:
         benches = len(evaluation.benches)
-        return {"benches": benches, "space_use": {"lawn": 50.0, "paving": 50.0}, "seating": {"any": benches > 0}}
+        return {
+            "benches": benches,
+            "space_use": {"lawn": 50.0, "paving": 50.0},
+            "seating": {"any": benches > 0},
+            "sitters": (benches + 1) * SITTERS_PER_BENCH[evaluation.weather],
+        }
 
     def deferred_values(self, interventions: list[Intervention], t: int) -> IndicatorValues:
         return {"benches_slow": len(_benches(interventions))}

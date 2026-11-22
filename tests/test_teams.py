@@ -208,6 +208,7 @@ def pin_app(tmp_path, monkeypatch):
     for cached in (config.auth_mechanism, storage.state_storage, access.team_store):
         cached.cache_clear()
     monkeypatch.setattr(state.store, "_sessions", {})
+    monkeypatch.setattr(state.store, "_uncontrollables", {})
     access.pin_throttle.reset()
     access.manager_throttle.reset()
     yield TestClient(create_app(active_pack()))
@@ -283,6 +284,7 @@ def test_teams_apart_and_viewers_looking(pin_app, tmp_path):
         ("delete", f"/api/interventions/{card['id']}", None),
         ("post", "/api/scenarios", {"name": "x"}),
         ("post", "/api/session/clear", None),
+        ("put", "/api/session/uncontrollables", {"values": {"weather": "rainy"}}),
     ):
         assert pin_app.request(method.upper(), path, json=body, headers=viewer1).status_code == 403, path
 

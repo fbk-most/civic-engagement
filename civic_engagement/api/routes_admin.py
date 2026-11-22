@@ -42,10 +42,11 @@ def _known(team_id: str) -> Team:
 
 
 def _scenario(scenario: str, team_id: str | None):
-    """One of the team's scenarios or a site preset; without a team, a preset."""
+    """One of the team's scenarios or a site preset (without a team, a
+    preset): its info, with its uncontrollables, and interventions."""
     saved, presets = library(team_id or "default")
     try:
-        return (read_scenario(scenario, saved, presets) if team_id else read_scenario(scenario, presets, None))[1]
+        return read_scenario(scenario, saved, presets) if team_id else read_scenario(scenario, presets, None)
     except FileNotFoundError as error:
         raise HTTPException(status_code=404, detail=f"Scenario {scenario} not found") from error
     except ScenarioError as error:
@@ -63,15 +64,15 @@ def post_team(data: TeamCreate) -> AdminTeam:
     or one of `from_team`'s scenarios)."""
     if data.from_team is not None:
         _known(data.from_team)
-    interventions = _scenario(data.from_scenario, data.from_team) if data.from_scenario else []
+    info, interventions = _scenario(data.from_scenario, data.from_team) if data.from_scenario else (None, [])
     try:
         team = team_store().create_team(data.name)
     except TeamError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     store.forget(team.id)  # nothing left behind by an earlier team of that id
     delete_library(library(team.id)[0])
-    if interventions:
-        store.replace(interventions, team.id)
+    if info is not None:
+        store.replace(interventions, team.id, info.uncontrollables)
     return _team(team)
 
 
@@ -131,8 +132,8 @@ def post_scene(team_id: str, data: TeamScene) -> AdminTeam:
     team = _known(team_id)
     if data.team is not None:
         _known(data.team)
-    interventions = _scenario(data.scenario, data.team or team_id) if data.scenario else []
-    store.replace(interventions, team_id)
+    info, interventions = _scenario(data.scenario, data.team or team_id) if data.scenario else (None, [])
+    store.replace(interventions, team_id, info.uncontrollables if info is not None else None)
     return _team(team)
 
 
@@ -146,6 +147,7 @@ def get_export(team_id: str) -> dict:
         "site_id": SITE.site_id,
         "team": _team(team).model_dump(),
         "interventions": [i.model_dump() for i in store.list_interventions(team_id)],
+        "uncontrollables": store.uncontrollables(team_id),
         "set_aside": documents(store.set_aside(team_id)),
         "scenarios": documents(scenario_documents(library(team_id)[0])),
     }

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from civic_engagement.access import Access, access, editor
 from civic_engagement.models.schema import ScenarioInfo, ScenarioSave, SceneResponse
-from civic_engagement.scene import current_scene, validated_t
+from civic_engagement.scene import current_scene, session_uncontrollables, validated_t
 from civic_engagement.store.scenarios import (
     ScenarioError,
     delete_scenario,
@@ -24,10 +24,17 @@ def get_scenarios(who: Access = Depends(access)) -> list[ScenarioInfo]:
 
 @router.post("/scenarios", response_model=ScenarioInfo)
 def post_scenario(data: ScenarioSave, who: Access = Depends(editor)) -> ScenarioInfo:
-    """Saves the team's interventions as a scenario. 409 if one with the
-    same id exists and `overwrite` isn't set."""
+    """Saves the team's interventions, and its uncontrollables, as a
+    scenario. 409 if one with the same id exists and `overwrite` isn't
+    set."""
     try:
-        return save_scenario(data.name, store.list_interventions(who.team), data.overwrite, *library(who.team))
+        return save_scenario(
+            data.name,
+            store.list_interventions(who.team),
+            data.overwrite,
+            *library(who.team),
+            uncontrollables=session_uncontrollables(who.team),
+        )
     except FileExistsError as error:
         raise HTTPException(status_code=409, detail=f"Scenario {error} already exists") from error
     except ScenarioError as error:
@@ -36,16 +43,17 @@ def post_scenario(data: ScenarioSave, who: Access = Depends(editor)) -> Scenario
 
 @router.post("/scenarios/{scenario}/load", response_model=SceneResponse)
 def load_scenario(scenario: str, t: int = 0, who: Access = Depends(editor)) -> SceneResponse:
-    """The team's scene becomes the scenario's interventions (the scene as it
+    """The team's scene becomes the scenario's interventions, under its
+    uncontrollables (the defaults for those it doesn't give; the scene as it
     was is set aside); every window of the team follows within seconds."""
     year = validated_t(t)
     try:
-        _, interventions = read_scenario(scenario, *library(who.team))
+        info, interventions = read_scenario(scenario, *library(who.team))
     except FileNotFoundError as error:
         raise HTTPException(status_code=404, detail=f"Scenario {scenario} not found") from error
     except ScenarioError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
-    store.replace(interventions, who.team)
+    store.replace(interventions, who.team, info.uncontrollables)
     return current_scene(year, who.team)
 
 
@@ -61,7 +69,8 @@ def remove_scenario(scenario: str, who: Access = Depends(editor)) -> None:
 
 @router.post("/session/clear", response_model=SceneResponse)
 def clear_session(t: int = 0, who: Access = Depends(editor)) -> SceneResponse:
-    """No interventions: a fresh start (the scene as it was is set aside)."""
+    """No interventions: a fresh start (the scene as it was is set aside),
+    under the same uncontrollables."""
     year = validated_t(t)
     store.replace([], who.team)
     return current_scene(year, who.team)

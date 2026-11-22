@@ -955,6 +955,56 @@
   color: #b33;
 }
 
+/* The uncontrollables, above the key indicators. */
+.uncontrollables-panel {
+  background: rgba(255, 255, 255, 0.97);
+  padding: 12px 14px;
+  border-radius: 8px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
+  width: 236px;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.uncontrollables-panel__row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  column-gap: 8px;
+  padding: 4px 0;
+  border-top: 1px solid #eee;
+}
+
+.uncontrollables-panel__label {
+  color: #555;
+}
+
+.uncontrollables-panel__value {
+  font-weight: 600;
+  text-align: right;
+}
+
+.uncontrollables-panel__row select {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 12px;
+  font-family: inherit;
+  max-width: 130px;
+}
+
+.uncontrollables-panel__note {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: #777;
+}
+
+.indicators-view__conditions {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #555;
+}
+
 /* Realistic 3D view --------------------------------------------------- */
 
 .view-3d {

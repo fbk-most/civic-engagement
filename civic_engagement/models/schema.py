@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # Element, cover and card types are the domain pack's (see domain.py: the
 # core checks them against the pack's).
@@ -83,6 +83,39 @@ class ParamSpec(BaseModel):
     max: float | None = None
 
 
+class UncontrollableValue(BaseModel):
+    id: str
+    label: str
+    label_en: str
+
+
+class UncontrollableSpec(BaseModel):
+    """What a scenario assumes but nobody at the table decides (the climate,
+    a market): the pack's, like its cards (see domain.py). A scenario takes
+    one of its values; "as is" is evaluated under the same ones, so that a
+    comparison shows the decisions alone."""
+
+    id: str
+    label: str
+    label_en: str
+    values: list[UncontrollableValue]
+    default: str = Field(description="The value of a scenario that doesn't choose one: one of `values`")
+
+    @model_validator(mode="after")
+    def _default_among_values(self) -> "UncontrollableSpec":
+        if self.default not in {v.id for v in self.values}:
+            raise ValueError(f"{self.id}: default {self.default!r} not among its values")
+        return self
+
+
+# Uncontrollable id -> the id of one of its values.
+Uncontrollables = dict[str, str]
+
+
+class UncontrollablesUpdate(BaseModel):
+    values: Uncontrollables = Field(description="Every uncontrollable's value; those left out take their defaults")
+
+
 class ScenarioInfo(BaseModel):
     """A saved scenario, as listed — see civic_engagement/store/scenarios.py."""
 
@@ -91,6 +124,9 @@ class ScenarioInfo(BaseModel):
     saved_at: str | None = Field(default=None, description="ISO 8601, UTC; None for a hand-made file")
     interventions: int = Field(description="How many interventions it holds")
     preset: bool = Field(default=False, description="The site's, shipped with it: every team can load it, none delete it")
+    uncontrollables: Uncontrollables = Field(
+        default_factory=dict, description="As saved (none with a pack that declares none, or in an older file)"
+    )
 
 
 class ScenarioSave(BaseModel):
@@ -172,6 +208,7 @@ class IndicatorSeries(BaseModel):
     years: list[int] = Field(description="Year offsets from now, one per entry of the two series")
     baseline: list[IndicatorValues] = Field(description="Every indicator with no interventions, per year")
     scenario: list[IndicatorValues] = Field(description="Every indicator with the session's interventions, per year")
+    uncontrollables: Uncontrollables = Field(default_factory=dict, description="Both series', as in SceneResponse")
 
 
 class FieldGrid(BaseModel):
@@ -245,6 +282,11 @@ class SceneResponse(BaseModel):
     interventions: list[Intervention] = Field(
         description="Active (non-deleted) interventions, so the frontend can render one card per "
         "placed intervention without a second round trip"
+    )
+    uncontrollables: Uncontrollables = Field(
+        default_factory=dict,
+        description="Every uncontrollable's value, the scene's and its baseline's (see UncontrollableSpec); "
+        "none with a pack that declares none",
     )
     revision: str = Field(
         default="",

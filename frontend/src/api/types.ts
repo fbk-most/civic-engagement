@@ -100,7 +100,30 @@ export interface IndicatorSeries {
   years: number[];
   baseline: IndicatorValues[];
   scenario: IndicatorValues[];
+  /** Both series', as in SceneResponse. */
+  uncontrollables: Uncontrollables;
 }
+
+/** One value an uncontrollable can take. */
+export interface UncontrollableValue {
+  id: string;
+  label: string;
+  label_en: string;
+}
+
+/** What a scenario assumes but nobody at the table decides (the climate, a
+ * market): the pack's, like its cards — see GET /api/uncontrollables. */
+export interface UncontrollableSpec {
+  id: string;
+  label: string;
+  label_en: string;
+  values: UncontrollableValue[];
+  /** One of `values`: a scenario's that doesn't choose one. */
+  default: string;
+}
+
+/** Uncontrollable id -> the id of one of its values. */
+export type Uncontrollables = Record<string, string>;
 
 export interface SceneResponse extends BaselineScene {
   /** Which site this is (its key in the pack's sites), e.g. for naming exports. */
@@ -117,6 +140,9 @@ export interface SceneResponse extends BaselineScene {
   indicators: IndicatorValues;
   baseline_indicators: IndicatorValues;
   interventions: Intervention[];
+  /** Every uncontrollable's value, the scene's and its baseline's; empty
+   * with a pack that declares none. */
+  uncontrollables: Uncontrollables;
   /** The session's revision this scene reflects (see fetchSessionRevision). */
   revision: string;
 }
@@ -132,6 +158,8 @@ export interface ScenarioInfo {
   interventions: number;
   /** The site's, shipped with it: every team can load it, none delete it. */
   preset: boolean;
+  /** As saved: those left out load at their defaults. */
+  uncontrollables: Uncontrollables;
 }
 
 export type CardType = string;

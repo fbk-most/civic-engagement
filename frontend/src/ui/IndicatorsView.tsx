@@ -1,8 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { IndicatorDescriptor, IndicatorDescriptors, IndicatorSeries, IndicatorValues, Intervention } from "../api/types";
+import type {
+  IndicatorDescriptor,
+  IndicatorDescriptors,
+  IndicatorSeries,
+  IndicatorValues,
+  Intervention,
+  Uncontrollables,
+  UncontrollableSpec,
+} from "../api/types";
 import { fetchIndicatorSeries } from "../api/client";
 import { tr } from "../i18n/lang";
-import { coverTypeLabel, yearLabel } from "../i18n/labels";
+import { coverTypeLabel, uncontrollablesSummary, yearLabel } from "../i18n/labels";
 import { activePack } from "../pack";
 import { LineChart, StackedAreaChart } from "./charts";
 import {
@@ -18,6 +26,10 @@ import {
 interface Props {
   descriptors: IndicatorDescriptors;
   interventions: Intervention[];
+  /** The pack's uncontrollables (none for a pack without), and the scene's
+   * values of them: both series are under these. */
+  uncontrollableSpecs: UncontrollableSpec[];
+  uncontrollables: Uncontrollables;
   t: number;
   onTimeChange: (t: number) => void;
 }
@@ -194,17 +206,18 @@ function FlagsCard({ descriptor, series, t }: { descriptor: IndicatorDescriptor;
 
 /** The "Indicatori" tab: every indicator over the whole 30-year horizon,
  * current situation vs. simulation, with the selected year as a cursor. */
-export function IndicatorsView({ descriptors, interventions, t, onTimeChange }: Props) {
+export function IndicatorsView({ descriptors, interventions, uncontrollableSpecs, uncontrollables, t, onTimeChange }: Props) {
   const [series, setSeries] = useState<IndicatorSeries | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [zeroBased, setZeroBased] = useState(true);
   const requestSeqRef = useRef(0);
 
-  // Keyed on the interventions' content, not the scene object: the scene is
-  // replaced on every year change too, and moving the year must not refetch
-  // a series that already covers every year.
-  const interventionsKey = useMemo(() => JSON.stringify(interventions), [interventions]);
+  // Keyed on the scenario's content (the interventions and the
+  // uncontrollables), not the scene object: the scene is replaced on every
+  // year change too, and moving the year must not refetch a series that
+  // already covers every year.
+  const scenarioKey = useMemo(() => JSON.stringify([interventions, uncontrollables]), [interventions, uncontrollables]);
 
   useEffect(() => {
     const seq = ++requestSeqRef.current;
@@ -222,13 +235,18 @@ export function IndicatorsView({ descriptors, interventions, t, onTimeChange }: 
         setFailed(true);
         setLoading(false);
       });
-  }, [interventionsKey]);
+  }, [scenarioKey]);
 
   return (
     <div className="indicators-view">
       <div className="indicators-view__inner">
         <header className="indicators-view__header">
           <h2>{tr("Indicatori", "Indicators")} · {yearLabel(t)}</h2>
+          {uncontrollableSpecs.length > 0 && (
+            <p className="indicators-view__conditions">
+              {tr("Condizioni esterne", "External conditions")} — {uncontrollablesSummary(uncontrollableSpecs, uncontrollables)}
+            </p>
+          )}
           <div className="indicators-view__legend">
             <span className="indicators-view__legend-item">
               <svg width="28" height="8">

@@ -84,6 +84,16 @@ through the API (`GET /api/scenarios`, `POST /api/scenarios`,
 `POST /api/scenarios/{id}/load`, `DELETE /api/scenarios/{id}`;
 `POST /api/session/clear` starts again with no cards). Whatever a load
 replaces is kept as `data/<site>/session.<timestamp>.json`.
+
+A pack can declare **uncontrollables**: what a scenario assumes but nobody
+at the table decides, such as the climate or a market (`DomainPack.uncontrollables`,
+each with its values and a default; `GET /api/uncontrollables`). The
+session holds one value of each, chosen in the "External conditions" panel
+(`PUT /api/session/uncontrollables`), and a saved scenario keeps them; a
+scenario saved without them loads at the defaults, and a clear keeps them.
+The current situation the indicators compare with is evaluated under the
+same values, so that the differences are the cards' alone. A pack without
+uncontrollables shows no panel, and its files are as before.
 `CIVIC_ENGAGEMENT_SCENARIO=<id>` loads a scenario when the backend starts — at
 every start, `--reload` restarts included, so leave it out once a workshop
 is under way.
@@ -161,9 +171,11 @@ origin, no Vite. `GET /api/health` says the backend is up.
 How a pack's app is delivered on the DigitalHub platform:
 [docs/deploy-digitalhub.md](docs/deploy-digitalhub.md).
 
-The pack's model is evaluated once per set of interventions, for every year
-of the horizon at once; the backend serves the scene and the indicators for
-the year asked.
+The pack's model is evaluated once per set of interventions (and values of
+the uncontrollables), for every year of the horizon at once; the backend
+serves the scene and the indicators for the year asked. The current
+situation is evaluated once for each setting of the uncontrollables asked
+about, and kept apart from the teams' scenarios.
 
 A site can have **terrain**: a height grid built from a LiDAR DTM
 (`civic_engagement/ingestion/terrain.py`), in `data/<site>/terrain/terrain_grid.json`,

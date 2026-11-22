@@ -15,6 +15,8 @@ import type {
   SiteAssets,
   TerrainGrid,
   ThermalFieldResponse,
+  Uncontrollables,
+  UncontrollableSpec,
 } from "./types";
 
 // With teams (CIVIC_ENGAGEMENT_AUTH=pin), the token a PIN was exchanged for
@@ -97,6 +99,23 @@ export function fetchBaseline(): Promise<BaselineScene> {
 
 export function fetchCards(): Promise<CardSpec[]> {
   return getJson("/api/cards");
+}
+
+/** The pack's uncontrollables; none for a pack that declares none. */
+export function fetchUncontrollables(): Promise<UncontrollableSpec[]> {
+  return getJson("/api/uncontrollables");
+}
+
+/** The team's scenario, and "as is", under these values (those left out at
+ * their defaults); returns the scene under them. */
+export async function setUncontrollables(values: Uncontrollables, t: number = 0): Promise<SceneResponse> {
+  const res = await request(`/api/session/uncontrollables?t=${t}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ values }),
+  });
+  if (!res.ok) throw new HttpError(`PUT /api/session/uncontrollables failed: ${res.status}`, res.status);
+  return res.json();
 }
 
 export function fetchScene(t: number = 0): Promise<SceneResponse> {

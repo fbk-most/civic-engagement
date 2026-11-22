@@ -2,11 +2,13 @@
 intervention routes (interventions endpoints return the freshly resolved
 scene directly, saving the frontend a second round trip).
 
-Each scenario — the baseline plus one set of interventions — is evaluated
-once by the domain pack for the whole horizon (see domain.py); moving the
-year slider only reads another year of the same evaluation. The "as is"
-scenario (no interventions) is evaluated once per site, and paired with the
-current one here: the pack knows nothing about baselines.
+Each scenario — the baseline plus one set of interventions, under one value
+of each of the pack's uncontrollables — is evaluated once by the domain pack
+for the whole horizon (see domain.py); moving the year slider only reads
+another year of the same evaluation. The "as is" scenario (no
+interventions) is evaluated under the same uncontrollables as the team's,
+once for each setting of them, and paired with the current one here: the
+pack knows nothing about baselines.
 
 Reads the registered pack when imported (see domain.py).
 """
@@ -29,6 +31,7 @@ from civic_engagement.models.schema import (
     IndicatorSeries,
     Intervention,
     SceneResponse,
+    Uncontrollables,
 )
 from civic_engagement.store.state import DEFAULT_TEAM, store
 
@@ -57,26 +60,33 @@ def load_baseline() -> BaselineScene:
     return baseline
 
 
-def _evaluate(interventions: list[Intervention]) -> Any:
+def _evaluate(interventions: list[Intervention], uncontrollables: Uncontrollables) -> Any:
+    pack = active_pack()
     try:
-        return active_pack().evaluate(load_baseline(), interventions)
+        if pack.uncontrollables:
+            return pack.evaluate(load_baseline(), interventions, uncontrollables=uncontrollables)  # type: ignore[call-arg]
+        return pack.evaluate(load_baseline(), interventions)
     finally:
         release_memory()
 
 
-@lru_cache(maxsize=1)
-def _as_is() -> Any:
-    return _evaluate([])
-
-
-# The evaluations of the last intervention sets asked about, the least
-# recently used dropped first: one per team at least, so that teams with
-# different scenes don't re-evaluate each other's at every request. Moving
-# the year slider doesn't change the interventions, so it never misses; an
-# edit does, and re-evaluates.
+# The evaluations of the last scenarios asked about, the least recently used
+# dropped first: one per team at least, so that teams with different scenes
+# don't re-evaluate each other's at every request. Moving the year slider
+# doesn't change the scenario, so it never misses; an edit does, and
+# re-evaluates.
 EVALUATIONS = int(os.environ.get("CIVIC_ENGAGEMENT_EVALUATIONS", "8"))
 _scenario_cache: OrderedDict[str, Any] = OrderedDict()
 _cache_lock = threading.Lock()
+
+
+# "As is" apart, under each setting of the uncontrollables asked about: every
+# team compares with it, so the teams' scenarios mustn't push it out. A
+# pack without uncontrollables has one. `uncontrollables` as JSON, those
+# left out at their defaults.
+@lru_cache(maxsize=EVALUATIONS)
+def _as_is(uncontrollables: str = "{}") -> Any:
+    return _evaluate([], active_pack().settled(json.loads(uncontrollables)))
 
 
 def interventions_key(interventions: list[Intervention]) -> str:
@@ -87,11 +97,20 @@ def interventions_key(interventions: list[Intervention]) -> str:
     )
 
 
-def evaluation(interventions: list[Intervention]) -> Any:
-    """The pack's evaluation of the scenario with these interventions."""
+def session_uncontrollables(team: str = DEFAULT_TEAM) -> Uncontrollables:
+    """Every uncontrollable's value in the team's scenario."""
+    return active_pack().settled(store.uncontrollables(team))
+
+
+def evaluation(interventions: list[Intervention], uncontrollables: Uncontrollables | None = None) -> Any:
+    """The pack's evaluation of the scenario with these interventions, under
+    these uncontrollables (every one's value: `session_uncontrollables`;
+    None, the defaults)."""
+    if uncontrollables is None:
+        uncontrollables = active_pack().settled({})
     if not interventions:
-        return _as_is()
-    key = interventions_key(interventions)
+        return _as_is(json.dumps(uncontrollables, sort_keys=True))
+    key = json.dumps([interventions_key(interventions), uncontrollables], sort_keys=True)
     with _cache_lock:
         evaluated = _scenario_cache.get(key)
         if evaluated is not None:
@@ -99,7 +118,7 @@ def evaluation(interventions: list[Intervention]) -> Any:
             return evaluated
     # Outside the lock: two teams' evaluations run side by side (the same
     # one asked twice at once is evaluated twice, rarely).
-    evaluated = _evaluate(interventions)
+    evaluated = _evaluate(interventions, uncontrollables)
     with _cache_lock:
         _scenario_cache[key] = evaluated
         while len(_scenario_cache) > EVALUATIONS:
@@ -118,7 +137,8 @@ def current_scene(t: int = 0, team: str = DEFAULT_TEAM) -> SceneResponse:
     # window refresh once more, never miss it.
     revision = store.revision(team)
     interventions = store.list_interventions(team)
-    scenario = evaluation(interventions)
+    uncontrollables = session_uncontrollables(team)
+    scenario = evaluation(interventions, uncontrollables)
     elements, covers = pack.assemble(scenario, t)
 
     return SceneResponse(
@@ -132,15 +152,16 @@ def current_scene(t: int = 0, team: str = DEFAULT_TEAM) -> SceneResponse:
         # The deferred indicators come apart (see `deferred_indicators`):
         # the rest of the scene needn't wait for them.
         indicators=pack.indicator_values(scenario, t),
-        baseline_indicators=pack.indicator_values(_as_is(), t),
+        baseline_indicators=pack.indicator_values(evaluation([], uncontrollables), t),
         interventions=interventions,
+        uncontrollables=uncontrollables,
         revision=revision,
     )
 
 
 def deferred_indicators(t: int, team: str = DEFAULT_TEAM) -> DeferredIndicators:
     """The deferred indicators at year t, with and without the team's
-    interventions."""
+    interventions. Not under the uncontrollables: no pack has both yet."""
     pack = active_pack()
     return DeferredIndicators(
         t=t,
@@ -154,12 +175,15 @@ def indicator_series(team: str = DEFAULT_TEAM) -> IndicatorSeries:
     team's interventions — the "Indicatori" tab's time series."""
     pack = active_pack()
     interventions = store.list_interventions(team)
-    scenario = evaluation(interventions)
+    uncontrollables = session_uncontrollables(team)
+    scenario = evaluation(interventions, uncontrollables)
+    as_is = evaluation([], uncontrollables)
     years = list(range(MIN_T, MAX_T + 1))
     baseline_deferred = pack.deferred_series([], years)
     scenario_deferred = pack.deferred_series(interventions, years)
     return IndicatorSeries(
         years=years,
-        baseline=[{**pack.indicator_values(_as_is(), t), **baseline_deferred[t]} for t in years],
+        baseline=[{**pack.indicator_values(as_is, t), **baseline_deferred[t]} for t in years],
         scenario=[{**pack.indicator_values(scenario, t), **scenario_deferred[t]} for t in years],
+        uncontrollables=uncontrollables,
     )

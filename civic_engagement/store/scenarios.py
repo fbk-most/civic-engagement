@@ -1,10 +1,15 @@
-"""Named scenarios: a set of interventions saved under a name, to load back
-into the session later (see `SessionStore.replace`).
+"""Named scenarios: a set of interventions, and the uncontrollables' values
+they were tried under, saved under a name, to load back into the session
+later (see `SessionStore.replace`).
 
 One JSON document per scenario, named after the scenario (`scenario_id`, a
 slug of its name):
 
-    {"site_id": "...", "name": "...", "saved_at": "...", "interventions": [...]}
+    {"site_id": "...", "name": "...", "saved_at": "...", "interventions": [...],
+     "uncontrollables": {...}}
+
+with "uncontrollables" only if the pack has some (see domain.py); a scenario
+without reads as every one at its default.
 
 A document holding just the list of interventions (the old demo preset
 format) is read too, with its name as the scenario's name.
@@ -26,7 +31,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from civic_engagement.config import SITE, auth_mechanism
-from civic_engagement.models.schema import Intervention, ScenarioInfo
+from civic_engagement.models.schema import Intervention, ScenarioInfo, Uncontrollables
 from civic_engagement.store.storage import LocalStorage, Storage, state_storage
 
 
@@ -75,6 +80,7 @@ def _parse(scenario: str, data: bytes) -> tuple[ScenarioInfo, list[Intervention]
         name=payload.get("name", scenario),
         saved_at=payload.get("saved_at"),
         interventions=len(interventions),
+        uncontrollables=payload.get("uncontrollables", {}),
     )
     return info, interventions
 
@@ -119,9 +125,11 @@ def save_scenario(
     overwrite: bool = False,
     saved: Storage = SAVED,
     presets: Storage | None = PRESETS,
+    uncontrollables: Uncontrollables | None = None,
 ) -> ScenarioInfo:
-    """Saves the interventions (the deleted ones left out) as `name`. An
-    existing scenario of the same id is replaced only with `overwrite`."""
+    """Saves the interventions (the deleted ones left out) as `name`, with
+    the uncontrollables' values. An existing scenario of the same id is
+    replaced only with `overwrite`."""
     name = name.strip()
     scenario = scenario_id(name)
     if not scenario:
@@ -136,8 +144,12 @@ def save_scenario(
         "saved_at": saved_at,
         "interventions": [i.model_dump() for i in kept],
     }
+    if uncontrollables:
+        payload["uncontrollables"] = dict(uncontrollables)
     saved.write(_name(scenario), json.dumps(payload, indent=1).encode())
-    return ScenarioInfo(id=scenario, name=name, saved_at=saved_at, interventions=len(kept))
+    return ScenarioInfo(
+        id=scenario, name=name, saved_at=saved_at, interventions=len(kept), uncontrollables=uncontrollables or {}
+    )
 
 
 def delete_scenario(scenario: str, saved: Storage = SAVED, presets: Storage | None = PRESETS) -> None:

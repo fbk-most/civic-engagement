@@ -42,6 +42,7 @@ def create_app(pack: DomainPack, title: str = "Civic Digital Twin PoC", frontend
         routes_scenarios,
         routes_scene,
         routes_site_assets,
+        routes_uncontrollables,
     )
     from civic_engagement.config import SITE, auth_mechanism
     from civic_engagement.store.state import store
@@ -77,6 +78,7 @@ def create_app(pack: DomainPack, title: str = "Civic Digital Twin PoC", frontend
         routes_cards.router,
         routes_interventions.router,
         routes_scenarios.router,
+        routes_uncontrollables.router,
         *pack.routers(),
     ):
         app.include_router(router, prefix="/api", dependencies=[Depends(access)])

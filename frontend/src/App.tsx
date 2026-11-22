@@ -23,6 +23,8 @@ import {
   fetchSiteAssets,
   fetchTerrainGrid,
   fetchThermalField,
+  fetchUncontrollables,
+  setUncontrollables,
   updateIntervention,
 } from "./api/client";
 import type {
@@ -33,6 +35,8 @@ import type {
   PlacementType,
   SceneResponse,
   TerrainGrid,
+  Uncontrollables,
+  UncontrollableSpec,
 } from "./api/types";
 import { CardPalette } from "./ui/CardPalette";
 import { ParamForm } from "./ui/ParamForm";
@@ -40,6 +44,7 @@ import { TimeSlider } from "./ui/TimeSlider";
 import { IndicatorsView } from "./ui/IndicatorsView";
 import { activePack } from "./pack";
 import { KpiPanel } from "./ui/KpiPanel";
+import { UncontrollablesPanel } from "./ui/UncontrollablesPanel";
 import { InterventionsToggle } from "./ui/InterventionsToggle";
 import { InterventionList } from "./ui/InterventionList";
 import { TreeIdentityCard } from "./ui/TreeIdentityCard";
@@ -149,6 +154,8 @@ function App() {
 
   const [status, setStatus] = useState<Status>("loading");
   const [cards, setCards] = useState<CardSpec[]>([]);
+  // The pack's uncontrollables: none for a pack without, and no panel.
+  const [uncontrollableSpecs, setUncontrollableSpecs] = useState<UncontrollableSpec[]>([]);
   const [indicatorDescriptors, setIndicatorDescriptors] = useState<IndicatorDescriptors | null>(null);
   cardsRef.current = cards;
   const [selectedCard, setSelectedCard] = useState<CardSpec | null>(null);
@@ -382,6 +389,7 @@ function App() {
       map.on("mouseout", () => setThermalReading(null));
 
       fetchCards().then(setCards).catch(console.error);
+      fetchUncontrollables().then(setUncontrollableSpecs).catch(console.error);
       fetchIndicatorDescriptors().then(setIndicatorDescriptors).catch(console.error);
     });
   }, [showNotice]);
@@ -763,6 +771,26 @@ function App() {
     setSelectedTreeElementId(null);
   }
 
+  function handleUncontrollablesChange(values: Uncontrollables) {
+    timeline.markInput("uncontrollables");
+    timeline.begin("scene");
+    // Numbered like a year change, so a year fetch still on its way doesn't
+    // bring back the values just replaced.
+    const requestSeq = ++timeRequestSeqRef.current;
+    setUncontrollables(values, t)
+      .then((newScene) => {
+        if (requestSeq !== timeRequestSeqRef.current) {
+          timeline.end("scene");
+          return;
+        }
+        applyScene(newScene);
+      })
+      .catch((err) => {
+        console.error(err);
+        timeline.end("scene");
+      });
+  }
+
   function handleDeleteIntervention(id: string) {
     timeline.markInput("card removed");
     timeline.begin("scene");
@@ -967,6 +995,15 @@ function App() {
           )}
           {view !== "indicators" && (
             <div className="right-rail">
+              {scene && uncontrollableSpecs.length > 0 && (
+                <UncontrollablesPanel
+                  specs={uncontrollableSpecs}
+                  values={scene.uncontrollables}
+                  canEdit={canEdit}
+                  onChange={handleUncontrollablesChange}
+                  initiallyCollapsed={initialDebugParams.panelsClosed}
+                />
+              )}
               {scene && indicatorDescriptors && <KpiPanel
                   descriptors={indicatorDescriptors}
                   indicators={scene.indicators}
@@ -1032,6 +1069,8 @@ function App() {
             <IndicatorsView
               descriptors={indicatorDescriptors}
               interventions={scene.interventions}
+              uncontrollableSpecs={uncontrollableSpecs}
+              uncontrollables={scene.uncontrollables}
               t={t}
               onTimeChange={handleTimeChange}
             />
