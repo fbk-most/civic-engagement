@@ -96,6 +96,13 @@ refuses what it wants on top, a card or its new parameters
 (`DomainPack.refused_intervention`, a reason in Italian and English). What
 the team is refused comes back as a 409 or 422 whose `detail` is
 `{"message": ..., "message_en": ...}`, shown in the interface's language.
+For a card on buildings, a pack can say which buildings it can take and
+what each is (`DomainPack.building_choices`, served at
+`GET /api/cards/{card_type}/buildings`): while picking, the map colours
+those the card can take, a hover tells what a building is, and a click
+on another one is refused (by the core too). A pack can also say what a
+placed card took or does (`DomainPack.intervention_summary`, Italian and
+English), shown with the card in the list, the form and the info card.
 
 A pack can declare **uncontrollables**: what a scenario assumes but nobody
 at the table decides, such as the climate or a market

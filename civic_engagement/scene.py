@@ -163,6 +163,7 @@ def current_scene(t: int = 0, team: str = DEFAULT_TEAM) -> SceneResponse:
         indicators=pack.indicator_values(scenario, t),
         baseline_indicators=pack.indicator_values(evaluation([], uncontrollables), t),
         interventions=interventions,
+        summaries={iv.id: summary for iv in interventions if (summary := pack.intervention_summary(iv))},
         uncontrollables=uncontrollables,
         revision=revision,
     )

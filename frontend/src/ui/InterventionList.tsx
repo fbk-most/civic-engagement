@@ -7,12 +7,21 @@ import { categoryColor } from "./categoryColors";
 
 interface Props {
   interventions: Intervention[];
+  /** The pack's words on what each card took or does, by intervention id. */
+  summaries?: Record<string, [string, string]>;
   cards: CardSpec[];
   onSelect: (id: string) => void;
   initiallyCollapsed?: boolean;
 }
 
-function InterventionRow({ iv, cards, onSelect }: { iv: Intervention; cards: CardSpec[]; onSelect: (id: string) => void }) {
+interface RowProps {
+  iv: Intervention;
+  cards: CardSpec[];
+  summary?: [string, string];
+  onSelect: (id: string) => void;
+}
+
+function InterventionRow({ iv, cards, summary, onSelect }: RowProps) {
   const card = cards.find((c) => c.card_type === iv.card_type);
   const color = card ? categoryColor(card.category) : "#999";
   return (
@@ -25,13 +34,14 @@ function InterventionRow({ iv, cards, onSelect }: { iv: Intervention; cards: Car
             <span className="intervention-card__year"> · {yearLabel(iv.planted_year)}</span>
           </span>
           <span className="intervention-card__summary">{summarizeParams(card, iv.params)}</span>
+          {summary && <span className="intervention-card__summary">{tr(...summary)}</span>}
         </span>
       </button>
     </div>
   );
 }
 
-export function InterventionList({ interventions, cards, onSelect, initiallyCollapsed = false }: Props) {
+export function InterventionList({ interventions, summaries = {}, cards, onSelect, initiallyCollapsed = false }: Props) {
   const [collapsed, setCollapsed] = useState(initiallyCollapsed);
   // The policies (cards without a place) apart, after those on the map.
   const isPolicy = (iv: Intervention) => cards.find((c) => c.card_type === iv.card_type)?.placement_type === "none";
@@ -52,11 +62,11 @@ export function InterventionList({ interventions, cards, onSelect, initiallyColl
             </p>
           )}
           {placed.map((iv) => (
-            <InterventionRow key={iv.id} iv={iv} cards={cards} onSelect={onSelect} />
+            <InterventionRow key={iv.id} iv={iv} cards={cards} summary={summaries[iv.id]} onSelect={onSelect} />
           ))}
           {policies.length > 0 && <h4 className="intervention-list__group">{tr("Politiche", "Policies")}</h4>}
           {policies.map((iv) => (
-            <InterventionRow key={iv.id} iv={iv} cards={cards} onSelect={onSelect} />
+            <InterventionRow key={iv.id} iv={iv} cards={cards} summary={summaries[iv.id]} onSelect={onSelect} />
           ))}
         </>
       )}

@@ -118,6 +118,13 @@ class ToyPack(DomainPack):
             return "Un murale non ha una quota.", "A mural has no rate."
         return None
 
+    def intervention_summary(self, intervention) -> tuple[str, str] | None:
+        # What a mural took: its buildings.
+        if intervention.card_type != "mural":
+            return None
+        n = len(intervention.element_ids or [])
+        return f"Edifici: {n}", f"Buildings: {n}"
+
     def assemble(self, evaluation: Evaluated, t: int) -> tuple[list[DiscreteElement], list[CoverPolygon]]:
         return [*evaluation.baseline.elements, *evaluation.benches], list(evaluation.baseline.covers)
 

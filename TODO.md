@@ -95,6 +95,11 @@ see `docs/plan-terrain-forest-rendering.md` in `rural-digital-twin`).
 
 ## Performance
 
+- **Buildings a card can take, shaded while picking** (`App.tsx`,
+  `setPickable`): their footprints are recomputed at every scene, each step
+  of the year slider included, with a search of `scene.elements` per
+  building. A lookup by building id, or memoising on the choices and the
+  buildings only, would spare it on sites with hundreds of buildings.
 - *Waiting for a measurement* — **"Measure" on the Nvidia machine**, to know
   whether performance matters only on laptops.
 - **"Measure" for sites without 3D life**: one row per moment instead of the

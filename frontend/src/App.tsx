@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { MapLayerMouseEvent, MapLibreMap } from "maplibre-gl";
+import { Popup, type MapLayerMouseEvent, type MapLibreMap, type MapMouseEvent } from "maplibre-gl";
 import type { TerraDraw } from "terra-draw";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./App.css";
 import { createMap } from "./map/mapSetup";
-import { renderScene, setCameraView, setHighlight } from "./map/layers";
+import { renderScene, setCameraView, setHighlight, setPickable } from "./map/layers";
 import { mapToView, readMapFraming, sameFraming, sameView, viewToMap, type MapFraming } from "./map/viewSync";
 import { frustumWedge, type CameraPose } from "./three/camera";
 import { anchorFromPolygon, toLocal } from "./three/geo";
@@ -15,6 +15,7 @@ import {
   createIntervention,
   HttpError,
   deleteIntervention,
+  fetchBuildingChoices,
   fetchCards,
   fetchDeferredIndicators,
   fetchIndicatorDescriptors,
@@ -28,6 +29,7 @@ import {
   updateIntervention,
 } from "./api/client";
 import type {
+  BuildingChoice,
   CardSpec,
   DeferredIndicators,
   IndicatorDescriptors,
@@ -109,6 +111,12 @@ function buildingFootprints(scene: SceneResponse, ids: string[]): GeoJSON.MultiP
   return { type: "MultiPolygon", coordinates };
 }
 
+/** Why a building can't be picked for a card. */
+function notPickableMessage(card: CardSpec, choice: BuildingChoice | undefined): string {
+  const what = choice?.label ? tr(choice.label, choice.label_en || choice.label) : tr("Questo edificio", "This building");
+  return tr(`${what}: non va per «${card.label}».`, `${what}: not for “${card.label_en}”.`);
+}
+
 function outsideMessage(): string {
   return tr("Le carte vanno posizionate dentro il confine del sito.", "Cards go within the site’s boundary.");
 }
@@ -178,6 +186,11 @@ function App() {
   const [pendingGeometry, setPendingGeometry] = useState<GeoJSON.Geometry | null>(null);
   // A card on buildings: the buildings picked so far on the map (by id).
   const [pickedBuildings, setPickedBuildings] = useState<string[]>([]);
+  // ...and the buildings it can take, with what each is (the pack's; null:
+  // any, nothing to say). The ref is for the map's handlers.
+  const [buildingChoices, setBuildingChoices] = useState<Record<string, BuildingChoice> | null>(null);
+  const buildingChoicesRef = useRef<Record<string, BuildingChoice> | null>(null);
+  buildingChoicesRef.current = buildingChoices;
   // A short message over the map (a card drawn outside the site), gone by itself.
   const [notice, setNotice] = useState<string | null>(null);
   // The backend can't save changes any more (see the revision check below).
@@ -236,9 +249,16 @@ function App() {
   // The 3D field of view drawn on the map after leaving an eye-level view;
   // renderScene clears it, so it's redrawn after every render.
   const mapWedgeRef = useRef<Parameters<typeof setCameraView>[1]>(null);
+  // Likewise the buildings a card can take, shaded while picking, and the
+  // highlight (the buildings picked, or the selected card's place): a render
+  // without a new scene (the "cards"/"simulated" switch) would lose them.
+  const pickableRef = useRef<GeoJSON.MultiPolygon | null>(null);
+  const highlightRef = useRef<GeoJSON.Geometry | null>(null);
   function renderMap(map: MapLibreMap, newScene: SceneResponse, mode: InterventionDisplayMode) {
     renderScene(map, newScene, mode, cardsRef.current);
     setCameraView(map, mapWedgeRef.current);
+    setPickable(map, pickableRef.current);
+    setHighlight(map, highlightRef.current);
   }
   function applyScene(newScene: SceneResponse) {
     sceneRef.current = newScene;
@@ -333,8 +353,43 @@ function App() {
           showNotice(outsideMessage());
           return;
         }
+        const choice = buildingChoicesRef.current?.[id];
+        if (buildingChoicesRef.current && !choice?.pickable) {
+          showNotice(notPickableMessage(card, choice));
+          return;
+        }
         setPickedBuildings((picked) => (picked.includes(id) ? picked.filter((p) => p !== id) : [...picked, id]));
       });
+
+      // While picking, what the building under the pointer is (the pack's
+      // words), and whether the card can take it.
+      const hover = new Popup({ closeButton: false, closeOnClick: false, className: "building-hover", offset: 12 });
+      map.on("mousemove", (e: MapMouseEvent) => {
+        const card = selectedCardRef.current;
+        const choices = buildingChoicesRef.current;
+        const hit =
+          card?.placement_type === "building" && choices
+            ? map
+                .queryRenderedFeatures(e.point)
+                .find((f) => f.properties?.elementType === "building" && f.properties?.source === "baseline")
+            : undefined;
+        const choice = hit ? choices?.[hit.properties?.elementId as string] : undefined;
+        if (!card || !choice?.label) {
+          hover.remove();
+          return;
+        }
+        const text = tr(choice.label, choice.label_en || choice.label);
+        const content = document.createElement("div");
+        content.textContent = text;
+        if (!choice.pickable) {
+          const note = document.createElement("div");
+          note.className = "building-hover__note";
+          note.textContent = tr("Non per questa carta", "Not for this card");
+          content.appendChild(note);
+        }
+        hover.setLngLat(e.lngLat).setDOMContent(content).addTo(map);
+      });
+      map.on("mouseout", () => hover.remove());
 
       // Makes every tree (baseline or placed) clickable: baseline trees open
       // a read-only identity card, placed trees jump to their existing
@@ -437,6 +492,15 @@ function App() {
     const draw = drawRef.current;
     if (!draw) return;
     setPickedBuildings([]);
+    setBuildingChoices(null);
+    let stale = false;
+    if (selectedCard?.placement_type === "building") {
+      fetchBuildingChoices(selectedCard.card_type)
+        .then((choices) => {
+          if (!stale) setBuildingChoices(choices.buildings);
+        })
+        .catch(console.error);
+    }
     // Only the drawn placements draw: a card on buildings picks them, a
     // policy has no place.
     const mode = selectedCard ? modeForPlacementRef.current[selectedCard.placement_type] : undefined;
@@ -446,7 +510,20 @@ function App() {
     } else {
       draw.stop();
     }
+    return () => {
+      stale = true;
+    };
   }, [selectedCard]);
+
+  // While picking, the buildings the card can take.
+  useEffect(() => {
+    if (!mapRef.current || !scene) return;
+    const pickable = buildingChoices
+      ? Object.entries(buildingChoices).filter(([, c]) => c.pickable).map(([id]) => id)
+      : [];
+    pickableRef.current = pickable.length > 0 ? buildingFootprints(scene, pickable) : null;
+    setPickable(mapRef.current, pickableRef.current);
+  }, [buildingChoices, scene]);
 
   useEffect(() => {
     interventionModeRef.current = interventionMode;
@@ -498,12 +575,9 @@ function App() {
     // `scene` as the readiness signal avoids calling addSource too early.
     if (!mapRef.current || !scene) return;
     // The buildings being picked, or the selected card's place.
-    if (pickedBuildings.length > 0) {
-      setHighlight(mapRef.current, buildingFootprints(scene, pickedBuildings));
-      return;
-    }
     const iv = scene.interventions.find((i) => i.id === selectedInterventionId) ?? null;
-    setHighlight(mapRef.current, iv?.geometry ?? null);
+    highlightRef.current = pickedBuildings.length > 0 ? buildingFootprints(scene, pickedBuildings) : (iv?.geometry ?? null);
+    setHighlight(mapRef.current, highlightRef.current);
   }, [selectedInterventionId, scene, pickedBuildings]);
 
   // The felt-temperature field for the year and day shown, with the
@@ -1038,6 +1112,7 @@ function App() {
                   )}
                   <InterventionList
                     interventions={scene?.interventions ?? []}
+                    summaries={scene?.summaries ?? {}}
                     cards={cards}
                     onSelect={handleSelectIntervention}
                     initiallyCollapsed={initialDebugParams.panelsClosed}
@@ -1129,6 +1204,7 @@ function App() {
                     initialValues={selectedIntervention.params}
                     plantedYear={selectedIntervention.planted_year}
                     authors={selectedIntervention}
+                    summary={scene?.summaries?.[selectedIntervention.id]}
                     submitLabel={tr("Salva", "Save")}
                     onSubmit={(params) => handleUpdateIntervention(selectedIntervention.id, params)}
                     onCancel={() => setSelectedInterventionId(null)}
@@ -1138,6 +1214,7 @@ function App() {
                   <InterventionInfoCard
                     intervention={selectedIntervention}
                     card={selectedInterventionCard}
+                    summary={scene?.summaries?.[selectedIntervention.id]}
                     onClose={() => setSelectedInterventionId(null)}
                   />
                 ) : selectedTreeElement ? (
@@ -1151,6 +1228,7 @@ function App() {
                 <InterventionInfoCard
                   intervention={selectedIntervention}
                   card={selectedInterventionCard}
+                  summary={scene?.summaries?.[selectedIntervention.id]}
                   onEdit={canEdit ? () => handleEditInterventionIn2D(selectedIntervention.id) : undefined}
                   onClose={() => setSelectedInterventionId(null)}
                 />

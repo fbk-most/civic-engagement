@@ -140,6 +140,9 @@ export interface SceneResponse extends BaselineScene {
   indicators: IndicatorValues;
   baseline_indicators: IndicatorValues;
   interventions: Intervention[];
+  /** What each placed card took or does, [Italian, English], by
+   * intervention id: the pack's, for the cards it says something of. */
+  summaries?: Record<string, [string, string]>;
   /** Every uncontrollable's value, the scene's and its baseline's; empty
    * with a pack that declares none. */
   uncontrollables: Uncontrollables;
@@ -185,6 +188,19 @@ export interface ParamSpec {
   options: string[] | null;
   min: number | null;
   max: number | null;
+}
+
+/** A building, as a card on buildings sees it (the pack's). */
+export interface BuildingChoice {
+  pickable: boolean;
+  /** What the building is, shown on hovering it while picking. */
+  label: string;
+  label_en: string;
+}
+
+export interface BuildingChoices {
+  /** By building id; null if the pack says nothing (any building of the site). */
+  buildings: Record<string, BuildingChoice> | null;
 }
 
 export interface CardSpec {

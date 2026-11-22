@@ -1,4 +1,5 @@
 import type {
+  BuildingChoices,
   AuthInfo,
   BaselineScene,
   CardSpec,
@@ -100,6 +101,11 @@ export function fetchBaseline(): Promise<BaselineScene> {
 
 export function fetchCards(): Promise<CardSpec[]> {
   return getJson("/api/cards");
+}
+
+/** For a card on buildings: the buildings it can take, and what each is. */
+export function fetchBuildingChoices(cardType: string): Promise<BuildingChoices> {
+  return getJson(`/api/cards/${encodeURIComponent(cardType)}/buildings`);
 }
 
 /** The pack's uncontrollables; none for a pack that declares none. */

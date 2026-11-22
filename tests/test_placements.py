@@ -125,3 +125,33 @@ def test_a_scenario_with_a_single_card_twice_is_listed_not_loaded(client, tmp_pa
     assert "twice" in [s["id"] for s in client.get("/api/scenarios").json()]
     response = client.post("/api/scenarios/twice/load")
     assert response.status_code == 422 and "seating_policy" in response.json()["detail"]
+
+
+def test_the_buildings_a_card_can_take(client, monkeypatch):
+    from civic_engagement.models.schema import BuildingChoice
+
+    (building,) = [e for e in load_baseline().elements if e.type == "building"]
+    # By default, the pack says nothing: any building.
+    assert client.get("/api/cards/mural/buildings").json() == {"buildings": None}
+    assert client.get("/api/cards/no_such_card/buildings").status_code == 404
+    assert client.get("/api/cards/seating_policy/buildings").status_code == 422
+
+    town_hall = BuildingChoice(pickable=False, label="Il municipio", label_en="The town hall")
+    monkeypatch.setattr(type(active_pack()), "building_choices", lambda self, card_type: {building.id: town_hall})
+    assert client.get("/api/cards/mural/buildings").json()["buildings"][building.id]["label_en"] == "The town hall"
+    response = client.post("/api/interventions", json={"card_type": "mural", "element_ids": [building.id], "params": {}})
+    assert response.status_code == 422
+    assert response.json()["detail"]["message_en"] == "“Mural” can’t go on: The town hall."
+
+    picked = BuildingChoice(pickable=True, label="Il municipio")
+    monkeypatch.setattr(type(active_pack()), "building_choices", lambda self, card_type: {building.id: picked})
+    assert client.post("/api/interventions", json={"card_type": "mural", "element_ids": [building.id], "params": {}}).status_code == 200
+
+
+def test_the_scene_says_what_each_card_took(client):
+    (building,) = [e for e in load_baseline().elements if e.type == "building"]
+    scene = client.post("/api/interventions", json={"card_type": "mural", "element_ids": [building.id], "params": {}}).json()
+    client.post("/api/interventions", json={"card_type": "seating_policy", "params": {"rate": 1}})
+    scene = client.get("/api/scene").json()
+    mural = next(iv for iv in scene["interventions"] if iv["card_type"] == "mural")
+    assert scene["summaries"] == {mural["id"]: ["Edifici: 1", "Buildings: 1"]}

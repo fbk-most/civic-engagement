@@ -58,6 +58,16 @@ def _placed(data: InterventionCreate) -> InterventionCreate:
                 f"«{card.label}» va posizionata su uno o più edifici del sito.",
                 f"“{card.label_en}” goes on one or more of the site’s buildings.",
             )
+        # The buildings the pack says the card can't take (the frontend
+        # lets none be picked).
+        choices = active_pack().building_choices(card.card_type)
+        if choices is not None:
+            refused = [choices.get(i) for i in ids if not (i in choices and choices[i].pickable)]
+            if refused:
+                named = [c for c in refused if c is not None and c.label]
+                it = "; ".join(c.label for c in named) or "uno degli edifici scelti"
+                en = "; ".join(c.label_en or c.label for c in named) or "one of the buildings picked"
+                raise _refusal(422, f"«{card.label}» non può andare su: {it}.", f"“{card.label_en}” can’t go on: {en}.")
         data = data.model_copy(update={"geometry": footprints([buildings[i].geometry for i in ids]), "element_ids": ids})
     elif data.geometry is None:
         raise HTTPException(status_code=422, detail=f"A {card.placement_type} card needs a geometry")

@@ -1743,6 +1743,24 @@
   color: #666;
 }
 
+.param-form__summary {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: #444;
+}
+
+/* While picking buildings: what the one under the pointer is. */
+.building-hover .maplibregl-popup-content {
+  padding: 4px 8px;
+  font-size: 12px;
+  max-width: 260px;
+}
+
+.building-hover__note {
+  margin-top: 2px;
+  color: #a33;
+}
+
 /* The PIN screen (ui/PinScreen.tsx), in front of the app with teams. */
 .pin-screen {
   position: fixed;

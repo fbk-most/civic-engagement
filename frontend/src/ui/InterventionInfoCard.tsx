@@ -8,6 +8,8 @@ import { categoryColor } from "./categoryColors";
 interface Props {
   intervention: Intervention;
   card: CardSpec | null;
+  /** The pack's words on what the card took or does ([Italian, English]). */
+  summary?: [string, string];
   /** Absent for a viewer, who can't change it. */
   onEdit?: () => void;
   onClose: () => void;
@@ -16,7 +18,7 @@ interface Props {
 /** Read-only details of a card: picked in the 3D view, where editing stays
  * on the 2D map, so this only offers the way there; or a viewer's, who
  * only looks. */
-export function InterventionInfoCard({ intervention, card, onEdit, onClose }: Props) {
+export function InterventionInfoCard({ intervention, card, summary, onEdit, onClose }: Props) {
   const color = card ? categoryColor(card.category) : "#999";
   return (
     <div className="param-form intervention-info" style={{ "--card-color": color } as CSSProperties}>
@@ -28,6 +30,7 @@ export function InterventionInfoCard({ intervention, card, onEdit, onClose }: Pr
         {tr("In vigore da: ", "In effect from: ")}<strong>{yearLabel(intervention.planted_year)}</strong>
       </p>
       <p className="intervention-info__summary">{summarizeParams(card ?? undefined, intervention.params)}</p>
+      {summary && <p className="param-form__summary">{tr(...summary)}</p>}
       {authorsLabel(intervention) && <p className="param-form__authors">{authorsLabel(intervention)}</p>}
       <div className="param-form__actions">
         {onEdit && (

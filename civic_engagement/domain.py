@@ -23,6 +23,7 @@ from fastapi import APIRouter
 from civic_engagement.config import SiteConfig
 from civic_engagement.models.schema import (
     BaselineScene,
+    BuildingChoice,
     CardSpec,
     CoverPolygon,
     DiscreteElement,
@@ -96,6 +97,18 @@ class DomainPack(ABC):
         English, shown to the team as is; or None. The core has already
         checked what it can: the card type, the boundary, the buildings
         picked."""
+        return None
+
+    def building_choices(self, card_type: str) -> dict[str, BuildingChoice] | None:
+        """For a card on buildings: which of the site's buildings it can
+        take, and what each is (shown on hovering it while picking), by
+        building id; or None, any building of the site, with nothing to
+        say. The core refuses a building the card can't take."""
+        return None
+
+    def intervention_summary(self, intervention: Intervention) -> tuple[str, str] | None:
+        """What a placed card took or does, in Italian and English, shown
+        with it (say, the dwellings a card on buildings took); or None."""
         return None
 
     def deferred_values(self, interventions: list[Intervention], t: int) -> IndicatorValues:

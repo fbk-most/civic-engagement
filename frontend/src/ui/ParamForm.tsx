@@ -15,6 +15,8 @@ interface Props {
   plantedYear?: number;
   /** An existing card's authors, with teams. */
   authors?: { created_by?: string | null; updated_by?: string | null };
+  /** The pack's words on what the card took or does ([Italian, English]). */
+  summary?: [string, string];
   onSubmit: (params: Record<string, unknown>) => void;
   onCancel: () => void;
   onDelete?: () => void;
@@ -26,6 +28,7 @@ export function ParamForm({
   submitLabel = tr("Posiziona", "Place"),
   plantedYear,
   authors,
+  summary,
   onSubmit,
   onCancel,
   onDelete,
@@ -50,6 +53,7 @@ export function ParamForm({
         </p>
       )}
       {authors && authorsLabel(authors) && <p className="param-form__authors">{authorsLabel(authors)}</p>}
+      {summary && <p className="param-form__summary">{tr(...summary)}</p>}
       {card.params.map((param) => (
         <label key={param.key} className="param-form__field">
           {paramLabel(param)}

@@ -92,6 +92,21 @@ class ParamSpec(BaseModel):
     max: float | None = None
 
 
+class BuildingChoice(BaseModel):
+    """A building, as a card on buildings sees it (DomainPack.building_choices)."""
+
+    pickable: bool = Field(description="Whether the card can take it")
+    label: str = Field(default="", description="What the building is, shown on hovering it while picking")
+    label_en: str = ""
+
+
+class BuildingChoices(BaseModel):
+    buildings: dict[str, BuildingChoice] | None = Field(
+        description="The site's buildings by id, as the card sees them; None if the pack says nothing "
+        "(every building of the site can be picked)"
+    )
+
+
 class UncontrollableValue(BaseModel):
     id: str
     label: str
@@ -294,6 +309,11 @@ class SceneResponse(BaseModel):
     interventions: list[Intervention] = Field(
         description="Active (non-deleted) interventions, so the frontend can render one card per "
         "placed intervention without a second round trip"
+    )
+    summaries: dict[str, tuple[str, str]] = Field(
+        default_factory=dict,
+        description="What each placed card took or does, in Italian and English, by intervention id: "
+        "the pack's (DomainPack.intervention_summary), for the cards it says something of",
     )
     uncontrollables: Uncontrollables = Field(
         default_factory=dict,

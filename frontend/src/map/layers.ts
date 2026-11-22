@@ -219,6 +219,7 @@ export function renderScene(
     ]));
   }
   setOrCreateSource(map, "highlight", featureCollection([]));
+  setOrCreateSource(map, "pickable", featureCollection([]));
   setOrCreateSource(map, "camera", featureCollection([]));
 
   const markers: GeoJSON.Feature[] = [];
@@ -293,6 +294,14 @@ export function renderScene(
 export function setHighlight(map: MapLibreMap, geometry: GeoJSON.Geometry | null): void {
   setOrCreateSource(map, "highlight", featureCollection(
     geometry ? [{ type: "Feature", geometry, properties: {} }] : []
+  ));
+}
+
+/** Shows the buildings a card on buildings can take (their footprints), or
+ * none. */
+export function setPickable(map: MapLibreMap, geometry: GeoJSON.MultiPolygon | null): void {
+  setOrCreateSource(map, "pickable", featureCollection(
+    geometry && geometry.coordinates.length > 0 ? [{ type: "Feature", geometry, properties: {} }] : []
   ));
 }
 
@@ -478,6 +487,20 @@ function ensureLayers(map: MapLibreMap, latDeg: number, showBoundary: boolean, l
     });
   }
 
+  // The buildings a card on buildings can take, while picking: under the
+  // highlight of those picked.
+  map.addLayer({
+    id: "pickable-fill",
+    type: "fill",
+    source: "pickable",
+    paint: { "fill-color": "#2a9d8f", "fill-opacity": 0.35 },
+  });
+  map.addLayer({
+    id: "pickable-line",
+    type: "line",
+    source: "pickable",
+    paint: { "line-color": "#1d6f65", "line-width": 1.5 },
+  });
   map.addLayer({
     id: "highlight-fill",
     type: "fill",
