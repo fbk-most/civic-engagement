@@ -7,7 +7,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from civic_engagement import config, scene
+from civic_engagement import config, domain, scene
 from civic_engagement.app import create_app
 from civic_engagement.domain import active_pack
 from civic_engagement.models.schema import Intervention
@@ -15,6 +15,7 @@ from civic_engagement.store import state, storage
 from civic_engagement.store.scenarios import read_scenario, save_scenario
 from civic_engagement.store.state import SessionStore
 from civic_engagement.store.storage import LocalStorage
+from tests.toy_pack import ToyPack
 
 BENCH = {"card_type": "add_bench", "geometry": {"type": "Point", "coordinates": [11.002, 46.001]}, "params": {}}
 
@@ -33,6 +34,17 @@ def test_the_pack_settles_and_refuses():
     assert pack.refused({"weather": "rainy"}) is None
     assert "wind" in pack.refused({"wind": "strong"})
     assert "snowy" in pack.refused({"weather": "snowy"})
+
+
+def test_a_pack_that_forgets_them_in_evaluate_is_refused(monkeypatch):
+    class Forgetful(ToyPack):
+        def evaluate(self, baseline, interventions):
+            return super().evaluate(baseline, interventions)
+
+    monkeypatch.setattr(domain, "_pack", None)
+    with pytest.raises(TypeError, match="uncontrollables"):
+        domain.register(Forgetful())
+    domain.register(ToyPack())  # with the keyword: accepted
 
 
 def test_the_session_keeps_them(tmp_path):
@@ -135,7 +147,7 @@ def test_a_pack_without_sees_nothing_of_them(client, monkeypatch, tmp_path):
 
     monkeypatch.setattr(pack, "uncontrollables", [])
     monkeypatch.setattr(pack, "evaluate", evaluate)
-    scene._as_is.cache_clear()
+    scene._as_is_under.cache_clear()
     scene._scenario_cache.clear()
     try:
         assert client.get("/api/uncontrollables").json() == []
@@ -147,5 +159,5 @@ def test_a_pack_without_sees_nothing_of_them(client, monkeypatch, tmp_path):
         saved = json.loads((tmp_path / "tests/toy_pack/data/scenarios/urban.json").read_text())
         assert "uncontrollables" not in saved
     finally:
-        scene._as_is.cache_clear()
+        scene._as_is_under.cache_clear()
         scene._scenario_cache.clear()

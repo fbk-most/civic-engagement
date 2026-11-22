@@ -1,8 +1,9 @@
 """A toy domain pack, for the core's tests: a square of about 300 m with a
 building, a lawn and a paving, one card (a bench), an indicator of each
 kind, a deferred one included, and an uncontrollable (the weather, which
-changes how many sit on the benches and on the building's steps). Not an example, nor an app: just enough to
-run the core without a real pack (see civic_engagement/domain.py)."""
+changes how many sit on the benches and on the building's steps). Not an
+example, nor an app: just enough to run the core without a real pack (see
+civic_engagement/domain.py)."""
 
 from civic_engagement.config import SiteConfig
 from civic_engagement.domain import DomainPack

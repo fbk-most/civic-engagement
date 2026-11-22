@@ -5,8 +5,10 @@ import { uncontrollableLabel, uncontrollableValueLabel } from "../i18n/labels";
 
 interface Props {
   specs: UncontrollableSpec[];
-  /** The scene's: every one's value. */
+  /** The scene's: every one's value (or those just picked, while busy). */
   values: Uncontrollables;
+  /** The scene under the values just picked is on its way: no change meanwhile. */
+  busy?: boolean;
   /** Viewers see the values, without changing them. */
   canEdit: boolean;
   onChange: (values: Uncontrollables) => void;
@@ -18,7 +20,7 @@ interface Props {
  * situation the indicators compare with is computed under the same values,
  * so that the differences are the cards' alone. The values are the team's,
  * like its cards: a change shows in every window of the team. */
-export function UncontrollablesPanel({ specs, values, canEdit, onChange, initiallyCollapsed = false }: Props) {
+export function UncontrollablesPanel({ specs, values, busy = false, canEdit, onChange, initiallyCollapsed = false }: Props) {
   const [collapsed, setCollapsed] = useState(initiallyCollapsed);
   return (
     <div className="uncontrollables-panel">
@@ -34,6 +36,7 @@ export function UncontrollablesPanel({ specs, values, canEdit, onChange, initial
               {canEdit ? (
                 <select
                   value={values[spec.id] ?? spec.default}
+                  disabled={busy}
                   onChange={(e) => onChange({ ...values, [spec.id]: e.target.value })}
                 >
                   {spec.values.map((v) => (
@@ -47,6 +50,7 @@ export function UncontrollablesPanel({ specs, values, canEdit, onChange, initial
               )}
             </label>
           ))}
+          {busy && <p className="uncontrollables-panel__busy">{tr("Calcolo in corso…", "Computing…")}</p>}
           <p className="uncontrollables-panel__note">
             {tr(
               "Non dipendono dalle carte; anche la situazione attuale è calcolata con queste condizioni.",

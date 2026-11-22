@@ -86,9 +86,10 @@ through the API (`GET /api/scenarios`, `POST /api/scenarios`,
 replaces is kept as `data/<site>/session.<timestamp>.json`.
 
 A pack can declare **uncontrollables**: what a scenario assumes but nobody
-at the table decides, such as the climate or a market (`DomainPack.uncontrollables`,
-each with its values and a default; `GET /api/uncontrollables`). The
-session holds one value of each, chosen in the "External conditions" panel
+at the table decides, such as the climate or a market
+(`DomainPack.uncontrollables`, each with its values and a default;
+`GET /api/uncontrollables`). The session holds one value of each, chosen
+in the "External conditions" panel
 (`PUT /api/session/uncontrollables`), and a saved scenario keeps them; a
 scenario saved without them loads at the defaults, and a clear keeps them.
 The current situation the indicators compare with is evaluated under the

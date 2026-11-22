@@ -156,6 +156,9 @@ function App() {
   const [cards, setCards] = useState<CardSpec[]>([]);
   // The pack's uncontrollables: none for a pack without, and no panel.
   const [uncontrollableSpecs, setUncontrollableSpecs] = useState<UncontrollableSpec[]>([]);
+  // The values just picked, shown until the scene under them arrives (an
+  // evaluation can take seconds); null when none is on its way.
+  const [pendingUncontrollables, setPendingUncontrollables] = useState<Uncontrollables | null>(null);
   const [indicatorDescriptors, setIndicatorDescriptors] = useState<IndicatorDescriptors | null>(null);
   cardsRef.current = cards;
   const [selectedCard, setSelectedCard] = useState<CardSpec | null>(null);
@@ -777,8 +780,10 @@ function App() {
     // Numbered like a year change, so a year fetch still on its way doesn't
     // bring back the values just replaced.
     const requestSeq = ++timeRequestSeqRef.current;
+    setPendingUncontrollables(values);
     setUncontrollables(values, t)
       .then((newScene) => {
+        setPendingUncontrollables(null);
         if (requestSeq !== timeRequestSeqRef.current) {
           timeline.end("scene");
           return;
@@ -787,7 +792,9 @@ function App() {
       })
       .catch((err) => {
         console.error(err);
+        setPendingUncontrollables(null);
         timeline.end("scene");
+        showNotice(tr("Condizioni esterne non cambiate: riprova.", "External conditions not changed: try again."));
       });
   }
 
@@ -998,7 +1005,8 @@ function App() {
               {scene && uncontrollableSpecs.length > 0 && (
                 <UncontrollablesPanel
                   specs={uncontrollableSpecs}
-                  values={scene.uncontrollables}
+                  values={pendingUncontrollables ?? scene.uncontrollables}
+                  busy={pendingUncontrollables !== null}
                   canEdit={canEdit}
                   onChange={handleUncontrollablesChange}
                   initiallyCollapsed={initialDebugParams.panelsClosed}

@@ -14,6 +14,7 @@ imported before, but `civic_engagement.scene`, `store` and `api` read them
 when imported.
 """
 
+import inspect
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -109,6 +110,9 @@ def register(pack: DomainPack) -> None:
     global _pack
     if _pack is not None and _pack is not pack:
         raise RuntimeError(f"A domain pack ({_pack.id!r}) is already registered")
+    # At startup rather than at the first request (see `DomainPack.evaluate`).
+    if pack.uncontrollables and "uncontrollables" not in inspect.signature(pack.evaluate).parameters:
+        raise TypeError(f"Domain pack {pack.id!r} declares uncontrollables, but its evaluate takes no 'uncontrollables'")
     _pack = pack
 
 

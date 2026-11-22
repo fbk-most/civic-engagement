@@ -80,13 +80,22 @@ _scenario_cache: OrderedDict[str, Any] = OrderedDict()
 _cache_lock = threading.Lock()
 
 
-# "As is" apart, under each setting of the uncontrollables asked about: every
-# team compares with it, so the teams' scenarios mustn't push it out. A
-# pack without uncontrollables has one. `uncontrollables` as JSON, those
-# left out at their defaults.
-@lru_cache(maxsize=EVALUATIONS)
-def _as_is(uncontrollables: str = "{}") -> Any:
-    return _evaluate([], active_pack().settled(json.loads(uncontrollables)))
+# "As is" apart, under the last settings of the uncontrollables asked about:
+# every team compares with it, so the teams' scenarios mustn't push it out.
+# Fewer than those: teams mostly share a setting, and a pack's evaluation
+# can be large. A pack without uncontrollables has one.
+AS_IS_EVALUATIONS = 3
+
+
+def _as_is(uncontrollables: Uncontrollables | None = None) -> Any:
+    """"As is" under these uncontrollables (those left out, or None, at
+    their defaults)."""
+    return _as_is_under(json.dumps(active_pack().settled(uncontrollables or {}), sort_keys=True))
+
+
+@lru_cache(maxsize=AS_IS_EVALUATIONS)
+def _as_is_under(settled: str) -> Any:
+    return _evaluate([], json.loads(settled))
 
 
 def interventions_key(interventions: list[Intervention]) -> str:
@@ -109,7 +118,7 @@ def evaluation(interventions: list[Intervention], uncontrollables: Uncontrollabl
     if uncontrollables is None:
         uncontrollables = active_pack().settled({})
     if not interventions:
-        return _as_is(json.dumps(uncontrollables, sort_keys=True))
+        return _as_is(uncontrollables)
     key = json.dumps([interventions_key(interventions), uncontrollables], sort_keys=True)
     with _cache_lock:
         evaluated = _scenario_cache.get(key)
@@ -161,7 +170,7 @@ def current_scene(t: int = 0, team: str = DEFAULT_TEAM) -> SceneResponse:
 
 def deferred_indicators(t: int, team: str = DEFAULT_TEAM) -> DeferredIndicators:
     """The deferred indicators at year t, with and without the team's
-    interventions. Not under the uncontrollables: no pack has both yet."""
+    interventions. Not under the uncontrollables (see TODO.md)."""
     pack = active_pack()
     return DeferredIndicators(
         t=t,

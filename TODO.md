@@ -18,6 +18,13 @@ This is the core's list. Each domain pack keeps its own, in its repository
 - **The map's opening centre** (`frontend/src/map/mapSetup.ts`) is Piazza
   Dante's: take it from the site.
 
+## Model
+
+- **Deferred indicators under the uncontrollables**: `deferred_values` and
+  `deferred_series` take only the interventions, so a deferred indicator
+  ignores the uncontrollables. No pack has both yet; the first that does
+  needs them passed (and the deferred cache keyed on them).
+
 ## Interface
 
 - *Waiting for end-user feedback* — **3D mini-map content**: simplify what the
