@@ -1,0 +1,60 @@
+/* The rehearsal page (RehearsalPage.tsx): a strip, the app framed below. */
+.rehearsal {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.rehearsal__strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 8px 12px;
+  background: #f4f4f1;
+  border-bottom: 1px solid #ddd;
+  font-size: 13px;
+  color: #222;
+}
+
+.rehearsal__title {
+  font-weight: 600;
+  color: #2e6b1f;
+}
+
+.rehearsal__group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rehearsal__caption {
+  color: #666;
+  margin-right: 4px;
+}
+
+.rehearsal__group button {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background: #fff;
+  color: #333;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.rehearsal__group button[aria-pressed="true"] {
+  background: #2e6b1f;
+  border-color: #2e6b1f;
+  color: #fff;
+}
+
+.rehearsal__error {
+  color: #b3261e;
+}
+
+.rehearsal__frame {
+  flex: 1;
+  width: 100%;
+  border: none;
+}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import App from "./App";
-import { AccessContext, OPEN_ACCESS, type AccessState } from "./access";
+import { AccessContext, type AccessState } from "./access";
 import { fetchAuthInfo, fetchMe, forgetToken, setUnauthorisedHandler, storedToken } from "./api/client";
 import type { Me } from "./api/types";
 import { tr, useLang } from "./i18n/lang";
@@ -25,7 +25,19 @@ export function AccessGate() {
     forgetToken();
     toPinScreen();
   }, [toPinScreen]);
-  const enter = useCallback((me: Me) => setGate({ kind: "in", access: { mechanism: "pin", me, changeTeam } }), [changeTeam]);
+  // Who this is, asked again (the team's phase changed): the app shows and
+  // hides its controls accordingly.
+  const refresh = useCallback(() => {
+    fetchMe()
+      .then((me) => setGate((gate) => (gate.kind === "in" ? { kind: "in", access: { ...gate.access, me } } : gate)))
+      .catch((err) => console.error(err));
+  }, []);
+  const enterAs = useCallback(
+    (mechanism: AccessState["mechanism"], me: Me) =>
+      setGate({ kind: "in", access: { mechanism, me, changeTeam, refresh } }),
+    [changeTeam, refresh]
+  );
+  const enter = useCallback((me: Me) => enterAs("pin", me), [enterAs]);
 
   useEffect(() => {
     setUnauthorisedHandler(toPinScreen);
@@ -35,8 +47,8 @@ export function AccessGate() {
     fetchAuthInfo()
       .then((info) => {
         if (info.mechanism === "open") {
-          setGate({ kind: "in", access: OPEN_ACCESS });
-          return;
+          // No login; still asked, for the phase (CIVIC_ENGAGEMENT_PHASE).
+          return fetchMe().then((me) => enterAs("open", me));
         }
         exampleRef.current = info.example;
         if (!storedToken()) {
@@ -50,7 +62,7 @@ export function AccessGate() {
         console.error(err);
         setGate({ kind: "failed" });
       });
-  }, [enter, toPinScreen]);
+  }, [enter, enterAs, toPinScreen]);
 
   switch (gate.kind) {
     case "loading":

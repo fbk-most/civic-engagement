@@ -9,9 +9,12 @@ CIVIC_ENGAGEMENT_MANAGER_USER, CIVIC_ENGAGEMENT_MANAGER_PASSWORD.
     civic-engagement-admin team create "Team 1" [--from <scenario> [--of <team>]]
     civic-engagement-admin team list | rename <team> <name> | delete <team> --yes
     civic-engagement-admin member add <team> "Anna" --editor | member add <team> --viewers
+    civic-engagement-admin member pins <team>              # the team's PINs, printed
     civic-engagement-admin member pin <team> <member>      # a new PIN, printed
     civic-engagement-admin member remove <team> <member>
     civic-engagement-admin scene set <team> <scenario> [--of <team>] | scene set <team> --empty
+    civic-engagement-admin phase list                          # the pack's phases
+    civic-engagement-admin phase set <phase> [--team <team>]   # a team's phase, or every team's
     civic-engagement-admin export <team> > team-1.json
     civic-engagement-admin status
     civic-engagement-admin throttle reset [<ip>]               # wrong PINs forgotten: an IP's, or everyone's
@@ -66,13 +69,15 @@ class Admin:
 
 
 def _print_team(team: dict) -> None:
-    print(f"{team['id']}  {team['name']}  ({team['interventions']} cards)")
+    phase = f"  phase {team['phase']}" if team.get("phase") else ""
+    print(f"{team['id']}  {team['name']}  ({team['interventions']} cards){phase}")
     for member in team["members"]:
         print(f"    {member['role']:6}  {member['name']:20}  {member['id']}")
 
 
 def _print_pin(member: dict) -> None:
-    print(f"{member['role']} {member['name']} ({member['id']}): PIN {member['pin']}")
+    pin = member["pin"] or "not readable (from before sealed PINs): `member pin` gives a new one"
+    print(f"{member['role']} {member['name']} ({member['id']}): PIN {pin}")
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -99,6 +104,7 @@ def main(argv: list[str] | None = None) -> None:
     role = add.add_mutually_exclusive_group(required=True)
     role.add_argument("--editor", action="store_const", dest="role", const="editor")
     role.add_argument("--viewers", action="store_const", dest="role", const="viewer")
+    member.add_parser("pins", help="the team's PINs, as handed out").add_argument("team")
     for action in ("pin", "remove"):
         command = member.add_parser(action)
         command.add_argument("team")
@@ -111,6 +117,12 @@ def main(argv: list[str] | None = None) -> None:
     what.add_argument("scenario", nargs="?")
     what.add_argument("--empty", action="store_true")
     set_scene.add_argument("--of", dest="of_team", help="the team whose scenario it is (default: its own, or a preset)")
+
+    phase = commands.add_parser("phase").add_subparsers(dest="action", required=True)
+    phase.add_parser("list")
+    set_phase = phase.add_parser("set", help="any phase, after any other")
+    set_phase.add_argument("phase")
+    set_phase.add_argument("--team", help="only this team (default: every team)")
 
     export = commands.add_parser("export")
     export.add_argument("team")
@@ -139,6 +151,9 @@ def main(argv: list[str] | None = None) -> None:
             print(f"Deleted {args.team}")
         case "member", "add":
             _print_pin(admin.call("POST", f"/teams/{args.team}/members", {"name": args.name, "role": args.role}))
+        case "member", "pins":
+            for found in admin.call("GET", f"/teams/{args.team}/pins"):
+                _print_pin(found)
         case "member", "pin":
             _print_pin(admin.call("POST", f"/teams/{args.team}/members/{admin.member_id(args.team, args.member)}/pin"))
         case "member", "remove":
@@ -147,6 +162,16 @@ def main(argv: list[str] | None = None) -> None:
         case "scene", "set":
             body = {} if args.empty else {"scenario": args.scenario, "team": args.of_team}
             _print_team(admin.call("POST", f"/teams/{args.team}/scene", body))
+        case "phase", "list":
+            for found in admin.call("GET", "/phases"):
+                allowed = ", ".join(found["operations"]) or "nothing"
+                print(f"{found['id']:12}  {found['label_en']:12}  may: {allowed}  views: {', '.join(found['views'])}")
+        case "phase", "set":
+            if args.team:
+                _print_team(admin.call("PUT", f"/teams/{args.team}/phase", {"phase": args.phase}))
+            else:
+                for found in admin.call("PUT", "/phase", {"phase": args.phase}):
+                    _print_team(found)
         case "export", _:
             json.dump(admin.call("GET", f"/teams/{args.team}/export"), sys.stdout, indent=1, ensure_ascii=False)
             print()

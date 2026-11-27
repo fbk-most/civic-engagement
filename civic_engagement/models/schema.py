@@ -107,6 +107,33 @@ class CardSpec(BaseModel):
     params: list[ParamSpec]
 
 
+class PhaseSpec(BaseModel):
+    """A phase of the process: the changes the server accepts in it (see
+    civic_engagement/phases.py), and the views a screen may show."""
+
+    id: str = Field(description="In the API and the URLs: English, lowercase")
+    label: str
+    label_en: str
+    operations: list[str] = Field(default=[], description="What editors may do: among civic_engagement.phases.OPERATIONS")
+    views: list[str] = Field(default=[], description="The views' ids; the first is the phase's default")
+
+
+class ViewSpec(BaseModel):
+    """A view: what a screen shows, among the core's panels (see
+    civic_engagement/views.py). It only hides: what a member may change is
+    the phase's and the role's."""
+
+    id: str = Field(description="In the URL (#view=<id>): English, lowercase")
+    label: str
+    label_en: str
+    panels: list[str] = Field(description="Among civic_engagement.views.PANELS")
+    tab: Literal["2d", "3d", "indicators"] = Field(default="2d", description="The tab it opens on: one of its tab.* panels")
+    intervention_mode: Literal["hidden", "cards", "simulated"] = Field(
+        default="simulated",
+        description="How the interventions are shown when the view doesn't offer the switch (no interventionMode panel)",
+    )
+
+
 IndicatorValue = float | dict[str, bool] | dict[str, float] | None
 # Indicator values keyed by descriptor id (see IndicatorDescriptor): a number
 # (None where it can't be computed), {part: number} for a breakdown,
@@ -284,6 +311,11 @@ class Me(BaseModel):
     team: TeamInfo
     member: MemberInfo | None = Field(default=None, description="None with the open mechanism")
     role: Role
+    phase: str | None = Field(default=None, description="The team's phase; None: nothing blocked")
+    operations: list[str] = Field(default=[], description="What this member may change now: none for viewers")
+    views: list[str] = Field(
+        default=[], description="The views of the team's phase, its default first (views.py); none: no phase, or one without"
+    )
 
 
 class LoginResponse(Me):
@@ -318,12 +350,30 @@ class ThrottleReset(BaseModel):
     ip: str | None = None
 
 
+class PhaseSet(BaseModel):
+    phase: str
+
+
+class Rehearsal(BaseModel):
+    """For the rehearsal page (api/routes_rehearsal.py): the pack's phases
+    and views, which a member can't ask the admin routes for."""
+
+    phases: list[PhaseSpec]
+    views: list[ViewSpec]
+    can_set_phase: bool = Field(description="Whether this member may move the team's phase: an editor")
+
+
 class AdminMember(MemberInfo):
     pin_version: int
-    pin: str | None = Field(default=None, description="The PIN, in clear: only in the answer that made it")
+    pin: str | None = Field(
+        default=None,
+        description="The PIN, in clear: in the answer that made it, and in GET /admin/teams/{team}/pins"
+        " (None there if it can't be read: a member from before sealed PINs)",
+    )
 
 
 class AdminTeam(TeamInfo):
     created_at: str
     members: list[AdminMember]
     interventions: int = Field(default=0, description="Cards in its scene")
+    phase: str | None = Field(default=None, description="None if the pack has no phases")

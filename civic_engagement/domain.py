@@ -18,6 +18,7 @@ from typing import Any
 
 from fastapi import APIRouter
 
+from civic_engagement import phases, views
 from civic_engagement.config import SiteConfig
 from civic_engagement.models.schema import (
     BaselineScene,
@@ -27,6 +28,8 @@ from civic_engagement.models.schema import (
     IndicatorDescriptors,
     IndicatorValues,
     Intervention,
+    PhaseSpec,
+    ViewSpec,
 )
 from civic_engagement.pins import DigitPin, PinFormat
 
@@ -43,6 +46,12 @@ class DomainPack(ABC):
     indicators: IndicatorDescriptors
     # The PINs' format, with teams (CIVIC_ENGAGEMENT_AUTH=pin): see pins.py.
     pin_format: PinFormat = DigitPin()
+    # The process's phases, in their usual order (see phases.py): a new
+    # team starts in the first. No phases (the default): nothing blocked.
+    phases: list[PhaseSpec] = []
+    # What a screen may show (see views.py), named by the phases. No views
+    # (the default): everything shown.
+    views: list[ViewSpec] = []
 
     @abstractmethod
     def evaluate(self, baseline: BaselineScene, interventions: list[Intervention]) -> Any:
@@ -78,6 +87,8 @@ def register(pack: DomainPack) -> None:
     global _pack
     if _pack is not None and _pack is not pack:
         raise RuntimeError(f"A domain pack ({_pack.id!r}) is already registered")
+    phases.check(pack.phases)
+    views.check(pack.views, pack.phases)
     _pack = pack
 
 

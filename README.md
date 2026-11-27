@@ -124,7 +124,64 @@ export CIVIC_ENGAGEMENT_ADMIN_URL=http://localhost:8000 \
 uv run civic-engagement-admin team create "Team 1"
 uv run civic-engagement-admin member add team-1 "Anna" --editor    # prints Anna's PIN
 uv run civic-engagement-admin member add team-1 --viewers          # the team's viewers' PIN
+uv run civic-engagement-admin member pins team-1                   # the team's PINs again
 ```
+
+A PIN is kept as an HMAC, to find its member, and sealed (AES-GCM, under a
+key derived from `CIVIC_ENGAGEMENT_PIN_SECRET`), so that the manager can
+read the team's PINs again — `member pins`, `GET /api/admin/teams/<team>/pins`
+— to show them to the facilitators: the container site needn't keep them.
+Neither reveals a PIN without the secret; with it, the HMACs would anyway,
+by trying every PIN. What the manager's credentials add is reading them
+unnoticed by the members (regenerating one logs them out), so every reading
+is logged. Members added before sealed PINs keep theirs, unreadable:
+`member pin` gives them a new one.
+
+A pack may declare the **phases** of its process (`DomainPack.phases`,
+`civic_engagement/phases.py`): each lets editors do some changes —
+`notes.edit`, `interventions.edit`, `scenarios.edit` — and the server
+refuses the others (409), whatever the role. Each team is in one phase, a
+new team in the pack's first; only the manager moves it, to any phase
+(going back too), and the team's windows follow within seconds (the phase
+is in `GET /auth/me` and `GET /session/revision`). Without phases, nothing
+is blocked.
+
+```bash
+uv run civic-engagement-admin phase list                        # the pack's phases
+uv run civic-engagement-admin phase set codesign --team team-1  # one team's
+uv run civic-engagement-admin phase set information             # every team's
+```
+
+The container site does the same through the API: `GET /api/admin/phases`,
+`PUT /api/admin/teams/<team>/phase` and `PUT /api/admin/phase` (every team),
+with `{"phase": "<id>"}`. Without teams (`open`), `CIVIC_ENGAGEMENT_PHASE=<id>`
+puts the one team in a phase (unset: nothing blocked; one the pack doesn't
+have: the app doesn't start), to try phases locally.
+
+What a screen shows is its **view** (`DomainPack.views`,
+`civic_engagement/views.py`): a set of panels — the tabs, the key
+indicators, the felt temperature, the year, the legend, the cards, the
+interventions' list and switch, the scenarios — with the tab it opens on
+and, without the switch, how the interventions are shown. A view only
+hides: the cards and the scenarios still need the role and the phase. Each
+phase names its views, the first its default; the app shows the one in its
+URL, `#view=<id>` (or `?view=<id>`; the fragment wins), if the team's phase
+has it, else the phase's default. A change of the fragment is applied at
+once, without reloading (the 3D view stays built): the container site
+framing the app changes only the fragment. Without views, or in a phase
+without any, everything is shown; without a phase, any of the pack's views
+may be asked for. `GET /api/admin/views` lists them, with their labels.
+
+For user tests before the container site exists, a pack's app may have a
+**rehearsal page** standing in for it (`frontend/src/rehearsal/`, the
+pack's `rehearsal.html`): the app framed below a strip with the team's
+phases and the phase's views, which it picks as a container site would,
+changing only the fragment of the frame's URL. It shares the frame's login.
+It needs `CIVIC_ENGAGEMENT_REHEARSAL=1` (with `pin`; ignored with `open`,
+which has no team's phase to move), which adds `GET /api/rehearsal` (the
+pack's phases and views, for any member) and `PUT /api/rehearsal/phase`
+(`{"phase": "<id>"}`: an editor moves their own team's phase). This
+relaxes "only the manager moves phases": keep it off for the real process.
 
 Wrong PINs are throttled per client IP (10 a minute free, then waits of up
 to a minute) and across the site (beyond 60 a minute, everyone waits); the
@@ -179,6 +236,7 @@ realistic view.
 ```bash
 npm install
 npm run typecheck && npm run lint
+npm test        # the unit tests (vitest), frontend/src/*.test.ts
 npm run dev     # the tree lab only, http://localhost:5173/tree-lab.html: the apps are the packs'
 ```
 
@@ -233,6 +291,7 @@ pack may read its own: see its README.
 
 | Parameter | Values | Effect |
 | --- | --- | --- |
+| `view` | a view's id | The view to show, if the team's phase has it (see "Teams"); better in the fragment, `#view=<id>`, whose changes are applied without reloading. |
 | `lang` | `it`, `en` | Interface language (default: the last one chosen with the IT/EN switch, else English). |
 | `temp` | `C`, `F` | Temperature unit, for display only: the model works in °C (default: the last one chosen with the °C/°F switch, else Celsius). The switch shows only in packs with the felt-temperature field. |
 | `viewer` | `1` | Open on the 3D view. |

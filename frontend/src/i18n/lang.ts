@@ -52,3 +52,13 @@ export function tr(it: string, en: string): string {
 export function locale(): string {
   return current === "en" ? "en-GB" : "it-IT";
 }
+
+/** Follows the language chosen in another window of this origin (an
+ * iframe's: they share the storage). */
+export function followOtherWindows(): () => void {
+  const follow = (event: StorageEvent) => {
+    if (event.key === STORAGE_KEY && (event.newValue === "it" || event.newValue === "en")) setLang(event.newValue);
+  };
+  window.addEventListener("storage", follow);
+  return () => window.removeEventListener("storage", follow);
+}

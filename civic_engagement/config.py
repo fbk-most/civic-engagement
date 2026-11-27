@@ -212,3 +212,9 @@ def auth_mechanism() -> str:
     if mechanism not in MECHANISMS:
         raise ValueError(f"CIVIC_ENGAGEMENT_AUTH={mechanism!r}: one of {', '.join(MECHANISMS)}")
     return mechanism
+
+
+def rehearsal() -> bool:
+    """Whether the rehearsal page's routes are on (`CIVIC_ENGAGEMENT_REHEARSAL=1`,
+    api/routes_rehearsal.py): with `pin` only, and never for the real process."""
+    return os.environ.get("CIVIC_ENGAGEMENT_REHEARSAL", "") == "1"

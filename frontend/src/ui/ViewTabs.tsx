@@ -10,13 +10,15 @@ const TABS: { value: AppView; label: [it: string, en: string] }[] = [
 
 interface Props {
   view: AppView;
+  /** The tabs offered (see views.ts): all by default. */
+  tabs?: AppView[];
   onChange: (view: AppView) => void;
 }
 
-export function ViewTabs({ view, onChange }: Props) {
+export function ViewTabs({ view, tabs, onChange }: Props) {
   return (
     <nav className="view-tabs" role="tablist">
-      {TABS.map((tab) => (
+      {TABS.filter((tab) => !tabs || tabs.includes(tab.value)).map((tab) => (
         <button
           key={tab.value}
           type="button"

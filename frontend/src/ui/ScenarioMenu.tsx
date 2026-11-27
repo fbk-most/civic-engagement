@@ -5,6 +5,7 @@ import {
   deleteScenario,
   fetchScenarios,
   loadScenario,
+  PhaseRefusedError,
   saveScenario,
   ScenarioExistsError,
 } from "../api/client";
@@ -15,6 +16,8 @@ interface Props {
   interventionCount: number;
   /** The year shown, for the scene a load returns. */
   t: number;
+  /** Whether "start again with no cards" is offered: the team's phase allows changing cards. */
+  canClear: boolean;
   /** A scenario was loaded, or the cards cleared: the scene with them. */
   onSceneReplaced: (scene: SceneResponse) => void;
 }
@@ -33,7 +36,7 @@ function cardCount(n: number): string {
  * place, or start afresh. The scene is the team's, so a load or a clear
  * changes it for every window of the team (they follow within seconds); the
  * cards replaced are kept on the server. */
-export function ScenarioMenu({ interventionCount, t, onSceneReplaced }: Props) {
+export function ScenarioMenu({ interventionCount, t, canClear, onSceneReplaced }: Props) {
   const [open, setOpen] = useState(false);
   const [scenarios, setScenarios] = useState<ScenarioInfo[] | null>(null);
   const [name, setName] = useState("");
@@ -80,7 +83,8 @@ export function ScenarioMenu({ interventionCount, t, onSceneReplaced }: Props) {
       await action();
     } catch (err) {
       console.error(err);
-      setMessage({ text: failure, error: true });
+      const refused = err instanceof PhaseRefusedError;
+      setMessage({ text: refused ? tr("La fase attuale non lo consente.", "Not allowed in the current phase.") : failure, error: true });
     } finally {
       setBusy(false);
     }
@@ -225,9 +229,11 @@ export function ScenarioMenu({ interventionCount, t, onSceneReplaced }: Props) {
               {message.text}
             </p>
           )}
-          <button type="button" className="scenario-menu__clear" disabled={busy || interventionCount === 0} onClick={handleClear}>
-            {tr("Ricomincia senza carte", "Start again with no cards")}
-          </button>
+          {canClear && (
+            <button type="button" className="scenario-menu__clear" disabled={busy || interventionCount === 0} onClick={handleClear}>
+              {tr("Ricomincia senza carte", "Start again with no cards")}
+            </button>
+          )}
         </div>
       )}
     </div>

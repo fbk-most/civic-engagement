@@ -85,6 +85,50 @@ def test_distinct_parts_differ_across_the_site(tmp_path):
     assert regenerated.distinct == "a" and regenerated.pin_version == 2  # its own letter back
 
 
+def test_pins_read_again(tmp_path):
+    teams = TeamStore(LocalStorage(tmp_path), "teams.json", LetterPin(), b"secret")
+    team = teams.create_team("Team 1")
+    anna, pin = teams.add_member(team.id, "Anna", "editor")
+    viewers, viewers_pin = teams.add_member(team.id, "", "viewer")
+    # As handed out, and only sealed in the file.
+    assert teams.pins(team.id) == [(anna, pin), (viewers, viewers_pin)]
+    stored = (tmp_path / "teams.json").read_text()
+    for handed_out in (pin, viewers_pin):
+        assert handed_out not in stored and LetterPin().normalise(handed_out) not in stored
+    assert anna.sealed in stored and anna.sealed != viewers.sealed
+    # Read back; another secret reads none.
+    assert [p for _, p in TeamStore(LocalStorage(tmp_path), "teams.json", LetterPin(), b"secret").pins(team.id)] == [pin, viewers_pin]
+    assert [p for _, p in TeamStore(LocalStorage(tmp_path), "teams.json", LetterPin(), b"other").pins(team.id)] == [None, None]
+    # A new PIN replaces the sealed one; the old one put back reads as none.
+    old = anna.sealed
+    _, new = teams.regenerate_pin(team.id, anna.id)
+    assert teams.pins(team.id)[0][1] == new != pin
+    anna.sealed = old
+    assert teams.pins(team.id)[0][1] is None
+    anna.sealed = "garbage"
+    assert teams.pins(team.id)[0][1] is None
+    # A sealed PIN copied onto another member doesn't open.
+    viewers.sealed = anna.sealed
+    assert teams.pins(team.id)[1][1] is None
+    with pytest.raises(TeamError):
+        teams.pins("nothing")
+
+
+def test_members_from_before_sealed_pins(tmp_path):
+    """Their PINs still let them in, but can't be read: a new one can."""
+    teams = TeamStore(LocalStorage(tmp_path), "teams.json", DigitPin(), b"secret")
+    team = teams.create_team("Team 1")
+    anna, pin = teams.add_member(team.id, "Anna", "editor")
+    old = json.loads((tmp_path / "teams.json").read_text())
+    del old["teams"][0]["members"][0]["sealed"]
+    (tmp_path / "teams.json").write_text(json.dumps(old))
+    teams = TeamStore(LocalStorage(tmp_path), "teams.json", DigitPin(), b"secret")
+    assert teams.by_pin(pin)[1].id == anna.id
+    assert teams.pins(team.id)[0][1] is None
+    _, new = teams.regenerate_pin(team.id, anna.id)
+    assert teams.pins(team.id)[0][1] == new
+
+
 def test_editors_need_a_name(tmp_path):
     teams = TeamStore(LocalStorage(tmp_path), "teams.json", DigitPin(), b"secret")
     team = teams.create_team("T")
@@ -298,7 +342,7 @@ def test_teams_apart_and_viewers_looking(pin_app, tmp_path):
     assert (tmp_path / "tests/toy_pack/data/scenarios/team-1/idea.json").is_file()
 
 
-def test_the_manager_runs_the_teams(pin_app):
+def test_the_manager_runs_the_teams(pin_app, caplog):
     pins = _workshop(pin_app)
     editor1 = _login(pin_app, pins["editor1"])
     pin_app.post("/api/interventions", json=BENCH, headers=editor1)
@@ -307,6 +351,7 @@ def test_the_manager_runs_the_teams(pin_app):
     teams = pin_app.get("/api/admin/teams", headers=ADMIN).json()
     assert [(t["id"], t["interventions"], len(t["members"])) for t in teams] == [("team-1", 1, 2), ("team-2", 0, 1)]
     assert all(m["pin"] is None for t in teams for m in t["members"])  # shown once only
+    assert "sealed" not in json.dumps(teams)
 
     # A team started from another's scenario.
     copy = pin_app.post("/api/admin/teams", json={"name": "Team 3", "from_scenario": "idea", "from_team": "team-1"}, headers=ADMIN)
@@ -319,11 +364,21 @@ def test_the_manager_runs_the_teams(pin_app):
     export = pin_app.get("/api/admin/teams/team-1/export", headers=ADMIN).json()
     assert len(export["interventions"]) == 1 and list(export["scenarios"]) == ["idea.json"]
     assert "pin" not in json.dumps(export["team"]).replace('"pin": null', "").replace("pin_version", "")
+    assert "sealed" not in json.dumps(export)
+
+    # The PINs read again, for the facilitators: the manager's only.
+    read = pin_app.get("/api/admin/teams/team-1/pins", headers=ADMIN)
+    assert [(m["name"], m["pin"]) for m in read.json()] == [("Editor 1", pins["editor1"]), ("Viewers", pins["viewer1"])]
+    assert read.headers["Cache-Control"] == "no-store"
+    assert "read the PINs of team 'team-1'" in caplog.text
+    assert pin_app.get("/api/admin/teams/nothing/pins", headers=ADMIN).status_code == 404
+    assert pin_app.get("/api/admin/teams/team-1/pins", headers=editor1).status_code == 401
 
     # A new PIN: the old one, and its token, are out.
     member = teams[0]["members"][0]
     new = pin_app.post(f"/api/admin/teams/team-1/members/{member['id']}/pin", headers=ADMIN).json()
     assert new["pin_version"] == 2 and new["pin"] != pins["editor1"]
+    assert pin_app.get("/api/admin/teams/team-1/pins", headers=ADMIN).json()[0]["pin"] == new["pin"]
     assert pin_app.get("/api/scene", headers=editor1).status_code == 401
     assert pin_app.post("/api/auth/pin", json={"pin": pins["editor1"]}).status_code == 401
     _login(pin_app, new["pin"])
@@ -399,7 +454,10 @@ def test_the_cli(pin_app, monkeypatch, capsys):
         assert len(pin) == 6
         admin.main(["member", "add", "team-1", "--viewers"])
         admin.main(["member", "pin", "team-1", "Anna"])
-        assert capsys.readouterr().out.split("PIN ")[-1].strip() != pin
+        new = capsys.readouterr().out.split("PIN ")[-1].strip()
+        assert new != pin
+        admin.main(["member", "pins", "team-1"])
+        assert "editor Anna (m-" in (shown := capsys.readouterr().out) and f"PIN {new}" in shown and shown.count("PIN ") == 2
         admin.main(["team", "list"])
         listed = capsys.readouterr().out
         assert "team-1  Team 1  (0 cards)" in listed and "viewer  Viewers" in listed

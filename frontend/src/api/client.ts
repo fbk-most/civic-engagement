@@ -9,12 +9,14 @@ import type {
   InterventionCreate,
   LoginResponse,
   Me,
+  Rehearsal,
   ScenarioInfo,
   SceneResponse,
   SiteAsset,
   SiteAssets,
   TerrainGrid,
   ThermalFieldResponse,
+  ViewSpec,
 } from "./types";
 
 // With teams (CIVIC_ENGAGEMENT_AUTH=pin), the token a PIN was exchanged for
@@ -22,6 +24,10 @@ import type {
 // every call. Without teams there's none, and none is asked for.
 const TOKEN_KEY = "civic-engagement-token";
 let onUnauthorised: () => void = () => {};
+let onPhaseRefused: () => void = () => {};
+// The start of the 409's detail when the team's phase refuses a change
+// (civic_engagement/access.py, PHASE_REFUSED), unlike the other 409s.
+const PHASE_REFUSED = "Not allowed in the current phase";
 
 export function storedToken(): string | null {
   return window.localStorage.getItem(TOKEN_KEY);
@@ -37,6 +43,15 @@ export function setUnauthorisedHandler(handler: () => void): void {
   onUnauthorised = handler;
 }
 
+/** Called when the team's phase refuses a change: the phase changed since
+ * the app last asked (it asks again, and says so). */
+export function setPhaseRefusedHandler(handler: () => void): void {
+  onPhaseRefused = handler;
+}
+
+/** Thrown by any change the team's phase refuses (a 409, see `request`). */
+export class PhaseRefusedError extends Error {}
+
 /** Every call to the API, the pack's too: with the token, if there is one. */
 async function request(url: string, init: RequestInit = {}): Promise<Response> {
   const token = storedToken();
@@ -46,6 +61,13 @@ async function request(url: string, init: RequestInit = {}): Promise<Response> {
   if (res.status === 401 && token) {
     forgetToken();
     onUnauthorised();
+  }
+  if (res.status === 409) {
+    const detail: unknown = await res.clone().json().then((body) => body?.detail, () => null);
+    if (typeof detail === "string" && detail.startsWith(PHASE_REFUSED)) {
+      onPhaseRefused();
+      throw new PhaseRefusedError(detail);
+    }
   }
   return res;
 }
@@ -64,6 +86,34 @@ export function fetchAuthInfo(): Promise<AuthInfo> {
 /** Who this window is, with its token. */
 export function fetchMe(): Promise<Me> {
   return getJson("/api/auth/me");
+}
+
+/** Calls `listener` when another window of this origin logs in or out
+ * (the token changes in the storage they share). */
+export function onTokenChange(listener: () => void): () => void {
+  const follow = (event: StorageEvent) => {
+    if (event.key === TOKEN_KEY || event.key === null) listener();
+  };
+  window.addEventListener("storage", follow);
+  return () => window.removeEventListener("storage", follow);
+}
+
+/** The rehearsal page's: the pack's phases and views (404: the rehearsal
+ * isn't on). */
+export function fetchRehearsal(): Promise<Rehearsal> {
+  return getJson("/api/rehearsal");
+}
+
+/** The rehearsal page's: the team's phase, set by an editor; the answer,
+ * who this is in it. */
+export async function setRehearsalPhase(phase: string): Promise<Me> {
+  const res = await request("/api/rehearsal/phase", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ phase }),
+  });
+  if (!res.ok) throw new HttpError(`PUT /api/rehearsal/phase failed: ${res.status}`, res.status);
+  return res.json();
 }
 
 /** Thrown by `loginWithPin` after too many attempts: retry after `seconds`. */
@@ -99,13 +149,19 @@ export function fetchCards(): Promise<CardSpec[]> {
   return getJson("/api/cards");
 }
 
+/** The pack's views (see views.ts). */
+export function fetchViews(): Promise<ViewSpec[]> {
+  return getJson("/api/views");
+}
+
 export function fetchScene(t: number = 0): Promise<SceneResponse> {
   return getJson(`/api/scene?t=${t}`);
 }
 
 /** Changes whenever any window changes the session's interventions; with
- * `restart_needed`, the app must be started again for changes to be saved. */
-export function fetchSessionRevision(): Promise<{ revision: string; restart_needed: boolean }> {
+ * `restart_needed`, the app must be started again for changes to be saved;
+ * `phase`, the team's (a change: ask `fetchMe` again). */
+export function fetchSessionRevision(): Promise<{ revision: string; restart_needed: boolean; phase: string | null }> {
   return getJson("/api/session/revision");
 }
 

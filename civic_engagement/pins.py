@@ -6,13 +6,22 @@ language and the people.
 A PIN is stored as an HMAC of its normalised form, with the deployment's
 secret (`CIVIC_ENGAGEMENT_PIN_SECRET`): deterministic, so a PIN is found
 by its HMAC, and useless without the secret.
+
+It is also kept sealed — encrypted (AES-GCM) under a key derived from the
+same secret — so that the manager can read it again (`seal`, `unseal`):
+whoever has the secret can find any PIN from its HMAC anyway, by trying
+them all, so the secret guards both alike.
 """
 
+import base64
 import hashlib
 import hmac
 import re
 import secrets
 from abc import ABC, abstractmethod
+
+from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 # The fewest PINs a format must be able to make: what the throttling's
 # strength assumes (access.Throttle). The code is public, so the format's
@@ -68,3 +77,27 @@ def checked(pin_format: PinFormat) -> PinFormat:
 
 def pin_hash(secret: bytes, normalised: str) -> str:
     return hmac.new(secret, b"pin\0" + normalised.encode(), hashlib.sha256).hexdigest()
+
+
+def _seal_key(secret: bytes) -> AESGCM:
+    return AESGCM(hmac.new(secret, b"seal\0", hashlib.sha256).digest())
+
+
+def seal(secret: bytes, member_id: str, pin: str) -> str:
+    """The PIN, as it was handed out, encrypted for its member only: a sealed
+    PIN copied onto another member doesn't open."""
+    nonce = secrets.token_bytes(12)
+    sealed = _seal_key(secret).encrypt(nonce, pin.encode(), member_id.encode())
+    return base64.urlsafe_b64encode(nonce + sealed).decode()
+
+
+def unseal(secret: bytes, member_id: str, sealed: str) -> str | None:
+    """The PIN; None if there's none (a member from before sealed PINs) or it
+    doesn't open (another secret, another member's)."""
+    if not sealed:
+        return None
+    try:
+        raw = base64.urlsafe_b64decode(sealed)
+        return _seal_key(secret).decrypt(raw[:12], raw[12:], member_id.encode()).decode()
+    except (InvalidTag, ValueError, TypeError):
+        return None

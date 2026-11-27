@@ -1,3 +1,4 @@
+import logging
 import os
 from pathlib import Path
 
@@ -8,6 +9,8 @@ from starlette.responses import Response
 from starlette.types import Scope
 
 from civic_engagement.domain import DomainPack, register
+
+log = logging.getLogger(__name__)
 
 
 class _Frontend(StaticFiles):
@@ -39,11 +42,12 @@ def create_app(pack: DomainPack, title: str = "Civic Digital Twin PoC", frontend
         routes_auth,
         routes_cards,
         routes_interventions,
+        routes_rehearsal,
         routes_scenarios,
         routes_scene,
         routes_site_assets,
     )
-    from civic_engagement.config import SITE, auth_mechanism
+    from civic_engagement.config import SITE, auth_mechanism, rehearsal
     from civic_engagement.store.state import store
 
     # With teams: refuses to start without its secrets; reads every team's
@@ -83,6 +87,14 @@ def create_app(pack: DomainPack, title: str = "Civic Digital Twin PoC", frontend
     app.include_router(routes_auth.router, prefix="/api")
     if auth_mechanism() == "pin":
         app.include_router(routes_admin.router, prefix="/api")
+    # The rehearsal page's routes: with teams only (without, there's no
+    # team's phase to move, only CIVIC_ENGAGEMENT_PHASE).
+    if rehearsal():
+        if auth_mechanism() == "pin":
+            log.warning("CIVIC_ENGAGEMENT_REHEARSAL=1: editors can change their team's phase (rehearsal.html)")
+            app.include_router(routes_rehearsal.router, prefix="/api")
+        else:
+            log.warning("CIVIC_ENGAGEMENT_REHEARSAL=1 ignored: it needs CIVIC_ENGAGEMENT_AUTH=pin")
 
     @app.get("/api/health")
     def health() -> dict[str, str]:

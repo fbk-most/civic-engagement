@@ -29,6 +29,8 @@ interface View3DProps {
   /** Scenario year offset — the same shared value as the other tabs' slider. */
   t: number;
   onTimeChange: (t: number) => void;
+  /** The time panel (year, day and hour): false in a view without it. */
+  showTime?: boolean;
   pose: CameraPose | null;
   onPlacePose: (pose: CameraPose) => void;
   /** Drops the placed viewpoint, back to the overview. */
@@ -88,6 +90,7 @@ export function View3D({
   active,
   t,
   onTimeChange,
+  showTime = true,
   pose,
   onPlacePose,
   onClearPose,
@@ -262,10 +265,12 @@ export function View3D({
           promise about what will be built. The caption is there to keep the
           status of the picture honest and stays visible at all times. */}
       <span className="view-3d__caption">{tr("Visualizzazione indicativa", "Indicative visualisation")}</span>
-      <div className="view-3d__time">
-        <TimeSlider t={t} onChange={onTimeChange} embedded />
-        <SunControl setting={sunSetting} altitudeDeg={sun.altitudeDeg} year={year} onChange={setSunSetting} />
-      </div>
+      {showTime && (
+        <div className="view-3d__time">
+          <TimeSlider t={t} onChange={onTimeChange} embedded />
+          <SunControl setting={sunSetting} altitudeDeg={sun.altitudeDeg} year={year} onChange={setSunSetting} />
+        </div>
+      )}
     </div>
   );
 }

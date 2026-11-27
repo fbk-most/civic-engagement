@@ -18,6 +18,8 @@ import {
 interface Props {
   descriptors: IndicatorDescriptors;
   interventions: Intervention[];
+  // The current situation only, as the KPI panel's: no simulation.
+  asIs: boolean;
   t: number;
   onTimeChange: (t: number) => void;
 }
@@ -38,26 +40,28 @@ function ChartCard({
   t,
   onTimeChange,
   zeroBased,
+  asIs,
 }: {
   descriptor: IndicatorDescriptor;
   series: IndicatorSeries;
   t: number;
   onTimeChange: (t: number) => void;
   zeroBased: boolean;
+  asIs: boolean;
 }) {
   const get = (values: IndicatorValues) => numberValue(values, descriptor);
   const baseline = series.baseline.map(get);
   const scenario = series.scenario.map(get);
   const index = series.years.indexOf(t);
-  const current = scenario[index] ?? null;
-  const reference = descriptor.scenario_only ? null : (baseline[index] ?? null);
+  const current = (asIs ? baseline : scenario)[index] ?? null;
+  const reference = descriptor.scenario_only || asIs ? null : (baseline[index] ?? null);
   const change = indicatorDelta(descriptor, current, reference);
 
   return (
     <div className="indicator-card">
       <h4>{indicatorLabel(descriptor)}</h4>
       <p className="indicator-card__values">
-        {!descriptor.scenario_only && (
+        {reference !== null && (
           <>
             <span className="indicator-card__baseline">{format(reference, descriptor)}</span>
             <span className="indicator-card__arrow">→</span>
@@ -73,7 +77,9 @@ function ChartCard({
         zeroBased={zeroBased}
         onSelectYear={onTimeChange}
         series={
-          descriptor.scenario_only
+          asIs
+            ? [{ values: baseline, variant: "baseline" }]
+            : descriptor.scenario_only
             ? [{ values: scenario, variant: "scenario" }]
             : [
                 { values: baseline, variant: "baseline" },
@@ -98,11 +104,13 @@ function BreakdownCard({
   series,
   t,
   onTimeChange,
+  asIs,
 }: {
   descriptor: IndicatorDescriptor;
   series: IndicatorSeries;
   t: number;
   onTimeChange: (t: number) => void;
+  asIs: boolean;
 }) {
   const parts = (values: IndicatorValues | undefined) => partsOf(values, descriptor.id);
   // One shared stacking order for both charts, so the same cover sits at the
@@ -129,10 +137,12 @@ function BreakdownCard({
           <p className="indicator-card__subtitle">{tr("Situazione attuale", "Current situation")}</p>
           <StackedAreaChart years={series.years} t={t} onSelectYear={onTimeChange} layers={layersFor(series.baseline)} />
         </div>
-        <div>
-          <p className="indicator-card__subtitle">{tr("Simulazione", "Simulation")}</p>
-          <StackedAreaChart years={series.years} t={t} onSelectYear={onTimeChange} layers={layersFor(series.scenario)} />
-        </div>
+        {!asIs && (
+          <div>
+            <p className="indicator-card__subtitle">{tr("Simulazione", "Simulation")}</p>
+            <StackedAreaChart years={series.years} t={t} onSelectYear={onTimeChange} layers={layersFor(series.scenario)} />
+          </div>
+        )}
       </div>
       <div className="indicator-card__legend">
         {coverTypes.map((type) => (
@@ -141,8 +151,13 @@ function BreakdownCard({
             {coverTypeLabel(type)}{" "}
             <span className="indicator-card__legend-values">
               {parts(series.baseline[index])[type] ?? 0}
-              {indicatorUnit(descriptor)} → {parts(series.scenario[index])[type] ?? 0}
               {indicatorUnit(descriptor)}
+              {!asIs && (
+                <>
+                  {" "}→ {parts(series.scenario[index])[type] ?? 0}
+                  {indicatorUnit(descriptor)}
+                </>
+              )}
             </span>
           </span>
         ))}
@@ -158,7 +173,17 @@ function flagsOf(values: IndicatorValues | undefined, id: string): Record<string
   return value !== null && typeof value === "object" ? (value as Record<string, boolean>) : null;
 }
 
-function FlagsCard({ descriptor, series, t }: { descriptor: IndicatorDescriptor; series: IndicatorSeries; t: number }) {
+function FlagsCard({
+  descriptor,
+  series,
+  t,
+  asIs,
+}: {
+  descriptor: IndicatorDescriptor;
+  series: IndicatorSeries;
+  t: number;
+  asIs: boolean;
+}) {
   const index = series.years.indexOf(t);
   const baseline = flagsOf(series.baseline[index], descriptor.id);
   const scenario = flagsOf(series.scenario[index], descriptor.id);
@@ -173,7 +198,7 @@ function FlagsCard({ descriptor, series, t }: { descriptor: IndicatorDescriptor;
           <tr>
             <th />
             <th>{tr("Attuale", "Current")}</th>
-            <th>{tr("Simulazione", "Simulation")}</th>
+            {!asIs && <th>{tr("Simulazione", "Simulation")}</th>}
           </tr>
         </thead>
         <tbody>
@@ -181,9 +206,11 @@ function FlagsCard({ descriptor, series, t }: { descriptor: IndicatorDescriptor;
             <tr key={part.id}>
               <td>{tr(part.label, part.label_en)}</td>
               <td>{baseline[part.id] ? "✓" : "—"}</td>
-              <td className={scenario[part.id] && !baseline[part.id] ? "indicator-card__gain" : undefined}>
-                {scenario[part.id] ? "✓" : "—"}
-              </td>
+              {!asIs && (
+                <td className={scenario[part.id] && !baseline[part.id] ? "indicator-card__gain" : undefined}>
+                  {scenario[part.id] ? "✓" : "—"}
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
@@ -194,7 +221,7 @@ function FlagsCard({ descriptor, series, t }: { descriptor: IndicatorDescriptor;
 
 /** The "Indicatori" tab: every indicator over the whole 30-year horizon,
  * current situation vs. simulation, with the selected year as a cursor. */
-export function IndicatorsView({ descriptors, interventions, t, onTimeChange }: Props) {
+export function IndicatorsView({ descriptors, interventions, asIs, t, onTimeChange }: Props) {
   const [series, setSeries] = useState<IndicatorSeries | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
@@ -236,12 +263,14 @@ export function IndicatorsView({ descriptors, interventions, t, onTimeChange }: 
               </svg>
               {tr("Situazione attuale", "Current situation")}
             </span>
-            <span className="indicators-view__legend-item">
-              <svg width="28" height="8">
-                <line x1="0" x2="28" y1="4" y2="4" className="chart__line chart__line--scenario" />
-              </svg>
-              {tr("Simulazione (con gli interventi)", "Simulation (with the interventions)")}
-            </span>
+            {!asIs && (
+              <span className="indicators-view__legend-item">
+                <svg width="28" height="8">
+                  <line x1="0" x2="28" y1="4" y2="4" className="chart__line chart__line--scenario" />
+                </svg>
+                {tr("Simulazione (con gli interventi)", "Simulation (with the interventions)")}
+              </span>
+            )}
             {loading && <span className="indicators-view__status">{tr("Calcolo delle serie in corso…", "Computing the series…")}</span>}
             {failed && <span className="indicators-view__status">{tr("Impossibile calcolare le serie", "Could not compute the series")}</span>}
           </div>
@@ -269,7 +298,7 @@ export function IndicatorsView({ descriptors, interventions, t, onTimeChange }: 
 
         {series &&
           descriptors.groups.map((group) => {
-            const charted = descriptors.indicators.filter((d) => d.group === group.id && d.chart);
+            const charted = descriptors.indicators.filter((d) => d.group === group.id && d.chart && !(asIs && d.scenario_only));
             if (charted.length === 0) return null;
             return (
               <section key={group.id}>
@@ -277,9 +306,9 @@ export function IndicatorsView({ descriptors, interventions, t, onTimeChange }: 
                 <div className="indicators-view__grid">
                   {charted.map((d) =>
                     d.kind === "breakdown" ? (
-                      <BreakdownCard key={d.id} descriptor={d} series={series} t={t} onTimeChange={onTimeChange} />
+                      <BreakdownCard key={d.id} descriptor={d} series={series} t={t} onTimeChange={onTimeChange} asIs={asIs} />
                     ) : d.kind === "flags" ? (
-                      <FlagsCard key={d.id} descriptor={d} series={series} t={t} />
+                      <FlagsCard key={d.id} descriptor={d} series={series} t={t} asIs={asIs} />
                     ) : (
                       <ChartCard
                         key={d.id}
@@ -288,6 +317,7 @@ export function IndicatorsView({ descriptors, interventions, t, onTimeChange }: 
                         t={t}
                         onTimeChange={onTimeChange}
                         zeroBased={zeroBased}
+                        asIs={asIs}
                       />
                     )
                   )}

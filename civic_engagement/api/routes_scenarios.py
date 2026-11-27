@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 
-from civic_engagement.access import Access, access, editor
+from civic_engagement.access import Access, access, allowed
 from civic_engagement.models.schema import ScenarioInfo, ScenarioSave, SceneResponse
+from civic_engagement.phases import INTERVENTIONS_EDIT, SCENARIOS_EDIT
 from civic_engagement.scene import current_scene, validated_t
 from civic_engagement.store.scenarios import (
     ScenarioError,
@@ -15,6 +16,11 @@ from civic_engagement.store.state import store
 
 router = APIRouter()
 
+# Saving, loading and deleting scenarios; clearing the scene is a change of
+# its cards.
+scenarios_editing = allowed(SCENARIOS_EDIT)
+interventions_editing = allowed(INTERVENTIONS_EDIT)
+
 
 @router.get("/scenarios", response_model=list[ScenarioInfo])
 def get_scenarios(who: Access = Depends(access)) -> list[ScenarioInfo]:
@@ -23,7 +29,7 @@ def get_scenarios(who: Access = Depends(access)) -> list[ScenarioInfo]:
 
 
 @router.post("/scenarios", response_model=ScenarioInfo)
-def post_scenario(data: ScenarioSave, who: Access = Depends(editor)) -> ScenarioInfo:
+def post_scenario(data: ScenarioSave, who: Access = Depends(scenarios_editing)) -> ScenarioInfo:
     """Saves the team's interventions as a scenario. 409 if one with the
     same id exists and `overwrite` isn't set."""
     try:
@@ -35,7 +41,7 @@ def post_scenario(data: ScenarioSave, who: Access = Depends(editor)) -> Scenario
 
 
 @router.post("/scenarios/{scenario}/load", response_model=SceneResponse)
-def load_scenario(scenario: str, t: int = 0, who: Access = Depends(editor)) -> SceneResponse:
+def load_scenario(scenario: str, t: int = 0, who: Access = Depends(scenarios_editing)) -> SceneResponse:
     """The team's scene becomes the scenario's interventions (the scene as it
     was is set aside); every window of the team follows within seconds."""
     year = validated_t(t)
@@ -50,7 +56,7 @@ def load_scenario(scenario: str, t: int = 0, who: Access = Depends(editor)) -> S
 
 
 @router.delete("/scenarios/{scenario}", status_code=204)
-def remove_scenario(scenario: str, who: Access = Depends(editor)) -> None:
+def remove_scenario(scenario: str, who: Access = Depends(scenarios_editing)) -> None:
     try:
         delete_scenario(scenario, *library(who.team))
     except FileNotFoundError as error:
@@ -60,7 +66,7 @@ def remove_scenario(scenario: str, who: Access = Depends(editor)) -> None:
 
 
 @router.post("/session/clear", response_model=SceneResponse)
-def clear_session(t: int = 0, who: Access = Depends(editor)) -> SceneResponse:
+def clear_session(t: int = 0, who: Access = Depends(interventions_editing)) -> SceneResponse:
     """No interventions: a fresh start (the scene as it was is set aside)."""
     year = validated_t(t)
     store.replace([], who.team)

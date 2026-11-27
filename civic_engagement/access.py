@@ -8,16 +8,18 @@
 
 The routes and the store only see the answer (`Access`), through the
 dependencies here: `access` on every route (create_app adds it to every
-router), `editor` on the ones that change a team's scene or scenarios,
-`manager` on the admin routes.
+router), `allowed(operation)` on the ones that change a team's scene or
+scenarios (an editor, in a phase that allows it: phases.py), `manager` on
+the admin routes.
 
 A token is signed, not stored: the member, their PIN's version and when it
 was issued, with an HMAC over them. It survives restarts; a regenerated or
 revoked PIN (a new version) invalidates it.
 
 The environment, with `pin`:
-- `CIVIC_ENGAGEMENT_PIN_SECRET`: the HMACs' secret, the same across
-  deployments (changing it invalidates every PIN and token);
+- `CIVIC_ENGAGEMENT_PIN_SECRET`: the HMACs' secret, and the sealed PINs'
+  (pins.py), the same across deployments (changing it invalidates every PIN
+  and token, and leaves the sealed PINs unreadable);
 - `CIVIC_ENGAGEMENT_MANAGER_USER`, `CIVIC_ENGAGEMENT_MANAGER_PASSWORD` (at
   least 12 characters);
 - `CIVIC_ENGAGEMENT_TRUSTED_PROXY` (see `client_ip`).
@@ -33,7 +35,7 @@ import secrets
 import threading
 import time
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import cache
 
 from fastapi import Depends, HTTPException, Request
@@ -42,10 +44,11 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from civic_engagement.config import SITE, auth_mechanism
 from civic_engagement.domain import active_pack
 from civic_engagement.models.schema import MemberInfo, Me, TeamInfo
+from civic_engagement.phases import OPERATIONS, open_phase, operations
 from civic_engagement.pins import checked
 from civic_engagement.store.state import DEFAULT_TEAM
 from civic_engagement.store.storage import state_storage
-from civic_engagement.store.teams import TeamStore
+from civic_engagement.store.teams import Member, Team, TeamStore
 
 log = logging.getLogger(__name__)
 
@@ -57,18 +60,44 @@ class Access:
     role: str
     member_id: str | None = None
     member_name: str | None = None
+    # The team's phase (phases.py): None, nothing blocked.
+    phase: str | None = None
 
     @property
     def author(self) -> str | None:
         """The name on the cards this member places or changes."""
         return self.member_name
 
+    @property
+    def operations(self) -> list[str]:
+        """What this member may change now: nothing for a viewer; for an
+        editor, what the phase allows."""
+        if self.role != "editor":
+            return []
+        return operations(active_pack().phases, self.phase)
+
+    @property
+    def views(self) -> list[str]:
+        """What a screen of this team may show now (views.py): the phase's
+        views, its default first; none without a phase."""
+        found = next((p for p in active_pack().phases if p.id == self.phase), None)
+        return list(found.views) if found else []
+
     def me(self) -> Me:
         member = MemberInfo(id=self.member_id, name=self.member_name or "", role=self.role) if self.member_id else None
-        return Me(team=TeamInfo(id=self.team, name=self.team_name), member=member, role=self.role)
+        return Me(
+            team=TeamInfo(id=self.team, name=self.team_name), member=member, role=self.role,
+            phase=self.phase, operations=self.operations, views=self.views,
+        )
 
 
 OPEN = Access(team=DEFAULT_TEAM, team_name="", role="editor")
+
+
+def member_access(team: Team, member: Member) -> Access:
+    return Access(
+        team=team.id, team_name=team.name, role=member.role, member_id=member.id, member_name=member.name, phase=team.phase
+    )
 
 
 def _secret() -> bytes:
@@ -81,7 +110,9 @@ def _secret() -> bytes:
 @cache
 def team_store() -> TeamStore:
     """The site's teams (the `pin` mechanism only)."""
-    return TeamStore(state_storage(), f"{SITE.data_dir}/teams.json", checked(active_pack().pin_format), _secret())
+    pack = active_pack()
+    phases = [phase.id for phase in pack.phases]
+    return TeamStore(state_storage(), f"{SITE.data_dir}/teams.json", checked(pack.pin_format), _secret(), phases)
 
 
 # Tokens.
@@ -238,9 +269,11 @@ def _unauthorised(detail: str) -> HTTPException:
 
 
 def access(request: Request) -> Access:
-    """The request's team, member and role; 401 without a valid token (pin)."""
+    """The request's team, member, role and phase; 401 without a valid
+    token (pin). The phase is read at each request: the manager's change
+    applies at once."""
     if auth_mechanism() == "open":
-        return OPEN
+        return replace(OPEN, phase=open_phase(active_pack().phases))
     scheme, _, token = request.headers.get("authorization", "").partition(" ")
     if scheme.lower() != "bearer" or not token:
         raise _unauthorised("A PIN is needed")
@@ -248,8 +281,7 @@ def access(request: Request) -> Access:
     found = team_store().member(issued[0]) if issued else None
     if found is None or found[1].pin_version != issued[1]:
         raise _unauthorised("Not a valid token: the PIN was changed, or the member removed")
-    team, member = found
-    return Access(team=team.id, team_name=team.name, role=member.role, member_id=member.id, member_name=member.name)
+    return member_access(*found)
 
 
 def editor(who: Access = Depends(access)) -> Access:
@@ -257,6 +289,25 @@ def editor(who: Access = Depends(access)) -> Access:
     if who.role != "editor":
         raise HTTPException(status_code=403, detail="Viewers can't change the scene")
     return who
+
+
+# The start of the 409's detail when the phase refuses a change: the
+# frontend tells it from the other 409s by it.
+PHASE_REFUSED = "Not allowed in the current phase"
+
+
+def allowed(operation: str):
+    """`editor`, for the routes doing `operation` (phases.py), if the team's
+    phase allows it: 409 if not (the frontend then asks for the phase)."""
+    if operation not in OPERATIONS:
+        raise ValueError(f"Unknown operation {operation!r}")
+
+    def dependency(who: Access = Depends(editor)) -> Access:
+        if operation not in who.operations:
+            raise HTTPException(status_code=409, detail=f"{PHASE_REFUSED} ({who.phase})")
+        return who
+
+    return dependency
 
 
 _basic = HTTPBasic(auto_error=False)
@@ -283,9 +334,11 @@ MANAGER_PASSWORD_MIN = 12
 
 
 def check_configuration() -> None:
-    """At startup, with `pin`: what's missing makes the app refuse to start,
-    not fail on the first login."""
+    """At startup: what's missing or wrong makes the app refuse to start,
+    not fail on the first request (with `pin`, its secrets; with `open`, a
+    phase the pack doesn't have)."""
     if auth_mechanism() != "pin":
+        open_phase(active_pack().phases)
         return
     if not (os.environ.get("CIVIC_ENGAGEMENT_MANAGER_USER") and os.environ.get("CIVIC_ENGAGEMENT_MANAGER_PASSWORD")):
         raise RuntimeError("CIVIC_ENGAGEMENT_AUTH=pin needs CIVIC_ENGAGEMENT_MANAGER_USER and CIVIC_ENGAGEMENT_MANAGER_PASSWORD")

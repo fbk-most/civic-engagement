@@ -275,12 +275,69 @@ export interface AuthInfo {
 
 export type Role = "editor" | "viewer";
 
-/** Who this window is. */
+/** The changes a phase can block (civic_engagement/phases.py). */
+export type Operation = "notes.edit" | "interventions.edit" | "scenarios.edit";
+
+/** Who this window is, and what it may change now. */
 export interface Me {
   team: { id: string; name: string };
   /** Null without teams. */
   member: { id: string; name: string; role: Role } | null;
   role: Role;
+  /** The team's phase; null, nothing blocked. */
+  phase: string | null;
+  /** What this member may change in that phase: none for viewers. */
+  operations: Operation[];
+  /** The views of that phase, its default first (see views.ts); none
+   * without a phase, or in one without views. */
+  views: string[];
+}
+
+/** What a view can show (civic_engagement/views.py). */
+export type Panel =
+  | "tab.2d"
+  | "tab.3d"
+  | "tab.indicators"
+  | "kpi"
+  | "thermal"
+  | "time"
+  | "legend"
+  | "notes"
+  | "cards"
+  | "interventions"
+  | "interventionMode"
+  | "scenarios"
+  | "compare"
+  | "export";
+
+/** A view of the pack's: what a screen shows (see views.ts). */
+export interface ViewSpec {
+  id: string;
+  label: string;
+  label_en: string;
+  panels: Panel[];
+  /** The tab it opens on. */
+  tab: "2d" | "3d" | "indicators";
+  /** How the interventions are shown when it hasn't the switch (`interventionMode`). */
+  intervention_mode: InterventionDisplayMode;
+}
+
+/** A phase of the pack's (civic_engagement/phases.py). */
+export interface PhaseSpec {
+  id: string;
+  label: string;
+  label_en: string;
+  operations: Operation[];
+  /** Its views' ids, the default first. */
+  views: string[];
+}
+
+/** For the rehearsal page (rehearsal/): the pack's phases and views, and
+ * whether this member may move the team's phase. */
+export interface Rehearsal {
+  phases: PhaseSpec[];
+  views: ViewSpec[];
+  can_set_phase: boolean;
 }
 
 export interface LoginResponse extends Me {

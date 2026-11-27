@@ -1,21 +1,36 @@
 """The manager's API (`pin` only): teams, members and their PINs, a team's
-scene, its export, the store's state, the PINs' throttle. Basic
+scene and phase, its export, the store's state, the PINs' throttle. Basic
 credentials (access.manager);
 the CLI, civic_engagement/admin.py, calls it."""
 
 import json
+import logging
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 
 from civic_engagement import digitalhub
 from civic_engagement.access import manager, manager_throttle, pin_throttle, team_store
 from civic_engagement.config import SITE, STARTED, memory
-from civic_engagement.models.schema import AdminMember, AdminTeam, MemberCreate, TeamCreate, TeamRename, TeamScene, ThrottleReset
+from civic_engagement.domain import active_pack
+from civic_engagement.models.schema import (
+    AdminMember,
+    AdminTeam,
+    MemberCreate,
+    PhaseSet,
+    PhaseSpec,
+    TeamCreate,
+    TeamRename,
+    TeamScene,
+    ThrottleReset,
+    ViewSpec,
+)
 from civic_engagement.store.scenarios import ScenarioError, delete_library, library, read_scenario, scenario_documents
 from civic_engagement.store.state import store
 from civic_engagement.store.storage import restart_needed, state_storage
 from civic_engagement.store.teams import Member, Team, TeamError
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin", dependencies=[Depends(manager)])
 
@@ -31,6 +46,7 @@ def _team(team: Team) -> AdminTeam:
         created_at=team.created_at,
         members=[_member(m) for m in team.members],
         interventions=len(store.list_interventions(team.id)),
+        phase=team.phase,
     )
 
 
@@ -104,6 +120,18 @@ def post_member(team_id: str, data: MemberCreate) -> AdminMember:
     return _member(member, pin)
 
 
+@router.get("/teams/{team_id}/pins", response_model=list[AdminMember])
+def get_pins(team_id: str, response: Response) -> list[AdminMember]:
+    """The team's members with their PINs, for the facilitators: the PIN
+    None for a member from before sealed PINs (regenerate it). Logged."""
+    _known(team_id)
+    response.headers["Cache-Control"] = "no-store"
+    pins = team_store().pins(team_id)
+    unreadable = sum(pin is None for _, pin in pins)
+    log.warning("The manager read the PINs of team %r%s", team_id, f" ({unreadable} not readable)" if unreadable else "")
+    return [_member(member, pin) for member, pin in pins]
+
+
 @router.delete("/teams/{team_id}/members/{member_id}", status_code=204)
 def delete_member(team_id: str, member_id: str) -> None:
     _known(team_id)
@@ -134,6 +162,44 @@ def post_scene(team_id: str, data: TeamScene) -> AdminTeam:
     interventions = _scenario(data.scenario, data.team or team_id) if data.scenario else []
     store.replace(interventions, team_id)
     return _team(team)
+
+
+def known_phase(phase: str) -> str:
+    """One of the pack's phases, or 422."""
+    known = [p.id for p in active_pack().phases]
+    if not known:
+        raise HTTPException(status_code=422, detail="The pack has no phases")
+    if phase not in known:
+        raise HTTPException(status_code=422, detail=f"No phase {phase!r}: one of {', '.join(known)}")
+    return phase
+
+
+@router.get("/phases", response_model=list[PhaseSpec])
+def get_phases() -> list[PhaseSpec]:
+    """The pack's phases, in their usual order, with their views."""
+    return active_pack().phases
+
+
+@router.get("/views", response_model=list[ViewSpec])
+def get_views() -> list[ViewSpec]:
+    """The pack's views, with their labels: a team's screens show one of
+    its phase's (`#view=<id>` in their URL)."""
+    return active_pack().views
+
+
+@router.put("/teams/{team_id}/phase", response_model=AdminTeam)
+def put_team_phase(team_id: str, data: PhaseSet) -> AdminTeam:
+    """The team's phase: any, after any (going back too). Its members'
+    windows follow within seconds."""
+    _known(team_id)
+    return _team(team_store().set_phase(team_id, known_phase(data.phase)))
+
+
+@router.put("/phase", response_model=list[AdminTeam])
+def put_phase(data: PhaseSet) -> list[AdminTeam]:
+    """Every team in the same phase."""
+    phase = known_phase(data.phase)
+    return [_team(team_store().set_phase(team.id, phase)) for team in team_store().teams()]
 
 
 @router.get("/teams/{team_id}/export")

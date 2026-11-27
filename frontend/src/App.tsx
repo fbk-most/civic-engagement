@@ -23,6 +23,8 @@ import {
   fetchSiteAssets,
   fetchTerrainGrid,
   fetchThermalField,
+  fetchViews,
+  setPhaseRefusedHandler,
   updateIntervention,
 } from "./api/client";
 import type {
@@ -30,9 +32,11 @@ import type {
   DeferredIndicators,
   IndicatorDescriptors,
   InterventionDisplayMode,
+  Panel,
   PlacementType,
   SceneResponse,
   TerrainGrid,
+  ViewSpec,
 } from "./api/types";
 import { CardPalette } from "./ui/CardPalette";
 import { ParamForm } from "./ui/ParamForm";
@@ -59,7 +63,8 @@ import { LangSwitch } from "./ui/LangSwitch";
 import { TempSwitch } from "./ui/TempSwitch";
 import { ScenarioMenu } from "./ui/ScenarioMenu";
 import { TeamBadge } from "./ui/TeamBadge";
-import { useAccess } from "./access";
+import { can, useAccess } from "./access";
+import { panelShown, resolveView, tabAfter, viewInterventionMode, viewTabs } from "./views";
 import { tr, useLang } from "./i18n/lang";
 import { withinBoundary } from "./map/boundary";
 import { useTempUnit } from "./i18n/units";
@@ -124,9 +129,43 @@ function App() {
   const lang = useLang();
   const tempUnit = useTempUnit();
   // With teams, a viewer only looks: no cards to place, change or remove,
-  // no scenarios to load or save (the backend refuses them anyway).
+  // no scenarios to load or save; an editor, only what the team's phase
+  // allows (the backend refuses the rest anyway).
   const access = useAccess();
-  const canEdit = access.me.role === "editor";
+  const canEditInterventions = can(access, "interventions.edit");
+  const { refresh: refreshAccess } = access;
+  // The view shown (see views.ts): the one in the URL's fragment or query,
+  // if the team's phase has it, else the phase's default; none (everything
+  // shown) without views. The fragment's changes are applied as they come.
+  // Null until the pack's views are known.
+  const [views, setViews] = useState<ViewSpec[] | null>(null);
+  useEffect(() => {
+    fetchViews()
+      .then(setViews)
+      .catch((err) => {
+        console.error(err);
+        setViews([]);
+      });
+  }, []);
+  const [urlHash, setUrlHash] = useState(window.location.hash);
+  useEffect(() => {
+    const follow = () => setUrlHash(window.location.hash);
+    window.addEventListener("hashchange", follow);
+    return () => window.removeEventListener("hashchange", follow);
+  }, []);
+  const { me } = access;
+  const screenView = useMemo(
+    () => resolveView(window.location.search, urlHash, me.phase === null ? null : me.views, views ?? []),
+    [urlHash, me, views]
+  );
+  // Each panel: the view has it and, for the controls of a change, the
+  // role and the phase allow it.
+  const shown = (panel: Panel) => panelShown(screenView, panel, me.operations);
+  // Placing cards, and changing or removing those placed.
+  const canPlace = shown("cards");
+  // The phase this window's controls follow, for the revision check below.
+  const phaseRef = useRef(access.me.phase);
+  phaseRef.current = access.me.phase;
   const containerRef = useRef<HTMLDivElement>(null);
   // Guards against React 18 StrictMode's dev-only double effect invocation:
   // creating a second MapLibre GL (WebGL) instance while the first is mid-init
@@ -163,6 +202,14 @@ function App() {
     window.clearTimeout(noticeTimerRef.current);
     noticeTimerRef.current = window.setTimeout(() => setNotice(null), NOTICE_MS);
   }, []);
+  // A change refused by the team's phase: it changed since this window
+  // last asked. Says so, and asks again (the controls follow).
+  useEffect(() => {
+    setPhaseRefusedHandler(() => {
+      showNotice(tr("La fase attuale non lo consente.", "Not allowed in the current phase."));
+      refreshAccess();
+    });
+  }, [showNotice, refreshAccess]);
   const [t, setT] = useState(initialDebugParams.t ?? 0);
   const [scene, setScene] = useState<SceneResponse | null>(null);
   // Null until known (flat if the site has no terrain grid). The ref is for
@@ -174,22 +221,24 @@ function App() {
   useEffect(() => {
     for (; scenesToEndRef.current > 0; scenesToEndRef.current--) timeline.end("scene");
   }, [scene]);
-  const [interventionMode, setInterventionMode] = useState<InterventionDisplayMode>(
+  // The switch's choice; a view without the switch says its own.
+  const [chosenInterventionMode, setInterventionMode] = useState<InterventionDisplayMode>(
     initialDebugParams.interventionMode ?? "simulated"
   );
+  const interventionMode = viewInterventionMode(screenView, chosenInterventionMode);
   const [selectedInterventionId, setSelectedInterventionId] = useState<string | null>(null);
   const [selectedTreeElementId, setSelectedTreeElementId] = useState<string | null>(null);
   const [replantTargetId, setReplantTargetId] = useState<string | null>(null);
-  const [view, setView] = useState<AppView>(initialDebugParams.viewerOpen ? "3d" : "2d");
+  const [tab, setTab] = useState<AppView>(initialDebugParams.viewerOpen ? "3d" : "2d");
   // The 3D view is only created the first time its tab is opened (no point
   // building trees nobody looks at), then kept alive across tab switches.
-  const [view3dMounted, setView3dMounted] = useState(view === "3d");
+  const [view3dMounted, setView3dMounted] = useState(tab === "3d");
   const [cameraPose, setCameraPose] = useState<CameraPose | null>(initialDebugParams.pose);
   // Keeping the map and the 3D view on the same framing across tab switches
   // (see map/viewSync.ts): what each showed right after the last alignment,
   // so a view that hasn't been moved since isn't disturbed.
   const view3dRef = useRef<View3DViewHandle>(null);
-  const previousViewRef = useRef<AppView>(view);
+  const previousTabRef = useRef<AppView>(tab);
   const alignedRef = useRef<{ map: MapFraming; view: CameraPose } | null>(null);
   const [initial3dView, setInitial3dView] = useState<CameraPose | null>(null);
   // Day and hour, shared by the 3D view's sun and the felt-temperature layer.
@@ -200,8 +249,12 @@ function App() {
   // The felt-temperature field is the domain's (see FrontendPack.features):
   // without it, nothing below ever asks for one.
   const { features } = activePack();
-  const [thermalOn, setThermalOn] = useState(initialDebugParams.thermal && features.thermal);
-  const [thermalPanelOpen, setThermalPanelOpen] = useState(initialDebugParams.thermal && features.thermal);
+  // Both off in a view without the thermal panel.
+  const thermalAllowed = features.thermal && shown("thermal");
+  const [thermalOnChosen, setThermalOn] = useState(initialDebugParams.thermal && features.thermal);
+  const [thermalPanelOpenChosen, setThermalPanelOpen] = useState(initialDebugParams.thermal && features.thermal);
+  const thermalOn = thermalOnChosen && thermalAllowed;
+  const thermalPanelOpen = thermalPanelOpenChosen && thermalAllowed;
   const [thermalFailed, setThermalFailed] = useState(false);
   const [thermalReading, setThermalReading] = useState<ThermalReading>(null);
   // How the 3D view's crowd fares in the felt temperature (see Viewer).
@@ -386,6 +439,15 @@ function App() {
     });
   }, [showNotice]);
 
+  // The phase, or the view, no longer allows changing cards: a card armed,
+  // or a form open, is dropped (as on a change of tab).
+  useEffect(() => {
+    if (canPlace) return;
+    setSelectedCard(null);
+    setPendingGeometry(null);
+    setReplantTargetId(null);
+  }, [canPlace]);
+
   useEffect(() => {
     selectedCardRef.current = selectedCard;
     const draw = drawRef.current;
@@ -413,15 +475,15 @@ function App() {
   // back, the 3D view takes the map's framing — each only if the other side
   // was actually moved since they were last aligned.
   useEffect(() => {
-    const previous = previousViewRef.current;
-    previousViewRef.current = view;
+    const previous = previousTabRef.current;
+    previousTabRef.current = tab;
     const map = mapRef.current;
     const currentScene = sceneRef.current;
-    if (previous === view || !map || !currentScene) return;
+    if (previous === tab || !map || !currentScene) return;
     const anchor = anchorFromPolygon(currentScene.site_boundary);
     const aligned = alignedRef.current;
 
-    if (view === "2d") {
+    if (tab === "2d") {
       const shown = view3dRef.current?.readView();
       if (!shown || (aligned && sameView(shown, aligned.view, anchor))) return;
       const { framing, eyeLevel } = viewToMap(map, anchor, shown, terrainRef.current);
@@ -429,7 +491,7 @@ function App() {
       mapWedgeRef.current = eyeLevel ? { wedge: frustumWedge(anchor, shown), position: [shown.lng, shown.lat] } : null;
       setCameraView(map, mapWedgeRef.current);
       alignedRef.current = { map: readMapFraming(map), view: shown };
-    } else if (view === "3d") {
+    } else if (tab === "3d") {
       const framing = readMapFraming(map);
       if (aligned && sameFraming(framing, aligned.map)) return;
       const next = mapToView(map, anchor, terrainRef.current);
@@ -438,11 +500,31 @@ function App() {
       else setInitial3dView(next);
       alignedRef.current = { map: framing, view: next };
     }
-  }, [view]);
+  }, [tab]);
 
   useEffect(() => {
-    if (view === "3d") setView3dMounted(true);
-  }, [view]);
+    if (tab === "3d") setView3dMounted(true);
+  }, [tab]);
+
+  // A change of view (from the URL, or the phase's): the tab it opens on,
+  // if that differs from the last view's or the tab shown isn't one it
+  // offers; today's year if it hasn't the year slider. The first, once the
+  // views are known, keeps a debug URL's 3D tab (?viewer=1) and year.
+  const appliedViewRef = useRef<ViewSpec | null | undefined>(undefined);
+  const applyViewRef = useRef((_previous: ViewSpec | null | undefined) => {});
+  applyViewRef.current = (previous) => {
+    const first = previous === undefined;
+    const keep3d = first && tab === "3d" && viewTabs(screenView).includes("3d");
+    const next = keep3d ? tab : tabAfter(previous ?? null, screenView, tab);
+    if (next !== tab) handleViewTabChange(next);
+    if (!first && screenView && !screenView.panels.includes("time") && t !== 0) handleTimeChange(0);
+  };
+  useEffect(() => {
+    const previous = appliedViewRef.current;
+    if (views === null || previous === screenView) return;
+    appliedViewRef.current = screenView;
+    applyViewRef.current(previous);
+  }, [views, screenView]);
 
   useEffect(() => {
     // Guard on `scene` (not just the map ref): the map object exists synchronously
@@ -584,15 +666,17 @@ function App() {
   }
   function changeInterventionMode(next: InterventionDisplayMode) {
     if (next !== interventionMode) timeline.markInput("interventions mode");
-    // The deck and the list go away there (see the left rail): so does a card
-    // being placed, or one being looked at.
-    if (next === "hidden") {
-      setSelectedCard(null);
-      setPendingGeometry(null);
-      setSelectedInterventionId(null);
-    }
     setInterventionMode(next);
   }
+  // Without the interventions (the switch, or the view), the deck and the
+  // list go away (see the left rail): so does a card being placed, or one
+  // being looked at.
+  useEffect(() => {
+    if (interventionMode !== "hidden") return;
+    setSelectedCard(null);
+    setPendingGeometry(null);
+    setSelectedInterventionId(null);
+  }, [interventionMode]);
   const missingKey =
     [...wantedVariants.map(keyFor), ...(todayKey ? [todayKey] : [])].find((key) => !fieldCache.has(key)) ?? null;
   // For the performance readout: the view isn't right until every field it
@@ -666,12 +750,12 @@ function App() {
   // (with its extruded buildings, not cheap). Switching back catches up.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !scene || view !== "2d") return;
+    if (!map || !scene || tab !== "2d") return;
     const shown = thermalShown;
     thermalLayerRef.current = shown;
     if (!shown) setThermalReading(null);
     setThermalLayer(map, anchorFromPolygon(scene.site_boundary), shown?.field ?? null, shown?.layer ?? null, shown?.stale);
-  }, [thermalShown, scene, view]);
+  }, [thermalShown, scene, tab]);
 
   // The sun's height, for the day-and-hour control's readout.
   const sunAltitudeDeg = useMemo(() => {
@@ -696,7 +780,7 @@ function App() {
   }
 
   function handleViewTabChange(next: AppView) {
-    if (next === view) return;
+    if (next === tab) return;
     // Editing only happens on the 2D map: an armed card or an open form
     // would be left dangling out of sight, and a placard picked in 3D is
     // only carried over to 2D through its explicit "Modifica" button.
@@ -705,12 +789,12 @@ function App() {
     setReplantTargetId(null);
     setSelectedInterventionId(null);
     setSelectedTreeElementId(null);
-    setView(next);
+    setTab(next);
   }
 
   /** From the 3D view's placard info card: straight into the edit form. */
   function handleEditInterventionIn2D(id: string) {
-    setView("2d");
+    setTab("2d");
     setSelectedInterventionId(id);
   }
 
@@ -839,8 +923,10 @@ function App() {
       if (!shown) return;
       checking = true;
       fetchSessionRevision()
-        .then(({ revision, restart_needed }) => {
+        .then(({ revision, restart_needed, phase }) => {
           setRestartNeeded(restart_needed);
+          // The manager moved the team to another phase: what may this window do now?
+          if (phase !== phaseRef.current) refreshAccess();
           if (revision === shown.revision || sceneRef.current !== shown) return;
           // Numbered like a year change, so a slider drag in the meantime wins.
           const requestSeq = ++timeRequestSeqRef.current;
@@ -870,7 +956,7 @@ function App() {
       window.removeEventListener("focus", checkForChanges);
       document.removeEventListener("visibilitychange", checkForChanges);
     };
-  }, [status, t]);
+  }, [status, t, refreshAccess]);
 
   const selectedIntervention = scene?.interventions.find((i) => i.id === selectedInterventionId) ?? null;
   const selectedInterventionCard = selectedIntervention
@@ -878,16 +964,23 @@ function App() {
     : null;
   const selectedTreeElement = scene?.elements.find((e) => e.id === selectedTreeElementId) ?? null;
 
+  // The panels wait for the view: none shown that it would hide.
+  const ready = status === "ready" && views !== null;
   return (
     <div className="app">
       <header className="top-bar">
-        <ViewTabs view={view} onChange={handleViewTabChange} />
+        <ViewTabs view={tab} tabs={viewTabs(screenView)} onChange={handleViewTabChange} />
         <div className="top-bar__right">
-          {status === "ready" && view !== "indicators" && (
+          {ready && tab !== "indicators" && shown("interventionMode") && (
             <InterventionsToggle mode={interventionMode} onChange={changeInterventionMode} />
           )}
-          {status === "ready" && scene && canEdit && (
-            <ScenarioMenu interventionCount={scene.interventions.length} t={t} onSceneReplaced={handleSceneReplaced} />
+          {ready && scene && shown("scenarios") && (
+            <ScenarioMenu
+              interventionCount={scene.interventions.length}
+              t={t}
+              canClear={canEditInterventions}
+              onSceneReplaced={handleSceneReplaced}
+            />
           )}
           {access.mechanism === "pin" && <TeamBadge access={access} />}
           {activePack().features.thermal && <TempSwitch unit={tempUnit} />}
@@ -914,14 +1007,14 @@ function App() {
         </div>
       )}
       {notice && <div className={restartNeeded ? "map-notice map-notice--lower" : "map-notice"}>{notice}</div>}
-      {status === "ready" && (
+      {ready && (
         <>
-          {view === "2d" && (
+          {tab === "2d" && (
             <>
               {/* The current situation has no cards to place or list. */}
-              {interventionMode !== "hidden" && (
+              {interventionMode !== "hidden" && (canPlace || shown("interventions")) && (
                 <div className="left-rail">
-                  {canEdit && (
+                  {canPlace && (
                     <CardPalette
                       cards={cards}
                       selected={selectedCard}
@@ -929,15 +1022,17 @@ function App() {
                       initiallyCollapsed={initialDebugParams.panelsClosed}
                     />
                   )}
-                  <InterventionList
-                    interventions={scene?.interventions ?? []}
-                    cards={cards}
-                    onSelect={handleSelectIntervention}
-                    initiallyCollapsed={initialDebugParams.panelsClosed}
-                  />
+                  {shown("interventions") && (
+                    <InterventionList
+                      interventions={scene?.interventions ?? []}
+                      cards={cards}
+                      onSelect={handleSelectIntervention}
+                      initiallyCollapsed={initialDebugParams.panelsClosed}
+                    />
+                  )}
                 </div>
               )}
-              <MapLegend />
+              {shown("legend") && <MapLegend />}
             </>
           )}
           {view3dMounted && (
@@ -946,9 +1041,10 @@ function App() {
               terrain={terrain}
               mode={interventionMode}
               cards={cards}
-              active={view === "3d"}
+              active={tab === "3d"}
               t={t}
               onTimeChange={handleTimeChange}
+              showTime={shown("time")}
               pose={cameraPose}
               onPlacePose={setCameraPose}
               onClearPose={() => setCameraPose(null)}
@@ -965,9 +1061,9 @@ function App() {
               initialView={initial3dView}
             />
           )}
-          {view !== "indicators" && (
+          {tab !== "indicators" && (
             <div className="right-rail">
-              {scene && indicatorDescriptors && <KpiPanel
+              {scene && indicatorDescriptors && shown("kpi") && <KpiPanel
                   descriptors={indicatorDescriptors}
                   indicators={scene.indicators}
                   baselineIndicators={scene.baseline_indicators}
@@ -975,7 +1071,7 @@ function App() {
                   asIs={interventionMode === "hidden"}
                   initiallyCollapsed={initialDebugParams.panelsClosed}
                 />}
-              {features.thermal && (view === "2d" || view === "3d") && (
+              {thermalAllowed && (tab === "2d" || tab === "3d") && (
                 <ThermalPanel
                   open={thermalPanelOpen}
                   onOpenChange={setThermalPanelOpen}
@@ -987,14 +1083,14 @@ function App() {
                   hour={sunSetting.hour}
                   onHourChange={(hour) => changeSunSetting({ ...sunSetting, hour })}
                   reading={thermalOn ? thermalReading : null}
-                  crowd={view === "3d" ? crowdExposure : null}
+                  crowd={tab === "3d" ? crowdExposure : null}
                   curve={curveShown}
                 />
               )}
-              {view === "2d" &&
+              {tab === "2d" &&
                 (pendingGeometry && selectedCard ? (
                   <ParamForm card={selectedCard} plantedYear={t} onSubmit={handleSubmit} onCancel={rearmDrawing} />
-                ) : selectedIntervention && selectedInterventionCard && canEdit ? (
+                ) : selectedIntervention && selectedInterventionCard && canPlace ? (
                   <ParamForm
                     card={selectedInterventionCard}
                     initialValues={selectedIntervention.params}
@@ -1015,42 +1111,45 @@ function App() {
                   <TreeIdentityCard
                     element={selectedTreeElement}
                     onClose={() => setSelectedTreeElementId(null)}
-                    onReplant={canEdit ? () => handleReplant(selectedTreeElement) : undefined}
+                    onReplant={canPlace ? () => handleReplant(selectedTreeElement) : undefined}
                   />
                 ) : null)}
-              {view === "3d" && selectedIntervention && (
+              {tab === "3d" && selectedIntervention && (
                 <InterventionInfoCard
                   intervention={selectedIntervention}
                   card={selectedInterventionCard}
-                  onEdit={canEdit ? () => handleEditInterventionIn2D(selectedIntervention.id) : undefined}
+                  onEdit={canPlace ? () => handleEditInterventionIn2D(selectedIntervention.id) : undefined}
                   onClose={() => setSelectedInterventionId(null)}
                 />
               )}
             </div>
           )}
-          {view === "indicators" && scene && indicatorDescriptors && (
+          {tab === "indicators" && scene && indicatorDescriptors && (
             <IndicatorsView
               descriptors={indicatorDescriptors}
               interventions={scene.interventions}
+              // Hidden by the view, not by the switch (which this tab hasn't).
+              asIs={!shown("interventionMode") && interventionMode === "hidden"}
               t={t}
               onTimeChange={handleTimeChange}
             />
           )}
           {/* In the 3D view the year is part of its own time panel, together
               with day and hour. */}
-          {view === "2d" && (thermalOn || thermalPanelOpen) ? (
-            <div className="map-time-panel">
-              <TimeSlider t={t} onChange={handleTimeChange} embedded />
-              <SunControl
-                setting={sunSetting}
-                altitudeDeg={sunAltitudeDeg}
-                year={CURRENT_YEAR + t}
-                onChange={changeSunSetting}
-              />
-            </div>
-          ) : (
-            view !== "3d" && <TimeSlider t={t} onChange={handleTimeChange} />
-          )}
+          {shown("time") &&
+            (tab === "2d" && (thermalOn || thermalPanelOpen) ? (
+              <div className="map-time-panel">
+                <TimeSlider t={t} onChange={handleTimeChange} embedded />
+                <SunControl
+                  setting={sunSetting}
+                  altitudeDeg={sunAltitudeDeg}
+                  year={CURRENT_YEAR + t}
+                  onChange={changeSunSetting}
+                />
+              </div>
+            ) : (
+              tab !== "3d" && <TimeSlider t={t} onChange={handleTimeChange} />
+            ))}
         </>
       )}
     </div>

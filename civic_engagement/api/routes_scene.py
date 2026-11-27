@@ -37,8 +37,9 @@ def get_session_revision(who: Access = Depends(access)) -> dict:
     """Cheap to ask: a window checks it when it comes back into focus and
     fetches the scene only if it differs from its scene's `revision`. With
     `restart_needed`, it says the app must be started again for changes to
-    be saved (store/storage.py)."""
-    return {"revision": store.revision(who.team), "restart_needed": restart_needed()}
+    be saved (store/storage.py). With `phase`, the team's: a window asks
+    again what it may do (GET /auth/me) when it changes."""
+    return {"revision": store.revision(who.team), "restart_needed": restart_needed(), "phase": who.phase}
 
 
 @router.get("/indicators/descriptors", response_model=IndicatorDescriptors)

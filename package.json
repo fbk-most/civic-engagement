@@ -6,7 +6,8 @@
   "description": "The core of the civic co-design demonstrator's frontend; each domain pack's app is built on it (startApp). Installed from its git repository, as TypeScript sources: the packs' apps compile it",
   "license": "Apache-2.0",
   "exports": {
-    ".": "./frontend/src/index.ts"
+    ".": "./frontend/src/index.ts",
+    "./rehearsal": "./frontend/src/rehearsal/index.ts"
   },
   "files": [
     "frontend/src",
@@ -15,7 +16,8 @@
   "scripts": {
     "dev": "vite frontend",
     "lint": "oxlint -c frontend/.oxlintrc.json frontend",
-    "typecheck": "tsc -p frontend/tsconfig.app.json --noEmit"
+    "typecheck": "tsc -p frontend/tsconfig.app.json --noEmit",
+    "test": "vitest run --dir frontend/src"
   },
   "dependencies": {
     "@types/geojson": "^7946.0.16",
@@ -42,6 +44,7 @@
     "pngjs": "^7.0.0",
     "puppeteer-core": "^25.10.0",
     "typescript": "~6.0.2",
-    "vite": "^8.1.1"
+    "vite": "^8.1.1",
+    "vitest": "^5.1.2"
   }
 }

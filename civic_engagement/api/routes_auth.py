@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from civic_engagement.access import Access, access, make_token, pin_throttle, team_store, throttled
+from civic_engagement.access import Access, access, make_token, member_access, pin_throttle, team_store, throttled
 from civic_engagement.config import auth_mechanism
 from civic_engagement.domain import active_pack
 from civic_engagement.models.schema import AuthInfo, LoginResponse, Me, PinLogin
@@ -30,10 +30,10 @@ def post_pin(data: PinLogin, request: Request) -> LoginResponse:
         pin_throttle.failed(ip)
         raise HTTPException(status_code=401, detail="Not a PIN")
     team, member = found
-    who = Access(team=team.id, team_name=team.name, role=member.role, member_id=member.id, member_name=member.name)
-    return LoginResponse(**who.me().model_dump(), token=make_token(member.id, member.pin_version))
+    return LoginResponse(**member_access(team, member).me().model_dump(), token=make_token(member.id, member.pin_version))
 
 
 @router.get("/auth/me", response_model=Me)
 def get_me(who: Access = Depends(access)) -> Me:
+    """Who this is, and what they may change now (the team's phase)."""
     return who.me()
