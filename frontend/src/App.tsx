@@ -4,7 +4,7 @@ import type { TerraDraw } from "terra-draw";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./App.css";
 import { createMap } from "./map/mapSetup";
-import { renderScene, setCameraView, setHighlight } from "./map/layers";
+import { DISABLED_INTERVENTION_LAYERS, renderScene, setCameraView, setHighlight } from "./map/layers";
 import { mapToView, readMapFraming, sameFraming, sameView, viewToMap, type MapFraming } from "./map/viewSync";
 import { frustumWedge, type CameraPose } from "./three/camera";
 import { anchorFromPolygon, toLocal } from "./three/geo";
@@ -24,6 +24,7 @@ import {
   fetchTerrainGrid,
   fetchThermalField,
   fetchViews,
+  setInterventionEnabled,
   setPhaseRefusedHandler,
   updateIntervention,
 } from "./api/client";
@@ -49,6 +50,8 @@ import { InterventionList } from "./ui/InterventionList";
 import { TreeIdentityCard } from "./ui/TreeIdentityCard";
 import { MapLegend } from "./ui/MapLegend";
 import { InterventionInfoCard } from "./ui/InterventionInfoCard";
+import { downloadCanvas, imageFileName } from "./imageExport";
+import { CardOffNotice } from "./ui/CardOffNotice";
 import { View3D, type View3DViewHandle } from "./ui/View3D";
 import { ThermalPanel } from "./ui/ThermalPanel";
 import { SunControl } from "./ui/SunControl";
@@ -68,6 +71,10 @@ import { panelShown, resolveView, tabAfter, viewInterventionMode, viewTabs } fro
 import { tr, useLang } from "./i18n/lang";
 import { withinBoundary } from "./map/boundary";
 import { useTempUnit } from "./i18n/units";
+import { useNotes } from "./notes/useNotes";
+import { NotesRail } from "./notes/NotesRail";
+import { notesClaimClick } from "./notes/notesLayer";
+import { NotesPanel } from "./notes/NotesPanel";
 import * as timeline from "./perf/timeline";
 
 type Status = "loading" | "ready" | "error";
@@ -121,6 +128,12 @@ function fetchFieldIntoCache(key: string, t: number, month: number, day: number,
     fieldCache.set(key, decodeField(response));
     if (fieldCache.size > FIELD_CACHE_SIZE) fieldCache.delete(fieldCache.keys().next().value!);
   });
+}
+
+/** The cards as placed (not the year shown): to tell whether they're still
+ * those of a scenario loaded. */
+function cardsKey(interventions: SceneResponse["interventions"]): string {
+  return JSON.stringify(interventions.map((i) => [i.id, i.card_type, i.geometry, i.params, i.planted_year, i.enabled]));
 }
 
 function App() {
@@ -212,6 +225,9 @@ function App() {
   }, [showNotice, refreshAccess]);
   const [t, setT] = useState(initialDebugParams.t ?? 0);
   const [scene, setScene] = useState<SceneResponse | null>(null);
+  // The scenario last loaded, and its cards as loaded: an image is named
+  // after it while the cards are still those (see imageName).
+  const [loadedScenario, setLoadedScenario] = useState<{ name: string; cards: string } | null>(null);
   // Null until known (flat if the site has no terrain grid). The ref is for
   // the tab switches' camera carry-over, which read it outside React.
   const [terrain, setTerrain] = useState<Terrain | null>(null);
@@ -233,6 +249,30 @@ function App() {
   // The 3D view is only created the first time its tab is opened (no point
   // building trees nobody looks at), then kept alive across tab switches.
   const [view3dMounted, setView3dMounted] = useState(tab === "3d");
+  // The team's notes (notes/): opening one, or adding one, closes the rest.
+  const closeForNotes = useCallback(() => {
+    setSelectedCard(null);
+    setPendingGeometry(null);
+    setReplantTargetId(null);
+    setSelectedInterventionId(null);
+    setSelectedTreeElementId(null);
+  }, []);
+  const notes = useNotes({
+    mapRef,
+    sceneRef,
+    ready: status === "ready",
+    shown: views !== null && shown("notes"),
+    canEdit: can(access, "notes.edit"),
+    on2d: tab === "2d",
+    blocked: selectedCard !== null,
+    showNotice,
+    onActivate: closeForNotes,
+  });
+  const notesRef = useRef(notes);
+  notesRef.current = notes;
+  useEffect(() => {
+    if (selectedCard || selectedInterventionId || selectedTreeElementId) notesRef.current.select(null);
+  }, [selectedCard, selectedInterventionId, selectedTreeElementId]);
   const [cameraPose, setCameraPose] = useState<CameraPose | null>(initialDebugParams.pose);
   // Keeping the map and the 3D view on the same framing across tab switches
   // (see map/viewSync.ts): what each showed right after the last alignment,
@@ -264,6 +304,23 @@ function App() {
   // The 3D field of view drawn on the map after leaving an eye-level view;
   // renderScene clears it, so it's redrawn after every render.
   const mapWedgeRef = useRef<Parameters<typeof setCameraView>[1]>(null);
+  /** "Scarica immagine"'s file name: the scenario's while the cards are as
+   * loaded (changed here or from another window), "corrente" otherwise. */
+  function imageName(view: "2d" | "3d"): string {
+    const current = sceneRef.current;
+    const scenario = loadedScenario && current && cardsKey(current.interventions) === loadedScenario.cards ? loadedScenario.name : null;
+    return imageFileName({ site: current?.site_id ?? "site", team: access.me.team.id, scenario, year: CURRENT_YEAR + t, view });
+  }
+
+  function downloadMapImage() {
+    const map = mapRef.current;
+    if (!map) return;
+    const name = imageName("2d");
+    // MapLibre clears its buffer after each frame: read it in the next one.
+    map.once("render", () => downloadCanvas(map.getCanvas(), name));
+    map.triggerRepaint();
+  }
+
   function renderMap(map: MapLibreMap, newScene: SceneResponse, mode: InterventionDisplayMode) {
     renderScene(map, newScene, mode, cardsRef.current);
     setCameraView(map, mapWedgeRef.current);
@@ -368,7 +425,7 @@ function App() {
         map.getCanvas().style.cursor = "";
       });
       map.on("click", "intervention-markers-fill", (e) => {
-        if (selectedCardRef.current) return;
+        if (selectedCardRef.current || notesClaimClick(map, e)) return;
         const feature = e.features?.[0];
         if (!feature) return;
         const props = feature.properties as { interventionId: string };
@@ -384,6 +441,7 @@ function App() {
       const SELECTABLE_LAYERS = [
         ...mapLayers.filter((layer) => layer.interaction === "select").map((layer) => layer.id),
         "covers-fill",
+        ...DISABLED_INTERVENTION_LAYERS,
       ];
       for (const layerId of SELECTABLE_LAYERS) {
         map.on("mouseenter", layerId, () => {
@@ -393,7 +451,7 @@ function App() {
           map.getCanvas().style.cursor = "";
         });
         map.on("click", layerId, (e) => {
-          if (selectedCardRef.current) return;
+          if (selectedCardRef.current || notesClaimClick(map, e)) return;
           const feature = e.features?.[0];
           if (!feature) return;
           const props = feature.properties as { source?: string; interventionId?: string | null };
@@ -408,7 +466,7 @@ function App() {
         // otherwise a click that happens to land on a tree hijacks it into
         // opening that tree's identity card instead, silently derailing
         // whatever the facilitator was doing.
-        if (selectedCardRef.current) return;
+        if (selectedCardRef.current || notesClaimClick(map, e)) return;
         const feature = e.features?.[0];
         if (!feature) return;
         const props = feature.properties as { source: string; elementId: string; interventionId: string | null };
@@ -463,12 +521,14 @@ function App() {
     }
   }, [selectedCard]);
 
+  // Also when the cards arrive, maybe after the scene: the markers take
+  // their colour from the card's category.
   useEffect(() => {
     interventionModeRef.current = interventionMode;
     if (mapRef.current && sceneRef.current) {
       renderMap(mapRef.current, sceneRef.current, interventionMode);
     }
-  }, [interventionMode]);
+  }, [interventionMode, cards]);
 
   // Tab switches carry the camera across: leaving 3D, the map takes the 3D
   // framing (or, from eye level, looks at the same place from above); coming
@@ -546,6 +606,9 @@ function App() {
   // stands in: dimmed on the map and in the 3D view, and for the crowd —
   // dropping it would replan everyone as if the weather were comfortable,
   // and again a second later when the field arrives.
+  // What's evaluated: the cards turned on (the others are only listed and
+  // drawn), so a card turned off and on again finds its fields cached.
+  const enabledInterventions = useMemo(() => scene?.interventions.filter((i) => i.enabled) ?? [], [scene?.interventions]);
   const thermalAsIs = interventionMode === "hidden";
   const crowdAsIs = interventionMode !== "simulated";
   const comfortWanted = view3dMounted && features.thermal;
@@ -553,7 +616,7 @@ function App() {
   // The panel's daily curve compares the situation with the interventions
   // and without, so it needs both — and, in a later year, today's without
   // (see `todayKey`). In "Situazione attuale", without them only.
-  const curveWithProposals = !!scene?.interventions.length && interventionMode !== "hidden";
+  const curveWithProposals = enabledInterventions.length > 0 && interventionMode !== "hidden";
   const curveVariants = thermalPanelOpen ? (curveWithProposals ? [true, false] : [true]) : [];
   const wantedVariants = [
     ...new Set([
@@ -563,7 +626,7 @@ function App() {
     ]),
   ];
   const variantsKey = JSON.stringify(wantedVariants);
-  const interventionsKey = useMemo(() => JSON.stringify(scene?.interventions ?? []), [scene?.interventions]);
+  const interventionsKey = useMemo(() => JSON.stringify(enabledInterventions), [enabledInterventions]);
   const keyFor = (asIs: boolean) => fieldKey(t, sunSetting.month, sunSetting.day, asIs, interventionsKey);
 
   // The KPI panel's deferred indicators (the thermal ones), fetched apart
@@ -835,8 +898,20 @@ function App() {
       });
   }
 
+  function handleToggleIntervention(id: string, enabled: boolean) {
+    timeline.markInput(enabled ? "card on" : "card off");
+    timeline.begin("scene");
+    setInterventionEnabled(id, enabled, t)
+      .then(applyScene)
+      .catch((err) => {
+        console.error(err);
+        timeline.end("scene");
+      });
+  }
+
   // A scenario loaded, or the cards cleared, from the "Scenari" menu.
-  function handleSceneReplaced(newScene: SceneResponse) {
+  function handleSceneReplaced(newScene: SceneResponse, scenarioName?: string) {
+    setLoadedScenario(scenarioName ? { name: scenarioName, cards: cardsKey(newScene.interventions) } : null);
     timeline.markInput("scenario loaded");
     timeline.begin("scene");
     // Numbered like a year change, so a year fetch still on its way doesn't
@@ -923,8 +998,9 @@ function App() {
       if (!shown) return;
       checking = true;
       fetchSessionRevision()
-        .then(({ revision, restart_needed, phase }) => {
+        .then(({ revision, notes: notesRevision, restart_needed, phase }) => {
           setRestartNeeded(restart_needed);
+          notesRef.current.follow(notesRevision);
           // The manager moved the team to another phase: what may this window do now?
           if (phase !== phaseRef.current) refreshAccess();
           if (revision === shown.revision || sceneRef.current !== shown) return;
@@ -977,6 +1053,7 @@ function App() {
           {ready && scene && shown("scenarios") && (
             <ScenarioMenu
               interventionCount={scene.interventions.length}
+              disabledCount={scene.interventions.length - enabledInterventions.length}
               t={t}
               canClear={canEditInterventions}
               onSceneReplaced={handleSceneReplaced}
@@ -989,7 +1066,7 @@ function App() {
       </header>
       <div
         ref={containerRef}
-        className={selectedCard ? "map-container map-container--drawing" : "map-container"}
+        className={selectedCard || notes.placing ? "map-container map-container--drawing" : "map-container"}
       />
       {status !== "ready" && (
         <div className="status-banner">
@@ -1011,10 +1088,12 @@ function App() {
         <>
           {tab === "2d" && (
             <>
-              {/* The current situation has no cards to place or list. */}
-              {interventionMode !== "hidden" && (canPlace || shown("interventions")) && (
+              {/* The current situation has no cards to place or list; the
+                  notes may still be there. */}
+              {((interventionMode !== "hidden" && (canPlace || shown("interventions"))) || shown("notes")) && (
                 <div className="left-rail">
-                  {canPlace && (
+                  {shown("notes") && <NotesPanel notes={notes} />}
+                  {interventionMode !== "hidden" && canPlace && (
                     <CardPalette
                       cards={cards}
                       selected={selectedCard}
@@ -1022,17 +1101,28 @@ function App() {
                       initiallyCollapsed={initialDebugParams.panelsClosed}
                     />
                   )}
-                  {shown("interventions") && (
+                  {interventionMode !== "hidden" && shown("interventions") && (
                     <InterventionList
                       interventions={scene?.interventions ?? []}
                       cards={cards}
                       onSelect={handleSelectIntervention}
+                      onToggle={canEditInterventions ? handleToggleIntervention : undefined}
                       initiallyCollapsed={initialDebugParams.panelsClosed}
                     />
                   )}
                 </div>
               )}
               {shown("legend") && <MapLegend />}
+              {shown("export") && (
+                <button
+                  type="button"
+                  className="map-download"
+                  onClick={downloadMapImage}
+                  title={tr("Scarica la mappa come immagine", "Download the map as an image")}
+                >
+                  {tr("Scarica immagine", "Download image")}
+                </button>
+              )}
             </>
           )}
           {view3dMounted && (
@@ -1045,10 +1135,13 @@ function App() {
               t={t}
               onTimeChange={handleTimeChange}
               showTime={shown("time")}
+              imageName={shown("export") ? () => imageName("3d") : undefined}
               pose={cameraPose}
               onPlacePose={setCameraPose}
               onClearPose={() => setCameraPose(null)}
               onSelectIntervention={setSelectedInterventionId}
+              notes={notes.drawn}
+              onSelectNote={notes.select}
               sunSetting={sunSetting}
               onSunSettingChange={changeSunSetting}
               thermal={thermalShown}
@@ -1087,6 +1180,7 @@ function App() {
                   curve={curveShown}
                 />
               )}
+              {(tab === "2d" || tab === "3d") && <NotesRail notes={notes} />}
               {tab === "2d" &&
                 (pendingGeometry && selectedCard ? (
                   <ParamForm card={selectedCard} plantedYear={t} onSubmit={handleSubmit} onCancel={rearmDrawing} />
@@ -1096,6 +1190,13 @@ function App() {
                     initialValues={selectedIntervention.params}
                     plantedYear={selectedIntervention.planted_year}
                     authors={selectedIntervention}
+                    notice={
+                      !selectedIntervention.enabled && (
+                        <CardOffNotice
+                          onEnable={canEditInterventions ? () => handleToggleIntervention(selectedIntervention.id, true) : undefined}
+                        />
+                      )
+                    }
                     submitLabel={tr("Salva", "Save")}
                     onSubmit={(params) => handleUpdateIntervention(selectedIntervention.id, params)}
                     onCancel={() => setSelectedInterventionId(null)}
@@ -1105,6 +1206,7 @@ function App() {
                   <InterventionInfoCard
                     intervention={selectedIntervention}
                     card={selectedInterventionCard}
+                    onEnable={canEditInterventions ? () => handleToggleIntervention(selectedIntervention.id, true) : undefined}
                     onClose={() => setSelectedInterventionId(null)}
                   />
                 ) : selectedTreeElement ? (
@@ -1119,6 +1221,7 @@ function App() {
                   intervention={selectedIntervention}
                   card={selectedInterventionCard}
                   onEdit={canPlace ? () => handleEditInterventionIn2D(selectedIntervention.id) : undefined}
+                  onEnable={canEditInterventions ? () => handleToggleIntervention(selectedIntervention.id, true) : undefined}
                   onClose={() => setSelectedInterventionId(null)}
                 />
               )}
@@ -1127,7 +1230,7 @@ function App() {
           {tab === "indicators" && scene && indicatorDescriptors && (
             <IndicatorsView
               descriptors={indicatorDescriptors}
-              interventions={scene.interventions}
+              interventions={enabledInterventions}
               // Hidden by the view, not by the switch (which this tab hasn't).
               asIs={!shown("interventionMode") && interventionMode === "hidden"}
               t={t}

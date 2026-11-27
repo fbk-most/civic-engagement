@@ -173,6 +173,9 @@ export interface Intervention {
   geometry: GeoJSON.Geometry;
   params: Record<string, unknown>;
   deleted: boolean;
+  /** Off: listed and drawn (grey), but not evaluated, nor saved in a
+   * scenario; the team's selection. */
+  enabled: boolean;
   created_at: string;
   replaces_element_id: string | null;
   planted_year: number;
@@ -180,6 +183,33 @@ export interface Intervention {
    * then); null without teams. */
   created_by?: string | null;
   updated_by?: string | null;
+}
+
+/** A team's note (the needs, in Bologna's words): a title and a text at a
+ * point of the site (civic_engagement/store/notes.py). */
+export interface Note {
+  id: string;
+  title: string;
+  text: string;
+  geometry: GeoJSON.Point;
+  created_at: string;
+  /** Who wrote it, and who last changed or moved it (by name); null
+   * without teams. */
+  created_by: string | null;
+  updated_by: string | null;
+}
+
+/** What changes in a note: the fields given (a new point moves it). */
+export interface NoteChange {
+  title?: string;
+  text?: string;
+  geometry?: GeoJSON.Point;
+}
+
+/** The team's notes, and their revision (see fetchSessionRevision). */
+export interface NoteList {
+  notes: Note[];
+  revision: string;
 }
 
 export interface InterventionCreate {

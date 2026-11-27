@@ -42,6 +42,7 @@ def create_app(pack: DomainPack, title: str = "Civic Digital Twin PoC", frontend
         routes_auth,
         routes_cards,
         routes_interventions,
+        routes_notes,
         routes_rehearsal,
         routes_scenarios,
         routes_scene,
@@ -80,6 +81,7 @@ def create_app(pack: DomainPack, title: str = "Civic Digital Twin PoC", frontend
         routes_site_assets.router,
         routes_cards.router,
         routes_interventions.router,
+        routes_notes.router,
         routes_scenarios.router,
         *pack.routers(),
     ):

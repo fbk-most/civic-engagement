@@ -30,7 +30,7 @@ from civic_engagement.models.schema import (
     Intervention,
     SceneResponse,
 )
-from civic_engagement.store.state import DEFAULT_TEAM, store
+from civic_engagement.store.state import DEFAULT_TEAM, enabled, store
 
 # The scenario horizon: t is any integer year offset in this range, not just
 # a handful of preset points.
@@ -80,15 +80,18 @@ _cache_lock = threading.Lock()
 
 
 def interventions_key(interventions: list[Intervention]) -> str:
-    """Identifies a set of interventions, for caching what depends on it.
-    Their authors don't change what they evaluate to."""
+    """Identifies a set of interventions, for caching what depends on it: the
+    ones turned on only. Their authors don't change what they evaluate to."""
     return json.dumps(
-        [i.model_dump(mode="json", exclude={"created_by", "updated_by"}) for i in interventions], sort_keys=True
+        [i.model_dump(mode="json", exclude={"created_by", "updated_by", "enabled"}) for i in enabled(interventions)],
+        sort_keys=True,
     )
 
 
 def evaluation(interventions: list[Intervention]) -> Any:
-    """The pack's evaluation of the scenario with these interventions."""
+    """The pack's evaluation of the scenario with these interventions (those
+    turned off left out: the pack never sees them)."""
+    interventions = enabled(interventions)
     if not interventions:
         return _as_is()
     key = interventions_key(interventions)
@@ -118,7 +121,7 @@ def current_scene(t: int = 0, team: str = DEFAULT_TEAM) -> SceneResponse:
     # window refresh once more, never miss it.
     revision = store.revision(team)
     interventions = store.list_interventions(team)
-    scenario = evaluation(interventions)
+    scenario = evaluation(enabled(interventions))
     elements, covers = pack.assemble(scenario, t)
 
     return SceneResponse(
@@ -133,6 +136,7 @@ def current_scene(t: int = 0, team: str = DEFAULT_TEAM) -> SceneResponse:
         # the rest of the scene needn't wait for them.
         indicators=pack.indicator_values(scenario, t),
         baseline_indicators=pack.indicator_values(_as_is(), t),
+        # Every card, those turned off too (with their flag).
         interventions=interventions,
         revision=revision,
     )
@@ -140,20 +144,21 @@ def current_scene(t: int = 0, team: str = DEFAULT_TEAM) -> SceneResponse:
 
 def deferred_indicators(t: int, team: str = DEFAULT_TEAM) -> DeferredIndicators:
     """The deferred indicators at year t, with and without the team's
-    interventions."""
+    interventions (those turned on)."""
     pack = active_pack()
     return DeferredIndicators(
         t=t,
-        scenario=pack.deferred_values(store.list_interventions(team), t),
+        scenario=pack.deferred_values(store.enabled_interventions(team), t),
         baseline=pack.deferred_values([], t),
     )
 
 
 def indicator_series(team: str = DEFAULT_TEAM) -> IndicatorSeries:
     """Every indicator for every year of the horizon, with and without the
-    team's interventions — the "Indicatori" tab's time series."""
+    team's interventions (those turned on) — the "Indicatori" tab's time
+    series."""
     pack = active_pack()
-    interventions = store.list_interventions(team)
+    interventions = store.enabled_interventions(team)
     scenario = evaluation(interventions)
     years = list(range(MIN_T, MAX_T + 1))
     baseline_deferred = pack.deferred_series([], years)

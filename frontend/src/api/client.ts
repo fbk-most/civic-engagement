@@ -9,6 +9,8 @@ import type {
   InterventionCreate,
   LoginResponse,
   Me,
+  NoteChange,
+  NoteList,
   Rehearsal,
   ScenarioInfo,
   SceneResponse,
@@ -161,7 +163,14 @@ export function fetchScene(t: number = 0): Promise<SceneResponse> {
 /** Changes whenever any window changes the session's interventions; with
  * `restart_needed`, the app must be started again for changes to be saved;
  * `phase`, the team's (a change: ask `fetchMe` again). */
-export function fetchSessionRevision(): Promise<{ revision: string; restart_needed: boolean; phase: string | null }> {
+/** The scene's revision, and the notes' (`notes`): each fetched again
+ * only when its own changes. */
+export function fetchSessionRevision(): Promise<{
+  revision: string;
+  notes: string;
+  restart_needed: boolean;
+  phase: string | null;
+}> {
   return getJson("/api/session/revision");
 }
 
@@ -227,10 +236,46 @@ export async function updateIntervention(
   return res.json();
 }
 
+/** Turns a card on or off; returns the scene evaluated without those off. */
+export async function setInterventionEnabled(id: string, enabled: boolean, t: number = 0): Promise<SceneResponse> {
+  const res = await request(`/api/interventions/${id}/enabled?t=${t}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+  if (!res.ok) throw new Error(`PATCH /api/interventions/${id}/enabled failed: ${res.status}`);
+  return res.json();
+}
+
 export async function deleteIntervention(id: string, t: number = 0): Promise<SceneResponse> {
   const res = await request(`/api/interventions/${id}?t=${t}`, { method: "DELETE" });
   if (!res.ok) throw new Error(`DELETE /api/interventions/${id} failed: ${res.status}`);
   return res.json();
+}
+
+export function fetchNotes(): Promise<NoteList> {
+  return getJson("/api/notes");
+}
+
+async function changeNotes(method: string, url: string, body?: object): Promise<NoteList> {
+  const res = await request(url, {
+    method,
+    ...(body ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}),
+  });
+  if (!res.ok) throw new HttpError(`${method} ${url} failed: ${res.status}`, res.status);
+  return res.json();
+}
+
+export function createNote(note: { title: string; text: string; geometry: GeoJSON.Point }): Promise<NoteList> {
+  return changeNotes("POST", "/api/notes", note);
+}
+
+export function updateNote(id: string, change: NoteChange): Promise<NoteList> {
+  return changeNotes("PATCH", `/api/notes/${id}`, change);
+}
+
+export function deleteNote(id: string): Promise<NoteList> {
+  return changeNotes("DELETE", `/api/notes/${id}`);
 }
 
 export function fetchInterventions(): Promise<Intervention[]> {

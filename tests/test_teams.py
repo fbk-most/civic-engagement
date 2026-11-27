@@ -11,7 +11,7 @@ from civic_engagement.domain import active_pack
 from civic_engagement.pins import DigitPin, PinFormat, checked
 from civic_engagement.store import state, storage
 from civic_engagement.store.storage import LocalStorage, Retrying
-from civic_engagement.store.teams import TeamError, TeamStore
+from civic_engagement.store.teams import TeamConflict, TeamError, TeamStore
 
 BENCH = {"card_type": "add_bench", "geometry": {"type": "Point", "coordinates": [11.002, 46.001]}, "params": {}}
 SECRET = "a-secret-of-sixteen-or-more"
@@ -74,7 +74,8 @@ def test_members_found_by_their_pin_however_typed(tmp_path):
 
 def test_distinct_parts_differ_across_the_site(tmp_path):
     teams = TeamStore(LocalStorage(tmp_path), "teams.json", LetterPin("abc"), b"secret")
-    one, two = teams.create_team("One"), teams.create_team("One")
+    # Two names, one slug: the second id numbered.
+    one, two = teams.create_team("One"), teams.create_team("One!")
     assert (one.id, two.id) == ("one", "one-2")
     letters = [teams.add_member(t.id, n, "editor")[0].distinct for t, n in ((one, "A"), (two, "B"), (one, "C"))]
     assert sorted(letters) == ["a", "b", "c"]
@@ -389,6 +390,12 @@ def test_the_manager_runs_the_teams(pin_app, caplog):
     assert pin_app.get("/api/scene", headers=viewer1).status_code == 401
     team = pin_app.post("/api/admin/teams", json={"name": "Team 1"}, headers=ADMIN).json()
     assert team["id"] == "team-1" and team["interventions"] == 0
+    # Names taken: 409, the setup can read it as "already there".
+    again = pin_app.post("/api/admin/teams", json={"name": "team 1"}, headers=ADMIN)
+    assert again.status_code == 409 and "team-1" in again.json()["detail"]
+    pin_app.post("/api/admin/teams/team-1/members", json={"name": "Anna", "role": "editor"}, headers=ADMIN)
+    twice = pin_app.post("/api/admin/teams/team-1/members", json={"name": "Anna", "role": "editor"}, headers=ADMIN)
+    assert twice.status_code == 409
 
     status = pin_app.get("/api/admin/status", headers=ADMIN).json()
     assert status["teams"] == 3 and status["storage"]["behind"] == [] and status["restart_needed"] is False
@@ -476,3 +483,25 @@ def test_the_cli(pin_app, monkeypatch, capsys):
     finally:
         server.should_exit = True
         thread.join()
+
+
+def test_names_taken_are_refused(tmp_path):
+    """A setup run twice fails at its first step, instead of a "tavolo-1-2"
+    and two Annas."""
+    teams = TeamStore(LocalStorage(tmp_path), "teams.json", LetterPin(), b"secret")
+    team = teams.create_team("Tavolo 1")
+    with pytest.raises(TeamConflict):
+        teams.create_team(" tavolo 1 ")
+    other = teams.create_team("Tavolo 2")
+    with pytest.raises(TeamConflict):
+        teams.rename_team(other.id, "TAVOLO 1")
+    assert teams.rename_team(team.id, "tavolo 1").name == "tavolo 1"  # its own name, recased
+
+    teams.add_member(team.id, "Anna", "editor")
+    teams.add_member(team.id, "", "viewer")
+    with pytest.raises(TeamConflict):
+        teams.add_member(team.id, "anna", "editor")
+    with pytest.raises(TeamConflict):
+        teams.add_member(team.id, "", "viewer")  # the viewers' PIN is one
+    assert teams.add_member(other.id, "Anna", "editor")[0].name == "Anna"  # another team: fine
+    assert [m.name for m in teams.team(team.id).members] == ["Anna", "Viewers"]

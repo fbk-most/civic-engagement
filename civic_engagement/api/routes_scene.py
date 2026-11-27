@@ -16,6 +16,7 @@ from civic_engagement.scene import (
     load_baseline,
     validated_t,
 )
+from civic_engagement.store.notes import notes
 from civic_engagement.store.state import store
 from civic_engagement.store.storage import restart_needed
 
@@ -38,8 +39,15 @@ def get_session_revision(who: Access = Depends(access)) -> dict:
     fetches the scene only if it differs from its scene's `revision`. With
     `restart_needed`, it says the app must be started again for changes to
     be saved (store/storage.py). With `phase`, the team's: a window asks
-    again what it may do (GET /auth/me) when it changes."""
-    return {"revision": store.revision(who.team), "restart_needed": restart_needed(), "phase": who.phase}
+    again what it may do (GET /auth/me) when it changes. With `notes`, the
+    revision of the team's notes (store/notes.py), apart from the scene's:
+    a note changed makes the windows fetch the notes, not the scene."""
+    return {
+        "revision": store.revision(who.team),
+        "notes": notes.revision(who.team),
+        "restart_needed": restart_needed(),
+        "phase": who.phase,
+    }
 
 
 @router.get("/indicators/descriptors", response_model=IndicatorDescriptors)

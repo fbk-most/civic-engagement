@@ -1,6 +1,7 @@
+import math
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # Element, cover and card types are the domain pack's (see domain.py: the
 # core checks them against the pack's).
@@ -44,6 +45,10 @@ class Intervention(BaseModel):
     geometry: dict[str, Any]
     params: dict[str, Any]
     deleted: bool = False
+    enabled: bool = Field(
+        default=True,
+        description="Off: kept on the scene, but not evaluated (the team's selection); not saved in a scenario",
+    )
     created_at: str
     replaces_element_id: str | None = Field(
         default=None,
@@ -70,6 +75,86 @@ class InterventionCreate(BaseModel):
 
 class InterventionUpdate(BaseModel):
     params: dict[str, Any]
+
+
+class InterventionEnabled(BaseModel):
+    enabled: bool
+
+
+# Notes (the needs, in Bologna's words): a title and a text at a point of
+# the site, a team's own (see civic_engagement/store/notes.py).
+
+NOTE_TITLE_MAX = 80
+NOTE_TEXT_MAX = 2000
+
+
+def _note_title(title: str | None) -> str | None:
+    if title is None:
+        return None
+    title = title.strip()
+    if not title:
+        raise ValueError("a title is needed")
+    if len(title) > NOTE_TITLE_MAX:
+        raise ValueError(f"a title of at most {NOTE_TITLE_MAX} characters")
+    return title
+
+
+def _note_text(text: str | None) -> str | None:
+    if text is None:
+        return None
+    text = text.strip()
+    if len(text) > NOTE_TEXT_MAX:
+        raise ValueError(f"a text of at most {NOTE_TEXT_MAX} characters")
+    return text
+
+
+def _note_point(geometry: dict[str, Any] | None) -> dict[str, Any] | None:
+    if geometry is None:
+        return None
+    coordinates = geometry.get("coordinates")
+    numbers = isinstance(coordinates, list) and len(coordinates) == 2 and all(
+        isinstance(c, int | float) and not isinstance(c, bool) and math.isfinite(c) for c in coordinates
+    )
+    if geometry.get("type") != "Point" or not numbers:
+        raise ValueError('a GeoJSON Point: {"type": "Point", "coordinates": [lon, lat]}')
+    return {"type": "Point", "coordinates": [float(c) for c in coordinates]}
+
+
+class Note(BaseModel):
+    id: str
+    title: str
+    text: str = ""
+    geometry: dict[str, Any] = Field(description="A GeoJSON Point, within the site")
+    created_at: str
+    created_by: str | None = Field(default=None, description="The member who wrote it, by name as it was then; None without teams")
+    updated_by: str | None = Field(default=None, description="The member who last changed or moved it")
+
+
+class NoteCreate(BaseModel):
+    title: str
+    text: str = ""
+    geometry: dict[str, Any]
+
+    _title = field_validator("title")(_note_title)
+    _text = field_validator("text")(_note_text)
+    _point = field_validator("geometry")(_note_point)
+
+
+class NoteUpdate(BaseModel):
+    """What changes: the fields given (a new point moves it)."""
+
+    title: str | None = None
+    text: str | None = None
+    geometry: dict[str, Any] | None = None
+
+    _title = field_validator("title")(_note_title)
+    _text = field_validator("text")(_note_text)
+    _point = field_validator("geometry")(_note_point)
+
+
+class NoteList(BaseModel):
+    notes: list[Note]
+    revision: str = Field(description="The revision of the team's notes they are (GET /session/revision, `notes`)")
 
 
 class ParamSpec(BaseModel):

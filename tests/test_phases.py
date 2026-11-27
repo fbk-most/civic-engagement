@@ -89,6 +89,7 @@ def _guarded(client, headers) -> dict[str, int]:
     calls = {
         "POST /interventions": ("POST", "/api/interventions", BENCH),
         "PATCH /interventions": ("PATCH", f"/api/interventions/{card}", {"params": {}}),
+        "PATCH /interventions/enabled": ("PATCH", f"/api/interventions/{card}/enabled", {"enabled": False}),
         "DELETE /interventions": ("DELETE", f"/api/interventions/{card}", None),
         "POST /scenarios": ("POST", "/api/scenarios", {"name": "Other"}),
         "POST /scenarios/load": ("POST", "/api/scenarios/idea/load", None),
@@ -98,7 +99,9 @@ def _guarded(client, headers) -> dict[str, int]:
     return {name: client.request(method, path, json=body, headers=headers).status_code for name, (method, path, body) in calls.items()}
 
 
-INTERVENTION_ROUTES = {"POST /interventions", "PATCH /interventions", "DELETE /interventions", "POST /session/clear"}
+INTERVENTION_ROUTES = {
+    "POST /interventions", "PATCH /interventions", "PATCH /interventions/enabled", "DELETE /interventions", "POST /session/clear"
+}
 SCENARIO_ROUTES = {"POST /scenarios", "POST /scenarios/load", "DELETE /scenarios"}
 
 
@@ -251,7 +254,7 @@ def test_phases_checked_when_the_pack_registers(monkeypatch):
         check([PHASES[0], PHASES[0]])
     with pytest.raises(ValueError, match="unknown operations"):
         check([PhaseSpec(id="x", label="X", label_en="X", operations=["cards.burn"])])
-    assert NOTES_EDIT in OPERATIONS  # allowed though no route uses it yet
+    assert NOTES_EDIT in OPERATIONS
 
     class Broken(type(active_pack())):
         phases = [PHASES[0], PHASES[0]]

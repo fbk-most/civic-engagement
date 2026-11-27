@@ -33,6 +33,16 @@ export interface FrontendPack {
     species: Record<string, Pair>;
     ageClasses: Record<string, Pair>;
   };
+  /** The notes' words and their bubble's colour (see notes/): generic
+   * ("Nota", "Note") without them. */
+  notes?: {
+    /** One, and several (the legend's switch). */
+    one: Pair;
+    many: Pair;
+    /** The button that adds one. */
+    add: Pair;
+    color: string;
+  };
   map: {
     /** The elements' layers on the 2D map, in drawing order, above the
      * covers and below the intervention markers (see map/layers.ts). */

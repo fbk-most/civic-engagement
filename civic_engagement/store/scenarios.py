@@ -69,7 +69,8 @@ def _parse(scenario: str, data: bytes) -> tuple[ScenarioInfo, list[Intervention]
     if site_id != SITE.site_id:
         raise ScenarioError(f"Scenario {scenario!r} is for site {site_id!r}, not {SITE.site_id!r}")
     interventions = [Intervention(**i) for i in payload["interventions"]]
-    interventions = [i for i in interventions if not i.deleted]
+    # A scenario's cards are all turned on when it's loaded.
+    interventions = [i.model_copy(update={"enabled": True}) for i in interventions if not i.deleted]
     info = ScenarioInfo(
         id=scenario,
         name=payload.get("name", scenario),
@@ -120,15 +121,16 @@ def save_scenario(
     saved: Storage = SAVED,
     presets: Storage | None = PRESETS,
 ) -> ScenarioInfo:
-    """Saves the interventions (the deleted ones left out) as `name`. An
-    existing scenario of the same id is replaced only with `overwrite`."""
+    """Saves the interventions (the deleted ones and those turned off left
+    out) as `name`. An existing scenario of the same id is replaced only with
+    `overwrite`."""
     name = name.strip()
     scenario = scenario_id(name)
     if not scenario:
         raise ScenarioError("A scenario needs a name with at least a letter or a digit")
     if not overwrite and _find(scenario, saved, presets) is not None:
         raise FileExistsError(scenario)
-    kept = [i for i in interventions if not i.deleted]
+    kept = [i for i in interventions if not i.deleted and i.enabled]
     saved_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     payload = {
         "site_id": SITE.site_id,

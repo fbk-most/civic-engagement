@@ -9,10 +9,13 @@ interface Props {
   interventions: Intervention[];
   cards: CardSpec[];
   onSelect: (id: string) => void;
+  /** Turns a card on or off: given to those who may change the cards now
+   * (the others see which are off, but no switch). */
+  onToggle?: (id: string, enabled: boolean) => void;
   initiallyCollapsed?: boolean;
 }
 
-export function InterventionList({ interventions, cards, onSelect, initiallyCollapsed = false }: Props) {
+export function InterventionList({ interventions, cards, onSelect, onToggle, initiallyCollapsed = false }: Props) {
   const [collapsed, setCollapsed] = useState(initiallyCollapsed);
 
   return (
@@ -31,8 +34,9 @@ export function InterventionList({ interventions, cards, onSelect, initiallyColl
           {interventions.map((iv) => {
             const card = cards.find((c) => c.card_type === iv.card_type);
             const color = card ? categoryColor(card.category) : "#999";
+            const className = iv.enabled ? "intervention-card" : "intervention-card intervention-card--off";
             return (
-              <div key={iv.id} className="intervention-card" style={{ "--card-color": color } as CSSProperties}>
+              <div key={iv.id} className={className} style={{ "--card-color": color } as CSSProperties}>
                 <button type="button" className="intervention-card__header" onClick={() => onSelect(iv.id)}>
                   <span className="intervention-card__icon">
                     {card && <CardIcon cardType={card.card_type} />}
@@ -42,9 +46,25 @@ export function InterventionList({ interventions, cards, onSelect, initiallyColl
                       {card ? cardLabel(card) : iv.card_type}
                       <span className="intervention-card__year"> · {yearLabel(iv.planted_year)}</span>
                     </span>
-                    <span className="intervention-card__summary">{summarizeParams(card, iv.params)}</span>
+                    <span className="intervention-card__summary">
+                      {!iv.enabled && !onToggle && `${tr("Non selezionato", "Not selected")} · `}
+                      {summarizeParams(card, iv.params)}
+                    </span>
                   </span>
                 </button>
+                {onToggle && (
+                  <input
+                    type="checkbox"
+                    className="intervention-card__switch"
+                    checked={iv.enabled}
+                    title={
+                      iv.enabled
+                        ? tr("Selezionato: togli dalla simulazione", "Selected: leave out of the simulation")
+                        : tr("Non selezionato: rimetti nella simulazione", "Not selected: put back in the simulation")
+                    }
+                    onChange={(e) => onToggle(iv.id, e.target.checked)}
+                  />
+                )}
               </div>
             );
           })}

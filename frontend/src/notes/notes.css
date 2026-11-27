@@ -1,0 +1,108 @@
+/* The notes' panels in the right rail (NotesRail.tsx), and their switch in
+   the map's legend; --card-color is the pack's colour for them. */
+
+.notes-panel {
+  width: 260px;
+  border-top: 4px solid var(--card-color);
+  overflow-y: auto;
+}
+
+.notes-panel__kind {
+  margin-bottom: -6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--card-color);
+}
+
+.notes-panel__text {
+  margin: 0;
+  font-size: 13px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.notes-panel__hint {
+  margin: 0;
+  font-size: 13px;
+  color: #444;
+}
+
+.notes-panel .param-form__actions {
+  flex-wrap: wrap;
+}
+
+.notes-panel .param-form__actions button[type="submit"] {
+  background: var(--card-color);
+  border-color: var(--card-color);
+}
+
+.notes-panel input,
+.notes-panel textarea {
+  font: inherit;
+  padding: 4px 6px;
+  resize: vertical;
+}
+
+/* The left rail's panel (NotesPanel.tsx): as the intervention list. */
+.notes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.97);
+  padding: 12px;
+  border-radius: 8px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
+  width: 236px;
+  flex-shrink: 0;
+}
+
+.notes-list__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.notes-list__header h3 {
+  flex: 1;
+  margin: 0;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.notes-list__marker {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--card-color);
+  flex-shrink: 0;
+}
+
+.notes-list__switch {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #555;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.notes-add {
+  padding: 7px 12px;
+  border: 1px solid var(--card-color);
+  border-radius: 6px;
+  background: var(--card-color);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.notes-add[aria-pressed="true"] {
+  background: #fff;
+  color: var(--card-color);
+}

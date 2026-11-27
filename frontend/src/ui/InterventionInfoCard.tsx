@@ -3,6 +3,7 @@ import type { CardSpec, Intervention } from "../api/types";
 import { tr } from "../i18n/lang";
 import { authorsLabel, cardLabel, summarizeParams, yearLabel } from "../i18n/labels";
 import { CardIcon } from "./cardIcons";
+import { CardOffNotice } from "./CardOffNotice";
 import { categoryColor } from "./categoryColors";
 
 interface Props {
@@ -10,20 +11,24 @@ interface Props {
   card: CardSpec | null;
   /** Absent for a viewer, who can't change it. */
   onEdit?: () => void;
+  /** Turns it back on; absent for whoever can't. */
+  onEnable?: () => void;
   onClose: () => void;
 }
 
 /** Read-only details of a card: picked in the 3D view, where editing stays
  * on the 2D map, so this only offers the way there; or a viewer's, who
  * only looks. */
-export function InterventionInfoCard({ intervention, card, onEdit, onClose }: Props) {
-  const color = card ? categoryColor(card.category) : "#999";
+export function InterventionInfoCard({ intervention, card, onEdit, onEnable, onClose }: Props) {
+  // Turned off: grey, like its card on the map.
+  const color = !intervention.enabled ? "#8a8a8a" : card ? categoryColor(card.category) : "#999";
   return (
     <div className="param-form intervention-info" style={{ "--card-color": color } as CSSProperties}>
       <div className="intervention-info__title">
         <span className="intervention-info__icon">{card && <CardIcon cardType={card.card_type} />}</span>
         <h3>{card ? cardLabel(card) : intervention.card_type}</h3>
       </div>
+      {!intervention.enabled && <CardOffNotice onEnable={onEnable} />}
       <p className="param-form__planted-year">
         {tr("In vigore da: ", "In effect from: ")}<strong>{yearLabel(intervention.planted_year)}</strong>
       </p>

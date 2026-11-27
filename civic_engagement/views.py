@@ -14,8 +14,8 @@ everything.
 
 from civic_engagement.models.schema import PhaseSpec, ViewSpec
 
-# Every panel a view can show. `notes`, `compare` and `export` are for
-# what is still to come: allowed, nothing shown by them yet.
+# Every panel a view can show. `compare` is for what is still to come:
+# allowed, nothing shown by it yet.
 PANELS = (
     "tab.2d",  # the tabs offered
     "tab.3d",

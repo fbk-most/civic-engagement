@@ -73,6 +73,11 @@ function dimIfOccluded(baseOpacity: number): ExpressionSpecification {
 const CARD_MARKER_WIDTH_M = 3;
 const CARD_MARKER_HEIGHT_M = 4.2;
 
+/** The cards turned off, drawn grey and dashed under the rest (they're not
+ * in the evaluated scene): clicking one selects it, like any card. */
+export const DISABLED_INTERVENTION_LAYERS = ["disabled-interventions-fill", "disabled-interventions-line", "disabled-interventions-circle"];
+const DISABLED_COLOR = "#8a8a8a";
+
 function featureCollection(features: GeoJSON.Feature[]): GeoJSON.FeatureCollection {
   return { type: "FeatureCollection", features };
 }
@@ -226,6 +231,7 @@ export function renderScene(
   if (mode === "cards") {
     // Same rule the model applies to the full geometry: an intervention
     // placed while previewing a later year doesn't exist yet at this t.
+    // One turned off stays a card, greyed (see the marker layers).
     for (const iv of scene.interventions) {
       if (scene.t < iv.planted_year) continue;
       const card = cards.find((c) => c.card_type === iv.card_type);
@@ -244,10 +250,21 @@ export function renderScene(
           interventionId: iv.id,
           cardType: iv.card_type,
           rotationDeg,
+          enabled: iv.enabled,
         },
       });
     }
   }
+  // Turned off, with the cards built: their geometry, where the built
+  // ones would be (as markers they're greyed cards, above).
+  const disabled = mode !== "simulated" ? [] : scene.interventions.filter((iv) => !iv.enabled && scene.t >= iv.planted_year);
+  setOrCreateSource(map, "disabled-interventions", featureCollection(
+    disabled.map((iv) => ({
+      type: "Feature",
+      geometry: iv.geometry,
+      properties: { source: "intervention", interventionId: iv.id },
+    }))
+  ));
   setOrCreateSource(map, "intervention-marker-shadows", featureCollection(markerShadows));
   setOrCreateSource(map, "intervention-markers", featureCollection(markers));
 
@@ -411,6 +428,35 @@ function ensureLayers(map: MapLibreMap, latDeg: number, showBoundary: boolean, l
     },
   });
 
+  // Under the domain's layers: what's evaluated is drawn over the cards off.
+  map.addLayer({
+    id: "disabled-interventions-fill",
+    type: "fill",
+    source: "disabled-interventions",
+    filter: ["==", ["geometry-type"], "Polygon"],
+    paint: { "fill-color": DISABLED_COLOR, "fill-opacity": 0.18 },
+  });
+  map.addLayer({
+    id: "disabled-interventions-line",
+    type: "line",
+    source: "disabled-interventions",
+    filter: ["!=", ["geometry-type"], "Point"],
+    paint: { "line-color": DISABLED_COLOR, "line-width": 2, "line-dasharray": [2, 2] },
+  });
+  map.addLayer({
+    id: "disabled-interventions-circle",
+    type: "circle",
+    source: "disabled-interventions",
+    filter: ["==", ["geometry-type"], "Point"],
+    paint: {
+      "circle-radius": 7,
+      "circle-color": DISABLED_COLOR,
+      "circle-opacity": 0.25,
+      "circle-stroke-color": DISABLED_COLOR,
+      "circle-stroke-width": 2,
+    },
+  });
+
   const helpers: MapLayerHelpers = {
     realWidth: (defaultWidthM, exaggeration = LINE_WIDTH_EXAGGERATION, minPx = 0) =>
       realWidthLineWidth(defaultWidthM, latDeg, exaggeration, minPx),
@@ -437,13 +483,19 @@ function ensureLayers(map: MapLibreMap, latDeg: number, showBoundary: boolean, l
     type: "fill",
     source: "intervention-markers",
     paint: {
+      // Turned off: grey and faded, like a card set aside on the table.
       "fill-color": [
-        "match",
-        ["get", "category"],
-        ...pack.cardCategories.flatMap((category) => [category.id, category.color]),
-        "#999",
+        "case",
+        ["!", ["get", "enabled"]],
+        DISABLED_COLOR,
+        [
+          "match",
+          ["get", "category"],
+          ...pack.cardCategories.flatMap((category) => [category.id, category.color]),
+          "#999",
+        ],
       ] as unknown as ExpressionSpecification,
-      "fill-opacity": 0.92,
+      "fill-opacity": ["case", ["get", "enabled"], 0.92, 0.45] as unknown as ExpressionSpecification,
     },
   });
   map.addLayer({
@@ -464,6 +516,7 @@ function ensureLayers(map: MapLibreMap, latDeg: number, showBoundary: boolean, l
       "icon-allow-overlap": true,
       "icon-ignore-placement": true,
     },
+    paint: { "icon-opacity": ["case", ["get", "enabled"], 1, 0.4] as unknown as ExpressionSpecification },
   });
 
   // `site_boundary` source only exists for a surveyed site (see renderScene) —

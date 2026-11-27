@@ -64,7 +64,8 @@ export function buildPlacards(
     // placed while previewing a later year doesn't exist yet at this t.
     if (t < iv.planted_year) continue;
     const card = cards.find((c) => c.card_type === iv.card_type);
-    const color = card ? categoryColor(card.category, "#5b6472") : "#5b6472";
+    // Turned off: grey and see-through, like a card set aside.
+    const color = !iv.enabled ? DISABLED_COLOR : card ? categoryColor(card.category, "#5b6472") : "#5b6472";
 
     const [lng, lat] = representativePoint(iv.geometry);
     const [x, z] = toLocal(anchor, lng, lat);
@@ -86,7 +87,12 @@ export function buildPlacards(
       panelGeometry,
       // Unlit: a card has to stay readable in the shade and at dusk, which
       // is when a lit one would fade to a dark rectangle.
-      new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide, toneMapped: false })
+      new THREE.MeshBasicMaterial({
+        map: texture,
+        side: THREE.DoubleSide,
+        toneMapped: false,
+        ...(iv.enabled ? {} : { transparent: true, opacity: DISABLED_OPACITY }),
+      })
     );
     panel.castShadow = true;
     panel.userData.interventionId = iv.id;
@@ -128,6 +134,9 @@ export function disposePlacards(placards: Placards): void {
     material.dispose();
   }
 }
+
+const DISABLED_COLOR = "#8a8a8a";
+const DISABLED_OPACITY = 0.5;
 
 function drawPlacard(iv: Intervention, card: CardSpec | undefined, color: string): HTMLCanvasElement {
   const canvas = document.createElement("canvas");

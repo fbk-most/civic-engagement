@@ -30,10 +30,10 @@ def get_scenarios(who: Access = Depends(access)) -> list[ScenarioInfo]:
 
 @router.post("/scenarios", response_model=ScenarioInfo)
 def post_scenario(data: ScenarioSave, who: Access = Depends(scenarios_editing)) -> ScenarioInfo:
-    """Saves the team's interventions as a scenario. 409 if one with the
-    same id exists and `overwrite` isn't set."""
+    """Saves the team's interventions turned on as a scenario. 409 if one
+    with the same id exists and `overwrite` isn't set."""
     try:
-        return save_scenario(data.name, store.list_interventions(who.team), data.overwrite, *library(who.team))
+        return save_scenario(data.name, store.enabled_interventions(who.team), data.overwrite, *library(who.team))
     except FileExistsError as error:
         raise HTTPException(status_code=409, detail=f"Scenario {error} already exists") from error
     except ScenarioError as error:

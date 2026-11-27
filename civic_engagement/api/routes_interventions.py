@@ -4,7 +4,13 @@ from civic_engagement.access import Access, access, allowed
 from civic_engagement.config import SITE
 from civic_engagement.domain import active_pack
 from civic_engagement.geo_utils import within_boundary
-from civic_engagement.models.schema import Intervention, InterventionCreate, InterventionUpdate, SceneResponse
+from civic_engagement.models.schema import (
+    Intervention,
+    InterventionCreate,
+    InterventionEnabled,
+    InterventionUpdate,
+    SceneResponse,
+)
 from civic_engagement.phases import INTERVENTIONS_EDIT
 from civic_engagement.scene import current_scene, validated_t
 from civic_engagement.store.state import store
@@ -41,6 +47,16 @@ def update_intervention(
     intervention_id: str, data: InterventionUpdate, t: int = 0, who: Access = Depends(editing)
 ) -> SceneResponse:
     if not store.update_intervention(intervention_id, data.params, team=who.team, author=who.author):
+        raise HTTPException(status_code=404, detail="Intervention not found")
+    return current_scene(validated_t(t), who.team)
+
+
+@router.patch("/interventions/{intervention_id}/enabled", response_model=SceneResponse)
+def enable_intervention(
+    intervention_id: str, data: InterventionEnabled, t: int = 0, who: Access = Depends(editing)
+) -> SceneResponse:
+    """Turns a card on or off: off, it stays on the scene but isn't evaluated."""
+    if not store.set_enabled(intervention_id, data.enabled, team=who.team):
         raise HTTPException(status_code=404, detail="Intervention not found")
     return current_scene(validated_t(t), who.team)
 

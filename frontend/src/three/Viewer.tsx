@@ -5,9 +5,12 @@ import type { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
-import type { CardSpec, DiscreteElement, InterventionDisplayMode, SceneResponse } from "../api/types";
+import type { CardSpec, DiscreteElement, InterventionDisplayMode, Note, SceneResponse } from "../api/types";
 import { buildScene, disposeScene, type BuiltScene } from "./SceneBuilder";
+import { downloadCanvas } from "../imageExport";
 import { buildPlacards, disposePlacards, facePlacards, type Placards } from "./builders/placards";
+import { buildNotePlacards } from "./builders/notePlacards";
+import { noteWords } from "../notes/words";
 import { tr, useLang } from "../i18n/lang";
 import { Lighting } from "./Lighting";
 import { MaterialLibrary } from "./materials";
@@ -53,6 +56,9 @@ const WALK_NETWORK_TYPES = new Set<DiscreteElement["type"]>([
 /** Element types the road network is built from (see people/traffic.ts). */
 const ROAD_NETWORK_TYPES = new Set<DiscreteElement["type"]>(["street", "crossing", "traffic_signal"]);
 
+// No notes, the same array every render (the default of `notes`).
+const NO_NOTES: Note[] = [];
+
 // The camera's far plane: this, or more on a site large enough to need it
 // (see `applyBuilt`).
 const MIN_CAMERA_FAR_M = 3000;
@@ -67,7 +73,8 @@ const MIN_PAN_MARGIN_M = 200;
 
 export interface ViewerHandle {
   /** Downloads the current frame as a PNG. */
-  captureFrame: () => void;
+  /** Downloads the view as it is now, as `fileName`. */
+  captureFrame: (fileName: string) => void;
   /** Frame timings since the last reset (see three/perf.ts), plus what's
    * in the scene right now. */
   readPerf: (reset: boolean) => PerfSummary & { people: number; dogs: number; cars: number };
@@ -101,6 +108,10 @@ interface ViewerProps {
   cards: CardSpec[];
   /** Fires when a placard is clicked. */
   onSelectIntervention?: (id: string) => void;
+  /** The notes, each a bubble on a stake; none when hidden. */
+  notes?: Note[];
+  /** Fires when a note's bubble is clicked. */
+  onSelectNote?: (id: string) => void;
   /** Imperative actions for the surrounding view's own toolbar. */
   handleRef?: Ref<ViewerHandle>;
   /** False while the view is hidden behind another tab: the scene is still
@@ -157,6 +168,8 @@ export function Viewer({
   mode,
   cards,
   onSelectIntervention,
+  notes = NO_NOTES,
+  onSelectNote,
   handleRef,
   active,
   sun,
@@ -186,6 +199,7 @@ export function Viewer({
   const materialsRef = useRef<MaterialLibrary | null>(null);
   const builtRef = useRef<BuiltScene | null>(null);
   const placardsRef = useRef<Placards | null>(null);
+  const notePlacardsRef = useRef<Placards | null>(null);
   const crowdRef = useRef<Crowd | null>(null);
   const thermalOverlayRef = useRef<ThermalOverlay | null>(null);
   const thermalRef = useRef(thermal);
@@ -251,6 +265,8 @@ export function Viewer({
   onViewChangeRef.current = onViewChange;
   const onSelectInterventionRef = useRef(onSelectIntervention);
   onSelectInterventionRef.current = onSelectIntervention;
+  const onSelectNoteRef = useRef(onSelectNote);
+  onSelectNoteRef.current = onSelectNote;
   // Which pose object has already been moved to, so a scene rebuild doesn't
   // yank the camera back to the placed viewpoint after the user has walked.
   const appliedPoseRef = useRef<CameraPose | null>(null);
@@ -524,14 +540,15 @@ export function Viewer({
     const pointer = new THREE.Vector2();
     const CLICK_MAX_MOVE_PX = 5;
     let pressedAt: { x: number; y: number } | null = null;
-    const placardAt = (event: PointerEvent): string | null => {
-      const placards = placardsRef.current;
-      if (!placards || placards.panels.length === 0 || walk.isLocked) return null;
+    // A card's placard or a note's bubble: its userData.
+    const placardAt = (event: PointerEvent): { interventionId?: string; noteId?: string } | null => {
+      const panels = [...(placardsRef.current?.panels ?? []), ...(notePlacardsRef.current?.panels ?? [])];
+      if (panels.length === 0 || walk.isLocked) return null;
       const rect = renderer.domElement.getBoundingClientRect();
       pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
       raycaster.setFromCamera(pointer, camera);
-      const hit = raycaster.intersectObjects(placards.panels, false)[0];
-      return hit ? (hit.object.userData.interventionId as string) : null;
+      const hit = raycaster.intersectObjects(panels, false)[0];
+      return hit ? hit.object.userData : null;
     };
     const handlePointerDown = (event: PointerEvent) => {
       pressedAt = { x: event.clientX, y: event.clientY };
@@ -540,8 +557,9 @@ export function Viewer({
       const start = pressedAt;
       pressedAt = null;
       if (!start || Math.hypot(event.clientX - start.x, event.clientY - start.y) > CLICK_MAX_MOVE_PX) return;
-      const id = placardAt(event);
-      if (id) onSelectInterventionRef.current?.(id);
+      const picked = placardAt(event);
+      if (picked?.interventionId) onSelectInterventionRef.current?.(picked.interventionId);
+      if (picked?.noteId) onSelectNoteRef.current?.(picked.noteId);
     };
     // Where the pointer meets the felt-temperature sheet.
     const sheet = new THREE.Plane(new THREE.Vector3(0, 1, 0), -OVERLAY_HEIGHT_M);
@@ -708,6 +726,7 @@ export function Viewer({
       if (materialsRef.current) materialsRef.current.treeLod.viewHeightPx = renderer.domElement.height;
       for (const part of builtRef.current?.parts ?? []) part.frame?.(camera, clock.elapsedTime);
       if (placardsRef.current) facePlacards(placardsRef.current, camera);
+      if (notePlacardsRef.current) facePlacards(notePlacardsRef.current, camera);
       const ground = builtRef.current?.terrain.heightAt(camera.position.x, camera.position.z) ?? 0;
       thermalOverlay.setViewHeight(camera.position.y - ground);
       if (walk.isLocked) reportHere(performance.now());
@@ -756,6 +775,8 @@ export function Viewer({
       thermalOverlayRef.current = null;
       if (placardsRef.current) disposePlacards(placardsRef.current);
       placardsRef.current = null;
+      if (notePlacardsRef.current) disposePlacards(notePlacardsRef.current);
+      notePlacardsRef.current = null;
       crowd?.dispose();
       crowdRef.current = null;
       traffic?.dispose();
@@ -1007,6 +1028,22 @@ export function Viewer({
     placardsRef.current = placards;
   }, [scene, terrain, cards, mode, lang]);
 
+  // The notes' bubbles, likewise apart: a note changed rebuilds only them.
+  const siteBoundary = scene?.site_boundary;
+  useEffect(() => {
+    const threeScene = threeSceneRef.current;
+    if (!threeScene) return;
+    if (notePlacardsRef.current) {
+      threeScene.remove(notePlacardsRef.current.group);
+      disposePlacards(notePlacardsRef.current);
+      notePlacardsRef.current = null;
+    }
+    if (!siteBoundary || !terrain || notes.length === 0) return;
+    const placards = buildNotePlacards(notes, noteWords().color, anchorFromPolygon(siteBoundary), terrain);
+    threeScene.add(placards.group);
+    notePlacardsRef.current = placards;
+  }, [notes, siteBoundary, terrain]);
+
   useImperativeHandle(handleRef, () => ({
     captureFrame,
     readPerf: (reset: boolean) => ({
@@ -1049,7 +1086,7 @@ export function Viewer({
     },
   }));
 
-  function captureFrame() {
+  function captureFrame(fileName: string) {
     const renderer = rendererRef.current;
     const composer = composerRef.current;
     if (!renderer || !composer) return;
@@ -1058,15 +1095,7 @@ export function Viewer({
     // not preserved between frames, so whatever the last animation frame left
     // there may already have been cleared.
     composer.render();
-    renderer.domElement.toBlob((blob) => {
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `${(scene?.site_id ?? "view").replaceAll("_", "-")}-t${t}-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "")}.png`;
-      link.click();
-      URL.revokeObjectURL(url);
-    }, "image/png");
+    downloadCanvas(renderer.domElement, fileName);
   }
 
   function startWalk() {

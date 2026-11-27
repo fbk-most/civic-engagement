@@ -36,6 +36,15 @@ class TeamError(Exception):
     """A team or member that doesn't exist, or a change that can't be made."""
 
 
+class TeamConflict(TeamError):
+    """A team or member named as one already there: a setup run twice, most
+    likely, which would otherwise leave a second "Tavolo 1" or two Annas."""
+
+
+def _same_name(a: str, b: str) -> bool:
+    return a.strip().casefold() == b.strip().casefold()
+
+
 @dataclass
 class Member:
     id: str
@@ -130,6 +139,7 @@ class TeamStore:
         if not _slug(name):
             raise TeamError("A team needs a name with at least a letter or a digit")
         with self._lock:
+            self._refuse_taken(name)
             team_id, n = _slug(name), 1
             while team_id in self._teams:
                 n += 1
@@ -145,9 +155,15 @@ class TeamStore:
             raise TeamError("A team needs a name")
         with self._lock:
             team = self.team(team_id)
+            self._refuse_taken(name, but=team_id)
             team.name = name
             self._save()
             return team
+
+    def _refuse_taken(self, name: str, but: str | None = None) -> None:
+        for other in self._teams.values():
+            if other.id != but and _same_name(other.name, name):
+                raise TeamConflict(f"There is already a team {other.name!r} ({other.id})")
 
     def set_phase(self, team_id: str, phase: str) -> Team:
         """Any phase after any other: going back is allowed."""
@@ -172,6 +188,11 @@ class TeamStore:
             raise TeamError("An editor needs a name: it's shown on the cards they place")
         with self._lock:
             team = self.team(team_id)
+            # One name per member in a team (the viewers' too: one PIN for all
+            # of them): a second Anna is a setup run twice, not a person.
+            for other in team.members:
+                if _same_name(other.name, name or "Viewers"):
+                    raise TeamConflict(f"There is already a member {other.name!r} in team {team_id!r} ({other.id})")
             pin, hashed, distinct = self._new_pin()
             member_id = f"m-{uuid.uuid4().hex[:10]}"
             member = Member(member_id, name or "Viewers", role, hashed, distinct, sealed=seal(self._secret, member_id, pin))

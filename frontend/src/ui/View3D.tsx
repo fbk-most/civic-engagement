@@ -1,5 +1,5 @@
 import { useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
-import type { CardSpec, InterventionDisplayMode, SceneResponse } from "../api/types";
+import type { CardSpec, InterventionDisplayMode, Note, SceneResponse } from "../api/types";
 import { Viewer, type ViewerHandle } from "../three/Viewer";
 import { anchorFromPolygon } from "../three/geo";
 import type { Terrain } from "../three/terrain";
@@ -31,12 +31,18 @@ interface View3DProps {
   onTimeChange: (t: number) => void;
   /** The time panel (year, day and hour): false in a view without it. */
   showTime?: boolean;
+  /** The downloaded image's file name, asked when downloading; absent in a
+   * view without "Scarica immagine". */
+  imageName?: () => string;
   pose: CameraPose | null;
   onPlacePose: (pose: CameraPose) => void;
   /** Drops the placed viewpoint, back to the overview. */
   onClearPose: () => void;
   /** A placard was clicked ("Carte proposte" mode). */
   onSelectIntervention: (id: string) => void;
+  /** The notes shown (none when hidden), and a click on one. */
+  notes?: Note[];
+  onSelectNote?: (id: string) => void;
   /** Day and hour for the sun — owned by the app, since the 2D map's
    * felt-temperature layer follows them too. */
   sunSetting: SunSetting;
@@ -91,10 +97,13 @@ export function View3D({
   t,
   onTimeChange,
   showTime = true,
+  imageName,
   pose,
   onPlacePose,
   onClearPose,
   onSelectIntervention,
+  notes,
+  onSelectNote,
   sunSetting,
   onSunSettingChange: setSunSetting,
   thermal = null,
@@ -194,6 +203,8 @@ export function View3D({
         mode={mode}
         cards={cards}
         onSelectIntervention={onSelectIntervention}
+        notes={notes}
+        onSelectNote={onSelectNote}
         handleRef={viewerRef}
         active={active}
         sun={sun}
@@ -220,13 +231,15 @@ export function View3D({
           onClearPose={handleClearPose}
         />
         <div className="view-3d__tools">
-          <button
-            type="button"
-            onClick={() => viewerRef.current?.captureFrame()}
-            title={tr("Salva questa vista come immagine", "Save this view as an image")}
-          >
-            {tr("Salva immagine", "Save image")}
-          </button>
+          {imageName && (
+            <button
+              type="button"
+              onClick={() => viewerRef.current?.captureFrame(imageName())}
+              title={tr("Scarica questa vista come immagine", "Download this view as an image")}
+            >
+              {tr("Scarica immagine", "Download image")}
+            </button>
+          )}
           <button type="button" onClick={handleCopyUrl} title={tr("Copia un link che riproduce esattamente questa vista", "Copy a link that reproduces exactly this view")}
           >
             {urlCopied ? tr("Copiato!", "Copied!") : tr("Copia URL vista", "Copy view URL")}

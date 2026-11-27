@@ -25,10 +25,11 @@ from civic_engagement.models.schema import (
     ThrottleReset,
     ViewSpec,
 )
+from civic_engagement.store.notes import notes
 from civic_engagement.store.scenarios import ScenarioError, delete_library, library, read_scenario, scenario_documents
 from civic_engagement.store.state import store
 from civic_engagement.store.storage import restart_needed, state_storage
-from civic_engagement.store.teams import Member, Team, TeamError
+from civic_engagement.store.teams import Member, Team, TeamConflict, TeamError
 
 log = logging.getLogger(__name__)
 
@@ -82,9 +83,13 @@ def post_team(data: TeamCreate) -> AdminTeam:
     interventions = _scenario(data.from_scenario, data.from_team) if data.from_scenario else []
     try:
         team = team_store().create_team(data.name)
+    except TeamConflict as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
     except TeamError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
-    store.forget(team.id)  # nothing left behind by an earlier team of that id
+    # Nothing left behind by an earlier team of that id.
+    store.forget(team.id)
+    notes.forget(team.id)
     delete_library(library(team.id)[0])
     if interventions:
         store.replace(interventions, team.id)
@@ -96,16 +101,19 @@ def patch_team(team_id: str, data: TeamRename) -> AdminTeam:
     _known(team_id)
     try:
         return _team(team_store().rename_team(team_id, data.name))
+    except TeamConflict as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
     except TeamError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @router.delete("/teams/{team_id}", status_code=204)
 def delete_team(team_id: str) -> None:
-    """The team, its members, its scene (with those set aside) and its scenarios."""
+    """The team, its members, its scene (with those set aside), its notes and its scenarios."""
     _known(team_id)
     team_store().delete_team(team_id)
     store.forget(team_id)
+    notes.forget(team_id)
     delete_library(library(team_id)[0])
 
 
@@ -115,6 +123,8 @@ def post_member(team_id: str, data: MemberCreate) -> AdminMember:
     _known(team_id)
     try:
         member, pin = team_store().add_member(team_id, data.name, data.role)
+    except TeamConflict as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
     except TeamError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     return _member(member, pin)
@@ -204,8 +214,8 @@ def put_phase(data: PhaseSet) -> list[AdminTeam]:
 
 @router.get("/teams/{team_id}/export")
 def get_export(team_id: str) -> dict:
-    """The team (without its PINs), its scene, the scenes set aside and its
-    scenarios: the file to hand back to the organisers."""
+    """The team (without its PINs), its scene, the scenes set aside, its
+    notes and its scenarios: the file to hand back to the organisers."""
     team = _known(team_id)
     documents = lambda named: {name: json.loads(data) for name, data in named.items()}  # noqa: E731
     return {
@@ -213,6 +223,7 @@ def get_export(team_id: str) -> dict:
         "team": _team(team).model_dump(),
         "interventions": [i.model_dump() for i in store.list_interventions(team_id)],
         "set_aside": documents(store.set_aside(team_id)),
+        "notes": [note.model_dump() for note in notes.list_notes(team_id)],
         "scenarios": documents(scenario_documents(library(team_id)[0])),
     }
 

@@ -84,6 +84,11 @@ through the API (`GET /api/scenarios`, `POST /api/scenarios`,
 `POST /api/scenarios/{id}/load`, `DELETE /api/scenarios/{id}`;
 `POST /api/session/clear` starts again with no cards). Whatever a load
 replaces is kept as `data/<site>/session.<timestamp>.json`.
+A card can be turned off (`PATCH /api/interventions/{id}/enabled`,
+`{"enabled": false}`; the same change of cards as placing one): it stays on
+the scene, drawn grey on the map, but the scene, the indicators and the
+pack's fields are computed without it, and saving a scenario leaves it out;
+a scenario's cards are all on when it's loaded.
 `CIVIC_ENGAGEMENT_SCENARIO=<id>` loads a scenario when the backend starts — at
 every start, `--reload` restarts included, so leave it out once a workshop
 is under way.
@@ -126,6 +131,10 @@ uv run civic-engagement-admin member add team-1 "Anna" --editor    # prints Anna
 uv run civic-engagement-admin member add team-1 --viewers          # the team's viewers' PIN
 uv run civic-engagement-admin member pins team-1                   # the team's PINs again
 ```
+
+A name already taken is refused (409, case aside): a second team "Team 1",
+a second Anna in a team, a second viewers' PIN. A setup run twice stops at
+its first step instead of leaving a `team-1-2` and two Annas.
 
 A PIN is kept as an HMAC, to find its member, and sealed (AES-GCM, under a
 key derived from `CIVIC_ENGAGEMENT_PIN_SECRET`), so that the manager can
@@ -171,6 +180,17 @@ once, without reloading (the 3D view stays built): the container site
 framing the app changes only the fragment. Without views, or in a phase
 without any, everything is shown; without a phase, any of the pack's views
 may be asked for. `GET /api/admin/views` lists them, with their labels.
+
+A team may write **notes** (`/api/notes`, `civic_engagement/store/notes.py`;
+the needs, in Bologna's words): a title and a text at a point within the
+site, shown on the map and in 3D in the views with the `notes` panel, and
+changed by editors only in a phase allowing `notes.edit`. They are kept
+apart from the scene (`data/<site>/notes/<team>.json`): nothing is
+evaluated again for them, scenarios don't hold them; the team's export
+does, and deleting the team deletes them. `GET /session/revision` carries
+their own revision (`notes`), so the team's windows fetch them, not the
+scene, when they change. The pack names them and colours them (its
+frontend pack's `notes`).
 
 For user tests before the container site exists, a pack's app may have a
 **rehearsal page** standing in for it (`frontend/src/rehearsal/`, the
@@ -263,7 +283,12 @@ textured, eye-level scene:
   slider: the slider moves the proposal forward in years, the sun control moves
   the clock within a year. Shadows are the point — the indicators panel argues
   about shade numerically, and this shows the same argument.
-- **Salva immagine** — PNG export of the current view, for the workshop record.
+- **Scarica immagine** — the view as a PNG, for the workshop record; the
+  2D map has the same button. Named `<site>_<team>_<scenario>_<year>_<2d|3d>.png`,
+  the scenario being the one loaded while the cards are still as loaded,
+  `corrente` otherwise. At screen size times the pixel ratio; what lies over
+  the picture (panels, legend) isn't in it. A view shows the buttons with
+  its `export` panel; in an iframe, a `sandbox` needs `allow-downloads`.
 
 The view is labelled *Visualizzazione indicativa* throughout: in a citizen
 workshop a realistic image is easily read as a promise about what will be built.

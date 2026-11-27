@@ -14,12 +14,14 @@ import { locale, tr } from "../i18n/lang";
 interface Props {
   /** How many interventions the session has now: loading over them asks first. */
   interventionCount: number;
+  /** How many of them are turned off: a save leaves them out, and says so first. */
+  disabledCount?: number;
   /** The year shown, for the scene a load returns. */
   t: number;
   /** Whether "start again with no cards" is offered: the team's phase allows changing cards. */
   canClear: boolean;
-  /** A scenario was loaded, or the cards cleared: the scene with them. */
-  onSceneReplaced: (scene: SceneResponse) => void;
+  /** A scenario was loaded (its name), or the cards cleared: the scene with them. */
+  onSceneReplaced: (scene: SceneResponse, scenarioName?: string) => void;
 }
 
 function formatSavedAt(savedAt: string | null): string {
@@ -36,7 +38,7 @@ function cardCount(n: number): string {
  * place, or start afresh. The scene is the team's, so a load or a clear
  * changes it for every window of the team (they follow within seconds); the
  * cards replaced are kept on the server. */
-export function ScenarioMenu({ interventionCount, t, canClear, onSceneReplaced }: Props) {
+export function ScenarioMenu({ interventionCount, disabledCount = 0, t, canClear, onSceneReplaced }: Props) {
   const [open, setOpen] = useState(false);
   const [scenarios, setScenarios] = useState<ScenarioInfo[] | null>(null);
   const [name, setName] = useState("");
@@ -105,7 +107,7 @@ export function ScenarioMenu({ interventionCount, t, canClear, onSceneReplaced }
       return;
     }
     run(async () => {
-      onSceneReplaced(await loadScenario(scenario.id, t));
+      onSceneReplaced(await loadScenario(scenario.id, t), scenario.name);
       setOpen(false);
     }, tr(`Impossibile caricare "${scenario.name}".`, `Could not load "${scenario.name}".`));
   }
@@ -208,8 +210,17 @@ export function ScenarioMenu({ interventionCount, t, canClear, onSceneReplaced }
             </>
           )}
           <form className="scenario-menu__save" onSubmit={handleSave}>
+            {disabledCount > 0 && (
+              <p className="scenario-menu__note scenario-menu__note--warning" role="alert">
+                {tr("Verranno salvati solo gli interventi selezionati", "Only the selected interventions will be saved")}
+                {` (${interventionCount - disabledCount}/${interventionCount}).`}
+              </p>
+            )}
             <label htmlFor="scenario-name">
-              {tr(`Salva le carte attuali (${cardCount(interventionCount)}) come:`, `Save the current cards (${cardCount(interventionCount)}) as:`)}
+              {tr(
+                `Salva le carte attuali (${cardCount(interventionCount - disabledCount)}) come:`,
+                `Save the current cards (${cardCount(interventionCount - disabledCount)}) as:`
+              )}
             </label>
             <div>
               <input

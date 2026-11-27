@@ -285,9 +285,10 @@ def access(request: Request) -> Access:
 
 
 def editor(who: Access = Depends(access)) -> Access:
-    """`access`, for the routes that change a team's scene or scenarios; 403 for a viewer."""
+    """`access`, for the routes that change a team's scene, scenarios or
+    notes; 403 for a viewer."""
     if who.role != "editor":
-        raise HTTPException(status_code=403, detail="Viewers can't change the scene")
+        raise HTTPException(status_code=403, detail="Viewers can look, not change")
     return who
 
 

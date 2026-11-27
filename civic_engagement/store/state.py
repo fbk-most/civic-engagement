@@ -28,6 +28,11 @@ from civic_engagement.store.storage import Storage, state_storage
 DEFAULT_TEAM = "default"
 
 
+def enabled(interventions: list[Intervention]) -> list[Intervention]:
+    """The interventions turned on: those the scene is evaluated with."""
+    return [i for i in interventions if i.enabled]
+
+
 def session_name(team: str) -> str:
     """The team's session document — see config.SiteConfig.session_json_path."""
     if auth_mechanism() == "open":
@@ -74,6 +79,11 @@ class SessionStore:
         with self._lock:
             return [i for i in self._session(team) if not i.deleted]
 
+    def enabled_interventions(self, team: str = DEFAULT_TEAM) -> list[Intervention]:
+        """The team's interventions turned on: what its scene, indicators and
+        fields are computed from (`list_interventions` has them all)."""
+        return enabled(self.list_interventions(team))
+
     def add_intervention(
         self, data: InterventionCreate, planted_year: int = 0, team: str = DEFAULT_TEAM, author: str | None = None
     ) -> Intervention:
@@ -101,6 +111,16 @@ class SessionStore:
                 if intervention.id == intervention_id and not intervention.deleted:
                     intervention.params = params
                     intervention.updated_by = author
+                    self._save(team)
+                    return True
+        return False
+
+    def set_enabled(self, intervention_id: str, on: bool, team: str = DEFAULT_TEAM) -> bool:
+        """Turns the intervention on or off; every window of the team follows."""
+        with self._lock:
+            for intervention in self._session(team):
+                if intervention.id == intervention_id and not intervention.deleted:
+                    intervention.enabled = on
                     self._save(team)
                     return True
         return False

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { CardSpec } from "../api/types";
 import { tr } from "../i18n/lang";
 import { authorsLabel, cardLabel, optionLabel, paramLabel, yearLabel } from "../i18n/labels";
@@ -15,6 +15,8 @@ interface Props {
   plantedYear?: number;
   /** An existing card's authors, with teams. */
   authors?: { created_by?: string | null; updated_by?: string | null };
+  /** Under the title: e.g. that the card is turned off. */
+  notice?: ReactNode;
   onSubmit: (params: Record<string, unknown>) => void;
   onCancel: () => void;
   onDelete?: () => void;
@@ -26,6 +28,7 @@ export function ParamForm({
   submitLabel = tr("Posiziona", "Place"),
   plantedYear,
   authors,
+  notice,
   onSubmit,
   onCancel,
   onDelete,
@@ -43,6 +46,7 @@ export function ParamForm({
       }}
     >
       <h3>{cardLabel(card)}</h3>
+      {notice}
       {plantedYear !== undefined && (
         <p className="param-form__planted-year">
           {initialValues ? tr("In vigore da: ", "In effect from: ") : tr("Entrerà in vigore: ", "Takes effect: ")}
