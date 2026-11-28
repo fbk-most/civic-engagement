@@ -24,6 +24,7 @@ import { crossingAxis } from "./network";
 import { Track } from "./track";
 import { addLampLighting } from "../lampLighting";
 import { FLAT_TERRAIN, type Terrain } from "../terrain";
+import { sunShadowOnly } from "./shadows";
 
 type Point = [number, number];
 
@@ -477,6 +478,7 @@ export class Traffic {
           mesh.count = 0;
           mesh.castShadow = true;
           mesh.receiveShadow = true;
+          sunShadowOnly(mesh);
           // Instances move every frame; a stale bounding sphere would cull
           // cars that are in view.
           mesh.frustumCulled = false;

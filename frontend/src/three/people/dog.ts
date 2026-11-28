@@ -10,6 +10,7 @@ import * as SkeletonUtils from "three/examples/jsm/utils/SkeletonUtils.js";
 import type { DogAsset } from "./assets";
 import type { DogBreed } from "./walkers";
 import type { Terrain } from "../terrain";
+import { sunShadowsOnly } from "./shadows";
 
 interface BreedSpec {
   /** Standing height (top of the head), metres. */
@@ -80,6 +81,7 @@ export class Dog {
     this.terrain = terrain;
     this.spec = BREEDS[breed];
     this.root = SkeletonUtils.clone(asset.scene);
+    sunShadowsOnly(this.root);
     this.scale = this.spec.height / asset.modelHeight;
     this.root.scale.setScalar(this.scale);
     parent.add(this.root);

@@ -19,6 +19,7 @@ import { PoseLayer } from "./poseLayer";
 import { applySeatedPose, hipCentre } from "./seatedPose";
 import { WalkerMotion, type DogBreed, type WalkerSpec } from "./walkers";
 import { FLAT_TERRAIN, type Terrain } from "../terrain";
+import { sunShadowsOnly } from "./shadows";
 
 // Where the hip joints sit above the ground on a bench (seat top ~0.48 m,
 // see buildBenchGeometry, plus the thigh's thickness).
@@ -237,6 +238,8 @@ export class Crowd {
   ): { root: THREE.Object3D; mixer: THREE.AnimationMixer; layer: PoseLayer; asset: CharacterAsset; scale: number } {
     const asset = this.characters![character];
     const root = SkeletonUtils.clone(asset.scene);
+    // A clone has none of the asset's hooks: set on each figure.
+    sunShadowsOnly(root);
     const scale = height / asset.modelHeight;
     root.scale.setScalar(scale);
     root.rotation.y = yaw;
