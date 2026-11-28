@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import "./index.css";
 import { AccessGate } from "./AccessGate";
 import { registerPack, type FrontendPack } from "./pack";
+import { keepPageStill } from "./touch";
 
 export type { FrontendPack, Pair } from "./pack";
 export type { MapElementLayer, MapLayerHelpers } from "./map/layers";
@@ -13,6 +14,7 @@ export type { ExpressionSpecification } from "maplibre-gl";
 /** Renders the app for `pack` into `root`. */
 export function startApp(pack: FrontendPack, root: HTMLElement): void {
   registerPack(pack);
+  keepPageStill();
   createRoot(root).render(createElement(StrictMode, null, createElement(AccessGate)));
 }
 

@@ -622,6 +622,11 @@ export function Viewer({
     renderer.domElement.addEventListener("pointerup", handlePointerUp);
     renderer.domElement.addEventListener("pointermove", handlePointerMove);
     renderer.domElement.addEventListener("pointerleave", handlePointerLeave);
+    // A finger dragging on the view never scrolls or zooms the page, even
+    // where the canvas's `touch-action: none` isn't honoured: the controls
+    // read pointer events, which this leaves alone.
+    const handleTouchMove = (event: TouchEvent) => event.preventDefault();
+    renderer.domElement.addEventListener("touchmove", handleTouchMove, { passive: false });
 
     // Live view reporting, rate-limited on both time and movement: the render
     // loop runs at 60fps and each report redraws a GeoJSON source on the map,
@@ -791,6 +796,7 @@ export function Viewer({
       renderer.domElement.removeEventListener("pointerup", handlePointerUp);
       renderer.domElement.removeEventListener("pointermove", handlePointerMove);
       renderer.domElement.removeEventListener("pointerleave", handlePointerLeave);
+      renderer.domElement.removeEventListener("touchmove", handleTouchMove);
       renderer.domElement.removeEventListener("pointerdown", handleGesturePointerDown, { capture: true });
       renderer.domElement.removeEventListener("wheel", handleGestureWheel, { capture: true });
       controls.removeEventListener("start", handleGestureStart);

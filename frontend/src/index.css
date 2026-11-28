@@ -8,3 +8,17 @@ html, body, #root {
   height: 100%;
   width: 100%;
 }
+
+/* Touch screens: a drag that runs off the view doesn't pull the page to
+   reload or swipe back, and a long press on a map or the 3D view doesn't
+   select or offer to save it. */
+html, body {
+  overscroll-behavior: none;
+}
+
+.maplibregl-canvas,
+.viewer-canvas canvas {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
