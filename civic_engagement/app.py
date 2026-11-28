@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 from starlette.types import Scope
@@ -72,6 +73,12 @@ def create_app(pack: DomainPack, title: str = "Civic Digital Twin PoC", frontend
             allow_methods=["*"],
             allow_headers=["*"],
         )
+
+    # Compressed, when the browser accepts it: the app's bundle (about
+    # 2 MB of JavaScript, a third of that compressed), the scenes, the
+    # felt-temperature fields. Level 5: most of level 9's gain, a fraction
+    # of its time.
+    app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
 
     # Every route, the pack's too, behind `access`: with teams, a valid
     # token for each, with no exceptions to remember but logging in, the

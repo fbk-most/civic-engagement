@@ -20,6 +20,7 @@ import type {
   ThermalFieldResponse,
   ViewSpec,
 } from "./types";
+import { withRetries } from "./retry";
 
 // With teams (CIVIC_ENGAGEMENT_AUTH=pin), the token a PIN was exchanged for
 // (see civic_engagement/access.py): kept across reloads and tabs, sent on
@@ -74,8 +75,10 @@ async function request(url: string, init: RequestInit = {}): Promise<Response> {
   return res;
 }
 
+/** A GET, asked again when the gateway in front of the app gives up on a
+ * long computation (see retry.ts): the views stay "loading" meanwhile. */
 async function getJson<T>(url: string): Promise<T> {
-  const res = await request(url);
+  const res = await withRetries(() => request(url));
   if (!res.ok) throw new HttpError(`GET ${url} failed: ${res.status}`, res.status);
   return res.json();
 }

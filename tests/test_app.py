@@ -25,6 +25,21 @@ def test_serves_the_built_frontend_beside_the_api(tmp_path):
     assert client.get("/assets/missing.js").status_code == 404
 
 
+def test_compressed_when_the_browser_accepts_it(tmp_path):
+    (tmp_path / "index.html").write_text("<html>app</html>")
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "assets" / "index-abc123.js").write_text("const x = 1;\n" * 2000)
+    client = TestClient(create_app(active_pack(), frontend=tmp_path))
+
+    bundle = client.get("/assets/index-abc123.js", headers={"Accept-Encoding": "gzip"})
+    assert bundle.headers["content-encoding"] == "gzip" and bundle.text == "const x = 1;\n" * 2000
+    assert "immutable" in bundle.headers["cache-control"]
+    plain = client.get("/assets/index-abc123.js", headers={"Accept-Encoding": "identity"})
+    assert "content-encoding" not in plain.headers
+    # Too small to be worth it.
+    assert "content-encoding" not in client.get("/api/health", headers={"Accept-Encoding": "gzip"}).headers
+
+
 def test_without_a_frontend_only_the_api(monkeypatch):
     monkeypatch.delenv("CIVIC_ENGAGEMENT_FRONTEND", raising=False)
     client = TestClient(create_app(active_pack()))
