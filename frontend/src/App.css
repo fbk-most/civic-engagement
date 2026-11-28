@@ -1836,6 +1836,12 @@
   font-size: 12px;
 }
 
+.team-badge__confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .param-form__authors {
   margin: 0 0 8px;
   font-size: 12px;
