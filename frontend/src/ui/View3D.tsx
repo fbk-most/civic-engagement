@@ -210,7 +210,6 @@ export function View3D({
         sun={sun}
         season={season}
         pose={pose}
-        t={scene?.t ?? 0}
         onViewChange={handleViewChange}
         crowdActivity={activity}
         lifeMode={lifeMode}

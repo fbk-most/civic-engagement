@@ -129,8 +129,6 @@ interface ViewerProps {
   /** Fires as the 3D camera moves, so the plan view can track it. Throttled,
    * and deliberately *not* fed back in through `pose` — that would be a loop. */
   onViewChange?: (pose: CameraPose, mode: "orbit" | "walk") => void;
-  /** Scenario year the scene was resolved at — only used to label exports. */
-  t: number;
   /** How many people are around (time of day, season) — see people/activity.ts. */
   crowdActivity: CrowdActivity;
   /** People, dogs and cars hidden, frozen or moving. */
@@ -175,7 +173,6 @@ export function Viewer({
   sun,
   season,
   pose,
-  t,
   onViewChange,
   crowdActivity,
   lifeMode,
