@@ -28,8 +28,10 @@ from civic_engagement.models.schema import (
     IndicatorDescriptors,
     IndicatorSeries,
     Intervention,
+    ScenarioInfo,
     SceneResponse,
 )
+from civic_engagement.store.scenarios import ScenarioError, compared_scenario, library
 from civic_engagement.store.state import DEFAULT_TEAM, enabled, store
 
 # The scenario horizon: t is any integer year offset in this range, not just
@@ -74,7 +76,9 @@ def _as_is() -> Any:
 # different scenes don't re-evaluate each other's at every request. Moving
 # the year slider doesn't change the interventions, so it never misses; an
 # edit does, and re-evaluates.
-EVALUATIONS = int(os.environ.get("CIVIC_ENGAGEMENT_EVALUATIONS", "8"))
+# A team comparing keeps two (each about 0.6 MiB, 1.3 s to make): 32 leaves
+# room for five teams comparing, and their edits.
+EVALUATIONS = int(os.environ.get("CIVIC_ENGAGEMENT_EVALUATIONS", "32"))
 _scenario_cache: OrderedDict[str, Any] = OrderedDict()
 _cache_lock = threading.Lock()
 
@@ -114,13 +118,39 @@ def indicator_descriptors() -> IndicatorDescriptors:
     return active_pack().indicators
 
 
-def current_scene(t: int = 0, team: str = DEFAULT_TEAM) -> SceneResponse:
+def scene_interventions(team: str = DEFAULT_TEAM, scenario: str | None = None) -> list[Intervention]:
+    """The cards of the scene asked about: the team's current one (every
+    card, those turned off too), or with `scenario` one of its saved
+    scenarios or the site's presets, as saved (all on) — to compare, not
+    load. 404 if there's no such scenario, 422 if it can't be read."""
+    if scenario is None:
+        return store.list_interventions(team)
+    return _saved_scene(team, scenario)[1]
+
+
+def _saved_scene(team: str, scenario: str) -> tuple[ScenarioInfo, list[Intervention]]:
+    try:
+        return compared_scenario(scenario, *library(team))
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=f"Scenario {scenario} not found") from error
+    except ScenarioError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+def current_scene(t: int = 0, team: str = DEFAULT_TEAM, scenario: str | None = None) -> SceneResponse:
+    """The scene at year t: the team's current one, or with `scenario` a
+    saved scenario's (see `scene_interventions`)."""
     pack = active_pack()
     baseline = load_baseline()
-    # Read before the interventions: a change landing in between makes the
-    # window refresh once more, never miss it.
-    revision = store.revision(team)
-    interventions = store.list_interventions(team)
+    if scenario is None:
+        # Read before the interventions: a change landing in between makes
+        # the window refresh once more, never miss it.
+        revision = store.revision(team)
+        interventions = store.list_interventions(team)
+    else:
+        # Not the session's: a saved scenario changes only when saved again.
+        info, interventions = _saved_scene(team, scenario)
+        revision = f"scenario-{info.id}-{info.saved_at or ''}"
     scenario = evaluation(enabled(interventions))
     elements, covers = pack.assemble(scenario, t)
 
@@ -142,23 +172,23 @@ def current_scene(t: int = 0, team: str = DEFAULT_TEAM) -> SceneResponse:
     )
 
 
-def deferred_indicators(t: int, team: str = DEFAULT_TEAM) -> DeferredIndicators:
+def deferred_indicators(t: int, team: str = DEFAULT_TEAM, scenario: str | None = None) -> DeferredIndicators:
     """The deferred indicators at year t, with and without the team's
-    interventions (those turned on)."""
+    interventions (those turned on; a saved scenario's with `scenario`)."""
     pack = active_pack()
     return DeferredIndicators(
         t=t,
-        scenario=pack.deferred_values(store.enabled_interventions(team), t),
+        scenario=pack.deferred_values(enabled(scene_interventions(team, scenario)), t),
         baseline=pack.deferred_values([], t),
     )
 
 
-def indicator_series(team: str = DEFAULT_TEAM) -> IndicatorSeries:
+def indicator_series(team: str = DEFAULT_TEAM, scenario: str | None = None) -> IndicatorSeries:
     """Every indicator for every year of the horizon, with and without the
-    team's interventions (those turned on) — the "Indicatori" tab's time
-    series."""
+    team's interventions (those turned on; a saved scenario's with
+    `scenario`) — the "Indicatori" tab's time series."""
     pack = active_pack()
-    interventions = store.enabled_interventions(team)
+    interventions = enabled(scene_interventions(team, scenario))
     scenario = evaluation(interventions)
     years = list(range(MIN_T, MAX_T + 1))
     baseline_deferred = pack.deferred_series([], years)

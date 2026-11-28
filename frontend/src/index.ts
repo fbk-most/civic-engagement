@@ -27,5 +27,6 @@ export type { ForestTree, TreeKind, TreeSource } from "./three/builders/forest";
 export { polygonRings } from "./three/geo";
 export { elementYaw } from "./three/hash";
 export { daylightFraction, type SunPosition } from "./three/sun";
-export { setLampIntensity, setLampLayout, setRealLamps } from "./three/lampLighting";
+export type { LampLighting } from "./three/lampLighting";
+export type { View3DSettings, ViewContext } from "./three/viewSettings";
 export { readDebugParams } from "./debugParams";

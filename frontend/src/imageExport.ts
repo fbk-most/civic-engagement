@@ -46,3 +46,51 @@ export function downloadCanvas(canvas: HTMLCanvasElement, fileName: string): voi
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }, "image/png");
 }
+
+// A's and B's colours, as on screen (App.css, `comparison-picker__letter--*`).
+const PAIR_COLORS = { a: "#7b3fa8", b: "#d9730d" } as const;
+
+/** Two scenarios compared as one picture: A and B side by side, a thin gap
+ * between, each labelled at its top left with its letter (in its colour)
+ * and its name. */
+export function pairImage(a: HTMLCanvasElement, b: HTMLCanvasElement, labelA: string, labelB: string): HTMLCanvasElement {
+  const scale = Math.max(1, a.height / 600);
+  const gap = Math.round(4 * scale);
+  const pair = document.createElement("canvas");
+  pair.width = a.width + gap + b.width;
+  pair.height = Math.max(a.height, b.height);
+  const ctx = pair.getContext("2d")!;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, pair.width, pair.height);
+  const sides: ["a" | "b", HTMLCanvasElement, number, string][] = [
+    ["a", a, 0, labelA],
+    ["b", b, a.width + gap, labelB],
+  ];
+  for (const [side, canvas, x, label] of sides) {
+    ctx.drawImage(canvas, x, 0);
+    const font = Math.round(15 * scale);
+    ctx.font = `600 ${font}px sans-serif`;
+    const pad = Math.round(8 * scale);
+    const radius = font * 0.6;
+    const width = pad + radius * 2 + pad / 2 + ctx.measureText(label).width + pad;
+    const height = font + pad * 2;
+    const left = x + pad;
+    const top = pad;
+    ctx.fillStyle = "rgba(255, 255, 255, 0.92)";
+    ctx.fillRect(left, top, width, height);
+    ctx.fillStyle = PAIR_COLORS[side];
+    ctx.beginPath();
+    ctx.arc(left + pad + radius, top + height / 2, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = `700 ${Math.round(font * 0.75)}px sans-serif`;
+    ctx.fillText(side.toUpperCase(), left + pad + radius, top + height / 2);
+    ctx.fillStyle = "#222222";
+    ctx.textAlign = "left";
+    ctx.font = `600 ${font}px sans-serif`;
+    ctx.fillText(label, left + pad + radius * 2 + pad / 2, top + height / 2);
+  }
+  return pair;
+}

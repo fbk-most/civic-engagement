@@ -193,7 +193,7 @@ export function ScenarioMenu({ interventionCount, disabledCount = 0, t, canClear
           )}
           {presets.length > 0 && (
             <>
-              <h3>{tr("Scenari del sito", "The site's scenarios")}</h3>
+              <h3>{tr("Scenari di esempio", "Example scenarios")}</h3>
               <ul className="scenario-menu__list">
                 {presets.map((scenario) => (
                   <li key={scenario.id}>

@@ -21,8 +21,8 @@ import type { SeasonState } from "../sun";
 import type { Terrain } from "../terrain";
 import type { CrownForm } from "./treeStructure";
 import type { BarkAttributes, FoliageAttributes, TreeJob } from "../workers/treeJobs";
-import { buildTreesInWorkers, treeJobKey } from "../workers/treeWorkerPool";
-import { readDebugParams } from "../../debugParams";
+import { treeJobKey, type TreeWorkerPool } from "../workers/treeWorkerPool";
+import type { ViewContext } from "../viewSettings";
 import {
   barkOrder,
   barkTriangles,
@@ -167,6 +167,8 @@ interface TreeChunk {
   leaves: Sorted | null;
   needles: Sorted | null;
   users: number;
+  /** The view's live chunks it's among (see `liveChunksOf`). */
+  live: Set<TreeChunk>;
 }
 
 // A tile of trees: small enough for its distance to the camera to be near
@@ -188,11 +190,21 @@ function isGrowing(element: DiscreteElement): boolean {
   return element.source !== "baseline" || GROWING_AGE_CLASSES.has(String(element.properties.age_class));
 }
 
-const liveChunks = new Set<TreeChunk>();
+// Each view's own chunks, by its pool of tree workers (one per view): a
+// chunk's arrays are freed once uploaded to the view's WebGL context (see
+// `releaseAfterUpload`), so another view, with a context of its own, could
+// never upload it.
+const liveChunksByView = new WeakMap<TreeWorkerPool, Set<TreeChunk>>();
+
+function liveChunksOf(pool: TreeWorkerPool): Set<TreeChunk> {
+  let live = liveChunksByView.get(pool);
+  if (!live) liveChunksByView.set(pool, (live = new Set()));
+  return live;
+}
 
 function releaseChunk(chunk: TreeChunk): void {
   if (--chunk.users > 0) return;
-  liveChunks.delete(chunk);
+  chunk.live.delete(chunk);
   chunk.bark?.geometry.dispose();
   chunk.leaves?.geometry.dispose();
   chunk.needles?.geometry.dispose();
@@ -208,7 +220,8 @@ function packed(jobs: { job: TreeJob; key: string }[]): { job: TreeJob; key: str
 
 /** The chunks drawing `jobs`: the live ones that still fit, and new ones,
  * built (in the worker pool) and merged, for the rest. */
-async function treeChunks(jobs: TreeJob[], growing: Set<string>): Promise<TreeChunk[]> {
+async function treeChunks(jobs: TreeJob[], growing: Set<string>, pool: TreeWorkerPool): Promise<TreeChunk[]> {
+  const liveChunks = liveChunksOf(pool);
   const wanted = new Map(jobs.map((job) => [treeJobKey(job), job]));
   const known = new Set<string>();
   const chunks: TreeChunk[] = [];
@@ -229,7 +242,7 @@ async function treeChunks(jobs: TreeJob[], growing: Set<string>): Promise<TreeCh
     )
   );
 
-  const results = new Map((await buildTreesInWorkers(rest.map(({ job }) => job))).map((r) => [r.id, r]));
+  const results = new Map((await pool.build(rest.map(({ job }) => job))).map((r) => [r.id, r]));
   for (const group of groups) {
     const bark: THREE.BufferGeometry[] = [];
     const leaves: THREE.BufferGeometry[] = [];
@@ -238,7 +251,7 @@ async function treeChunks(jobs: TreeJob[], growing: Set<string>): Promise<TreeCh
     for (const { job } of group) {
       const result = results.get(job.id);
       // A build superseded in the pool comes back empty (see
-      // `buildTreesInWorkers`); its scene is dropped anyway.
+      // `TreeWorkerPool.build`); its scene is dropped anyway.
       if (!result) continue;
       bark.push(barkGeometryFromAttributes(result.bark));
       if (result.foliage?.kind === "needle") needles.push(foliageGeometryFromAttributes(result.foliage));
@@ -254,6 +267,7 @@ async function treeChunks(jobs: TreeJob[], growing: Set<string>): Promise<TreeCh
       leaves: sorted(merged(leaves), foliageOrder),
       needles: sorted(merged(needles), foliageOrder),
       users: 0,
+      live: liveChunks,
     });
   }
   const complete = groups.every((group) => group.every(({ job }) => results.has(job.id)));
@@ -277,9 +291,6 @@ export interface Vegetation {
   release: () => void;
 }
 
-// `?detail=`: how fine the trees stay with distance (see `treeLod.ts`).
-// Under 0.5 the thinning shows.
-const DETAIL = Math.min(4, Math.max(0.5, readDebugParams().detail ?? 1));
 // The camera moves this much before the chunks' draw ranges are set again;
 // they are set for a camera that much nearer, so that they hold meanwhile.
 const RECHECK_M = 3;
@@ -308,8 +319,11 @@ export async function buildVegetation(
   elements: DiscreteElement[],
   anchor: GeoAnchor,
   materials: MaterialLibrary,
-  terrain: Terrain
+  terrain: Terrain,
+  view: ViewContext
 ): Promise<Vegetation> {
+  // How fine the trees stay with distance (see `treeLod.ts`): the view's.
+  const detail = view.settings.treeDetail;
   const broadleafAtlas = await loadFoliageAtlas();
 
   const group = new THREE.Group();
@@ -385,7 +399,7 @@ export async function buildVegetation(
   // across a worker pool rather than inline here — see
   // `workers/treeWorkerPool.ts` for why (measured ~1.7-1.8s of this
   // function's own wall-clock time otherwise, ~62% of it in foliage alone).
-  const chunks = await treeChunks(treeJobs, growingTrees);
+  const chunks = await treeChunks(treeJobs, growingTrees, view.trees);
 
   const trunkMesh = instanced(trunkGeometry, materials.bark(), trunks, "tree-trunks");
   if (trunkMesh) group.add(trunkMesh);
@@ -421,7 +435,7 @@ export async function buildVegetation(
   const setAt = new THREE.Vector3(Infinity, Infinity, Infinity);
   let setFor = "";
   const frame = (camera: THREE.Camera) => {
-    const { view, shadow } = updateTreeLod(lod, camera, DETAIL, leafDensity);
+    const { view, shadow } = updateTreeLod(lod, camera, detail, leafDensity);
     const state = `${view.leaves.d0}|${view.barkSlope}|${shadow.barkFloor}|${leafDensity}`;
     if (state === setFor && lod.eye.value.distanceTo(setAt) < RECHECK_M) return;
     setFor = state;

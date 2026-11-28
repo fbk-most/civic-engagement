@@ -282,7 +282,8 @@ export interface FieldGrid {
 export interface ThermalFieldResponse {
   t: number;
   date: string;
-  scenario: "current" | "as_is";
+  /** `current` (the team's scene), `as_is`, or the saved scenario's id. */
+  scenario: string;
   grid: FieldGrid;
   hours: number;
   data: string;

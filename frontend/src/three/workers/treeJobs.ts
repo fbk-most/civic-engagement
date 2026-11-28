@@ -69,7 +69,7 @@ export interface TreeBuildResult {
 }
 
 /** One worker's unit of work: a subset of the jobs from the current
- * `buildTreesInWorkers` call, tagged with the pool's generation so a
+ * `TreeWorkerPool.build` call, tagged with the pool's generation so a
  * response from a superseded build can be recognised and dropped (see
  * `treeWorkerPool.ts`). */
 export interface TreeWorkerRequest {

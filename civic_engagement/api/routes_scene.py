@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from civic_engagement.access import Access, access
 from civic_engagement.models.schema import (
@@ -22,6 +22,12 @@ from civic_engagement.store.storage import restart_needed
 
 router = APIRouter()
 
+# `scenario=<id>` on the scene, the deferred indicators and the series (and
+# the pack's routes that follow, like the urban /thermal-field): one of the
+# team's saved scenarios or the site's presets instead of the current scene,
+# for comparing two (see scene.scene_interventions).
+Scenario = Query(None, description="A saved scenario or preset of the team instead of its current scene")
+
 
 @router.get("/baseline", response_model=BaselineScene)
 def get_baseline() -> BaselineScene:
@@ -29,8 +35,8 @@ def get_baseline() -> BaselineScene:
 
 
 @router.get("/scene", response_model=SceneResponse)
-def get_scene(t: int = 0, who: Access = Depends(access)) -> SceneResponse:
-    return current_scene(validated_t(t), who.team)
+def get_scene(t: int = 0, scenario: str | None = Scenario, who: Access = Depends(access)) -> SceneResponse:
+    return current_scene(validated_t(t), who.team, scenario)
 
 
 @router.get("/session/revision")
@@ -56,12 +62,14 @@ def get_indicator_descriptors() -> IndicatorDescriptors:
 
 
 @router.get("/indicators/deferred", response_model=DeferredIndicators)
-def get_deferred_indicators(t: int = 0, who: Access = Depends(access)) -> DeferredIndicators:
+def get_deferred_indicators(
+    t: int = 0, scenario: str | None = Scenario, who: Access = Depends(access)
+) -> DeferredIndicators:
     """The indicators too slow for the scene (two fields, for the urban
     thermal ones), which the scene needn't wait for."""
-    return deferred_indicators(validated_t(t), who.team)
+    return deferred_indicators(validated_t(t), who.team, scenario)
 
 
 @router.get("/indicators/series", response_model=IndicatorSeries)
-def get_indicator_series(who: Access = Depends(access)) -> IndicatorSeries:
-    return indicator_series(who.team)
+def get_indicator_series(scenario: str | None = Scenario, who: Access = Depends(access)) -> IndicatorSeries:
+    return indicator_series(who.team, scenario)

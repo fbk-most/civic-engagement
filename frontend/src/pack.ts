@@ -3,6 +3,7 @@ import type { MapElementLayer } from "./map/layers";
 import type { Surface } from "./three/materials";
 import type { TreeSource } from "./three/builders/forest";
 import type { PartBuilder } from "./three/parts";
+import type { View3DSettings } from "./three/viewSettings";
 import type { IconShape } from "./ui/cardIconShapes";
 
 /** The frontend side of a domain pack (see civic_engagement/domain.py for
@@ -80,6 +81,10 @@ export interface FrontendPack {
     /** The pack's own parts of the scene, built after the core's ground,
      * ribbons, buildings and trees, before the water. */
     parts: PartBuilder[];
+    /** How the two 3D views of a comparison are drawn, side by side: any
+     * of three/viewSettings.ts's `SPLIT_DEFAULTS` changed (the URL's
+     * testing parameters still win). */
+    split?: Partial<View3DSettings>;
   };
 }
 

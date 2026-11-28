@@ -21,7 +21,9 @@ it; a preset can't be deleted.
 
 import json
 import re
+import threading
 import unicodedata
+from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -114,6 +116,40 @@ def read_scenario(
         raise ScenarioError(f"Scenario {scenario!r} can't be read: {error}") from error
 
 
+# The scenarios compared lately (`compared_scenario`), by where they are
+# kept and their id: a comparison asks for its scenario at every year moved,
+# and a team's saved ones are on S3. Saving and deleting through here forget
+# them; a document changed behind the backend's back is seen after a
+# restart.
+COMPARED = 32
+_compared: OrderedDict[tuple[str, str], tuple[ScenarioInfo, list[Intervention]]] = OrderedDict()
+_compared_lock = threading.Lock()
+
+
+def compared_scenario(
+    scenario: str, saved: Storage = SAVED, presets: Storage | None = PRESETS
+) -> tuple[ScenarioInfo, list[Intervention]]:
+    """`read_scenario`, remembered: for a scenario looked at, not loaded."""
+    key = (saved.location, scenario)
+    with _compared_lock:
+        found = _compared.get(key)
+        if found is not None:
+            _compared.move_to_end(key)
+            return found[0], list(found[1])
+    found = read_scenario(scenario, saved, presets)
+    with _compared_lock:
+        _compared[key] = found
+        while len(_compared) > COMPARED:
+            _compared.popitem(last=False)
+    return found[0], list(found[1])
+
+
+def _forget_compared(saved: Storage) -> None:
+    with _compared_lock:
+        for key in [key for key in _compared if key[0] == saved.location]:
+            del _compared[key]
+
+
 def save_scenario(
     name: str,
     interventions: list[Intervention],
@@ -139,11 +175,13 @@ def save_scenario(
         "interventions": [i.model_dump() for i in kept],
     }
     saved.write(_name(scenario), json.dumps(payload, indent=1).encode())
+    _forget_compared(saved)
     return ScenarioInfo(id=scenario, name=name, saved_at=saved_at, interventions=len(kept))
 
 
 def delete_scenario(scenario: str, saved: Storage = SAVED, presets: Storage | None = PRESETS) -> None:
     if saved.delete(_name(scenario)):
+        _forget_compared(saved)
         return
     if presets is not None and presets.read(_name(scenario)) is not None:
         raise ScenarioError(f"Scenario {scenario!r} comes with the site: it can't be deleted")
@@ -158,3 +196,4 @@ def scenario_documents(saved: Storage) -> dict[str, bytes]:
 def delete_library(saved: Storage) -> None:
     for name in saved.names():
         saved.delete(name)
+    _forget_compared(saved)

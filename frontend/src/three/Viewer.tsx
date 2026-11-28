@@ -14,7 +14,8 @@ import { noteWords } from "../notes/words";
 import { tr, useLang } from "../i18n/lang";
 import { Lighting } from "./Lighting";
 import { MaterialLibrary } from "./materials";
-import { terminateTreeWorkerPool } from "./workers/treeWorkerPool";
+import { TreeWorkerPool } from "./workers/treeWorkerPool";
+import { viewSettings, type View3DSettings, type ViewContext } from "./viewSettings";
 import type { SeasonState, SunPosition } from "./sun";
 import { DEFAULT_FOV_DEG, EYE_HEIGHT_M, LOOK_DISTANCE_M, MIN_CAMERA_HEIGHT_M, OVERVIEW_FOV_DEG, type CameraPose } from "./camera";
 import { anchorFromPolygon, bearingToDirection, directionToBearing, toLocal, toLngLat } from "./geo";
@@ -94,6 +95,22 @@ export interface ViewerHandle {
   /** Back to the framing the view opened on, out of walking or wherever
    * the camera was moved — "Vista d'insieme". */
   showOverview: () => void;
+  /** Where the camera is and what it looks at, in the site's own frame:
+   * for two views of the same site moved together (a comparison). Null
+   * before the first build. */
+  readCamera: () => CameraState | null;
+  /** Puts the camera there (orbiting, not walking). */
+  setCamera: (state: CameraState) => void;
+  /** The view as it is drawn now, copied: for the comparison's image of
+   * the pair. Null before the first build. */
+  snapshot: () => HTMLCanvasElement | null;
+}
+
+/** A camera as `readCamera` gives it: its position and the point it looks
+ * at, in metres in the site's frame. */
+export interface CameraState {
+  position: [number, number, number];
+  target: [number, number, number];
 }
 
 interface ViewerProps {
@@ -131,6 +148,9 @@ interface ViewerProps {
   onViewChange?: (pose: CameraPose, mode: "orbit" | "walk") => void;
   /** How many people are around (time of day, season) — see people/activity.ts. */
   crowdActivity: CrowdActivity;
+  /** How heavy the view is drawn (see three/viewSettings.ts): read when it
+   * opens. The single view's by default. */
+  settings?: View3DSettings;
   /** People, dogs and cars hidden, frozen or moving. */
   lifeMode: LifeMode;
   /** Where to start, instead of the default overview — the 2D map's framing
@@ -181,6 +201,7 @@ export function Viewer({
   onThermalReading,
   comfort = null,
   onCrowdExposure,
+  settings,
 }: ViewerProps) {
   // Only "simulated" changes the built geometry; "hidden" and "cards" share
   // the same current-situation build, so switching between those two only
@@ -194,6 +215,9 @@ export function Viewer({
   const controlsRef = useRef<OrbitControls | null>(null);
   const lightingRef = useRef<Lighting | null>(null);
   const materialsRef = useRef<MaterialLibrary | null>(null);
+  // The view's settings, read once, and its own tree workers.
+  const settingsRef = useRef(settings ?? viewSettings(false));
+  const viewContextRef = useRef<ViewContext | null>(null);
   const builtRef = useRef<BuiltScene | null>(null);
   const placardsRef = useRef<Placards | null>(null);
   const notePlacardsRef = useRef<Placards | null>(null);
@@ -492,6 +516,7 @@ export function Viewer({
     lightingRef.current = lighting;
 
     materialsRef.current = new MaterialLibrary();
+    viewContextRef.current = { settings: settingsRef.current, trees: new TreeWorkerPool() };
 
     // Outside the rebuilt scene group, so people survive (and are only
     // incrementally updated by) rebuilds. Not at all in a domain without
@@ -739,6 +764,8 @@ export function Viewer({
         traffic.settle();
       }
       const renderStart = performance.now();
+      // This view's streetlights, in the materials it may share with another.
+      materialsRef.current?.lamps.activate();
       composer.render();
       const renderEnd = performance.now();
       // A frame after a pause (tab hidden, view switched away) isn't
@@ -784,7 +811,8 @@ export function Viewer({
       if (builtRef.current) disposeScene(builtRef.current);
       lighting.dispose();
       materialsRef.current?.dispose();
-      terminateTreeWorkerPool();
+      viewContextRef.current?.trees.dispose();
+      viewContextRef.current = null;
       composer.dispose();
       composerRef.current = null;
       threeSceneRef.current = null;
@@ -812,7 +840,7 @@ export function Viewer({
     const inputs = buildInputsRef.current;
     if (!inputs || !threeScene || !materials || !lighting || buildingRef.current) return;
     buildingRef.current = true;
-    buildScene(inputs.scene, materials, inputs.showInterventions, inputs.terrain).then((built) => {
+    buildScene(inputs.scene, materials, viewContextRef.current!, inputs.showInterventions, inputs.terrain).then((built) => {
       buildingRef.current = false;
       // Unmounted meanwhile (the mount effect's cleanup clears the scene ref).
       if (threeSceneRef.current !== threeScene) {
@@ -1075,6 +1103,39 @@ export function Viewer({
       // The cleared pose that follows has nothing left to undo.
       appliedPoseRef.current = null;
     },
+    readCamera: () => {
+      const camera = cameraRef.current;
+      const controls = controlsRef.current;
+      if (!builtRef.current || !camera || !controls) return null;
+      // Walking, the controls' target is where the walk began: ahead of
+      // the walker instead.
+      const target = walkRef.current?.isLocked
+        ? camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(10).add(camera.position)
+        : controls.target;
+      return { position: camera.position.toArray(), target: target.toArray() };
+    },
+    setCamera: (state: CameraState) => {
+      const camera = cameraRef.current;
+      const controls = controlsRef.current;
+      if (!builtRef.current || !camera || !controls) return;
+      walkRef.current?.controls.unlock();
+      camera.position.fromArray(state.position);
+      controls.target.fromArray(state.target);
+      camera.lookAt(controls.target);
+    },
+    snapshot: () => {
+      const renderer = rendererRef.current;
+      const composer = composerRef.current;
+      if (!builtRef.current || !renderer || !composer) return null;
+      // Drawn again just before: the buffer isn't kept between frames.
+      materialsRef.current?.lamps.activate();
+      composer.render();
+      const copy = document.createElement("canvas");
+      copy.width = renderer.domElement.width;
+      copy.height = renderer.domElement.height;
+      copy.getContext("2d")!.drawImage(renderer.domElement, 0, 0);
+      return copy;
+    },
     setAutoRotate: (on: boolean) => {
       const controls = controlsRef.current;
       if (!controls) return;
@@ -1091,6 +1152,7 @@ export function Viewer({
     // Re-render immediately before reading the buffer: the drawing buffer is
     // not preserved between frames, so whatever the last animation frame left
     // there may already have been cleared.
+    materialsRef.current?.lamps.activate();
     composer.render();
     downloadCanvas(renderer.domElement, fileName);
   }

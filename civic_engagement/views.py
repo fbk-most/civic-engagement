@@ -14,8 +14,7 @@ everything.
 
 from civic_engagement.models.schema import PhaseSpec, ViewSpec
 
-# Every panel a view can show. `compare` is for what is still to come:
-# allowed, nothing shown by it yet.
+# Every panel a view can show.
 PANELS = (
     "tab.2d",  # the tabs offered
     "tab.3d",
@@ -29,7 +28,7 @@ PANELS = (
     "interventions",  # the placed interventions' list
     "interventionMode",  # the as-is / cards / simulation switch
     "scenarios",  # the scenario menu (also needs the phase)
-    "compare",  # two scenarios side by side
+    "compare",  # two scenarios side by side (2D, 3D, indicators)
     "export",  # image download
 )
 

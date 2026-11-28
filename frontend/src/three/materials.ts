@@ -12,7 +12,7 @@
  */
 
 import * as THREE from "three";
-import { addLampLighting } from "./lampLighting";
+import { addLampLighting, LampLighting } from "./lampLighting";
 import { loadGroundTextures, type GroundTextureSet } from "./assets";
 import {
   facadeEmissiveTexture,
@@ -179,6 +179,10 @@ export class MaterialLibrary {
    * `branches()` draw with: set every frame (see builders/vegetation.ts);
    * until it is, a tree is drawn whole. */
   readonly treeLod = createTreeLod();
+  /** The view's streetlights, as its materials draw them (see
+   * lampLighting.ts): the pack's streetlights set them, the viewer makes
+   * them the active ones before each render. */
+  readonly lamps = new LampLighting();
   private ground = new Map<string, GroundTextureSet>();
   // Facade materials are cached (and shared across every building of that
   // colour) by `color`, same as everything else in `cache` — but their
@@ -465,6 +469,7 @@ export class MaterialLibrary {
 
   dispose(): void {
     disposeTreeLod(this.treeLod);
+    this.lamps.dispose();
     for (const material of this.cache.values()) material.dispose();
     this.cache.clear();
     // Ground textures are process-wide and cached in `assets.ts`; they outlive

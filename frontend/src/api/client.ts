@@ -156,8 +156,15 @@ export function fetchViews(): Promise<ViewSpec[]> {
   return getJson("/api/views");
 }
 
-export function fetchScene(t: number = 0): Promise<SceneResponse> {
-  return getJson(`/api/scene?t=${t}`);
+/** `&scenario=<id>`, a saved scenario or preset instead of the current
+ * scene (to compare: the backend's `scenario=`); nothing for null. */
+function scenarioParam(scenario: string | null): string {
+  return scenario === null ? "" : `&scenario=${encodeURIComponent(scenario)}`;
+}
+
+/** The team's current scene at year t, or a saved scenario's (`scenario`). */
+export function fetchScene(t: number = 0, scenario: string | null = null): Promise<SceneResponse> {
+  return getJson(`/api/scene?t=${t}${scenarioParam(scenario)}`);
 }
 
 /** Changes whenever any window changes the session's interventions; with
@@ -190,12 +197,14 @@ export function fetchIndicatorDescriptors(): Promise<IndicatorDescriptors> {
 
 /** Apart from the scene, which would otherwise wait for them (two fields,
  * for the thermal ones). */
-export function fetchDeferredIndicators(t: number): Promise<DeferredIndicators> {
-  return getJson(`/api/indicators/deferred?t=${t}`);
+export function fetchDeferredIndicators(t: number, scenario: string | null = null): Promise<DeferredIndicators> {
+  return getJson(`/api/indicators/deferred?t=${t}${scenarioParam(scenario)}`);
 }
 
-export function fetchIndicatorSeries(): Promise<IndicatorSeries> {
-  return getJson("/api/indicators/series");
+/** The series of the team's current scene, or of one of its saved
+ * scenarios or the site's presets (`scenario`, to compare). */
+export function fetchIndicatorSeries(scenario: string | null = null): Promise<IndicatorSeries> {
+  return getJson(`/api/indicators/series${scenario === null ? "" : `?scenario=${encodeURIComponent(scenario)}`}`);
 }
 
 export function fetchThermalField(t: number, month: number, day: number, asIs: boolean): Promise<ThermalFieldResponse> {

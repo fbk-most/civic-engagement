@@ -262,9 +262,86 @@
 }
 
 .indicator-card__subtitle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   margin: 6px 0 0;
   font-size: 12px;
   color: #666;
+}
+
+.indicator-card__pair--3 {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.indicator-card__values--compared {
+  flex-wrap: wrap;
+  column-gap: 12px;
+  row-gap: 2px;
+}
+
+.indicator-card__side {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.indicator-card__value--a,
+.indicator-card__value--b {
+  font-weight: 600;
+}
+
+.indicator-card__value--a {
+  color: #7b3fa8;
+}
+
+.indicator-card__value--b {
+  color: #d9730d;
+}
+
+/* The scenarios compared, in the top bar. */
+.comparison-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.comparison-picker__side {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.comparison-picker__side select {
+  max-width: 180px;
+  padding: 3px 4px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background: #fff;
+  font: inherit;
+}
+
+.comparison-picker__letter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.comparison-picker__letter--a {
+  background: #7b3fa8;
+}
+
+.comparison-picker__letter--b {
+  background: #d9730d;
 }
 
 .indicator-card__legend {
@@ -366,6 +443,29 @@
 
 .chart__dot--scenario {
   fill: #2e6b1f;
+}
+
+/* Two scenarios compared (A, B): a colour each, apart from the green and
+   red of better and worse and the cursor's blue, and from each other for
+   red-green colour blindness. The same as their letters
+   (.comparison-picker__letter). */
+/* A wider, under B: where the two coincide, A's edge still shows. */
+.chart__line--a {
+  stroke: #7b3fa8;
+  stroke-width: 3.6;
+}
+
+.chart__line--b {
+  stroke: #d9730d;
+  stroke-width: 1.8;
+}
+
+.chart__dot--a {
+  fill: #7b3fa8;
+}
+
+.chart__dot--b {
+  fill: #d9730d;
 }
 
 .chart__click-area {
@@ -1790,4 +1890,110 @@
   margin: 0;
   color: #b3261e;
   font-size: 14px;
+}
+
+/* Comparing: A and B side by side over the main map (ComparisonView), each
+   a read-only map with its name and its key indicators. */
+.comparison-view {
+  position: absolute;
+  top: var(--top-bar-height);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  background: #fff;
+}
+
+.scenario-pane {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.scenario-pane__map {
+  position: absolute;
+  inset: 0;
+}
+
+.scenario-pane__title {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 280px);
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scenario-pane__kpi {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  bottom: 10px;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+}
+
+.scenario-pane__kpi > .kpi-panel {
+  min-height: 0;
+  overflow-y: auto;
+  pointer-events: auto;
+}
+
+.scenario-pane__status {
+  position: absolute;
+  top: 52px;
+  left: 10px;
+  z-index: 1;
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #b33;
+  font-size: 13px;
+}
+
+/* The 3D comparison's controls for both views: people and traffic, the
+   pair's image (bottom left, clear of the time panel in the middle). */
+.comparison-view__tools {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.comparison-view__download {
+  border: none;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 5px 12px;
+}
+
+.comparison-view__download:hover {
+  background: rgba(0, 0, 0, 0.72);
+}
+
+.comparison-view--3d .view-3d__time {
+  z-index: 1;
 }

@@ -26,7 +26,11 @@ const SLOTS_PER_CELL = 12;
 const TEXELS_PER_CELL = SLOTS_PER_CELL / 4;
 const MAX_GRID_ROWS = 4096;
 
-/** Shared by every patched material: updating a value updates them all. */
+/** Shared by every patched material: updating a value updates them all.
+ * Each 3D view keeps its own lamps (`LampLighting`) and makes them these
+ * values before it renders (`activate`): two views side by side draw their
+ * own lamps, and the materials shared between them (the people's, the
+ * cars') see the lamps of the view being drawn. */
 const uniforms = {
   lampData: { value: emptyTexture(1, 1) as THREE.DataTexture },
   lampGrid: { value: emptyTexture(TEXELS_PER_CELL, 1) as THREE.DataTexture },
@@ -46,72 +50,103 @@ function emptyTexture(width: number, height: number): THREE.DataTexture {
   return texture;
 }
 
-let lamps: THREE.Vector3[] = [];
+/** One 3D view's lamps (its MaterialLibrary's `lamps`): where they are, which
+ * have a real light, how bright they are. */
+export class LampLighting {
+  private lamps: THREE.Vector3[] = [];
+  private lampData = emptyTexture(1, 1);
+  private lampGrid = emptyTexture(TEXELS_PER_CELL, 1);
+  private readonly gridOrigin = new THREE.Vector2();
+  private cellSize = 1;
+  private gridCols = 1;
+  private gridRows = 1;
+  private readonly color = new THREE.Color();
+  private intensity = 0;
+  private range = 1;
 
-/** Where the lamps are, and how far they reach: rebuilds the lamp list and
- * the grid. Call on every scene build. */
-export function setLampLayout(positions: THREE.Vector3[], range: number, color: THREE.ColorRepresentation): void {
-  lamps = positions;
-  uniforms.lampColor.value.set(color);
-  uniforms.lampRange.value = range;
+  /** Where the lamps are, and how far they reach: rebuilds the lamp list
+   * and the grid. Call on every scene build. */
+  setLayout(positions: THREE.Vector3[], range: number, color: THREE.ColorRepresentation): void {
+    this.lamps = positions;
+    this.color.set(color);
+    this.range = range;
 
-  const data = new Float32Array(Math.max(1, positions.length) * 4);
-  positions.forEach((p, i) => data.set([p.x, p.y, p.z, 1], i * 4));
-  uniforms.lampData.value.dispose();
-  uniforms.lampData.value = new THREE.DataTexture(data, Math.max(1, positions.length), 1, THREE.RGBAFormat, THREE.FloatType);
-  uniforms.lampData.value.needsUpdate = true;
+    const data = new Float32Array(Math.max(1, positions.length) * 4);
+    positions.forEach((p, i) => data.set([p.x, p.y, p.z, 1], i * 4));
+    this.lampData.dispose();
+    this.lampData = new THREE.DataTexture(data, Math.max(1, positions.length), 1, THREE.RGBAFormat, THREE.FloatType);
+    this.lampData.needsUpdate = true;
 
-  if (positions.length === 0) return;
-  const minX = Math.min(...positions.map((p) => p.x)) - range;
-  const maxX = Math.max(...positions.map((p) => p.x)) + range;
-  const minZ = Math.min(...positions.map((p) => p.z)) - range;
-  const maxZ = Math.max(...positions.map((p) => p.z)) + range;
-  // Cells about the size of a lamp's reach: small enough that a cell's list
-  // stays short, and never so many that the grid texture outgrows limits.
-  let cell = Math.max(8, range);
-  while (Math.ceil((maxX - minX) / cell) * Math.ceil((maxZ - minZ) / cell) > MAX_GRID_ROWS) cell *= 1.25;
-  const cols = Math.ceil((maxX - minX) / cell);
-  const rows = Math.ceil((maxZ - minZ) / cell);
+    if (positions.length === 0) return;
+    const minX = Math.min(...positions.map((p) => p.x)) - range;
+    const maxX = Math.max(...positions.map((p) => p.x)) + range;
+    const minZ = Math.min(...positions.map((p) => p.z)) - range;
+    const maxZ = Math.max(...positions.map((p) => p.z)) + range;
+    // Cells about the size of a lamp's reach: small enough that a cell's list
+    // stays short, and never so many that the grid texture outgrows limits.
+    let cell = Math.max(8, range);
+    while (Math.ceil((maxX - minX) / cell) * Math.ceil((maxZ - minZ) / cell) > MAX_GRID_ROWS) cell *= 1.25;
+    const cols = Math.ceil((maxX - minX) / cell);
+    const rows = Math.ceil((maxZ - minZ) / cell);
 
-  const grid = new Float32Array(cols * rows * TEXELS_PER_CELL * 4).fill(-1);
-  for (let cz = 0; cz < rows; cz++) {
-    for (let cx = 0; cx < cols; cx++) {
-      // Lamps that can reach any point of the cell, nearest its centre first.
-      const x0 = minX + cx * cell;
-      const z0 = minZ + cz * cell;
-      const reaching = positions
-        .map((p, index) => {
-          const dx = Math.max(x0 - p.x, 0, p.x - (x0 + cell));
-          const dz = Math.max(z0 - p.z, 0, p.z - (z0 + cell));
-          return { index, reach: Math.hypot(dx, dz), centre: Math.hypot(p.x - (x0 + cell / 2), p.z - (z0 + cell / 2)) };
-        })
-        .filter((lamp) => lamp.reach <= range)
-        .sort((a, b) => a.centre - b.centre)
-        .slice(0, SLOTS_PER_CELL);
-      const base = (cz * cols + cx) * SLOTS_PER_CELL;
-      reaching.forEach((lamp, slot) => (grid[base + slot] = lamp.index));
+    const grid = new Float32Array(cols * rows * TEXELS_PER_CELL * 4).fill(-1);
+    for (let cz = 0; cz < rows; cz++) {
+      for (let cx = 0; cx < cols; cx++) {
+        // Lamps that can reach any point of the cell, nearest its centre first.
+        const x0 = minX + cx * cell;
+        const z0 = minZ + cz * cell;
+        const reaching = positions
+          .map((p, index) => {
+            const dx = Math.max(x0 - p.x, 0, p.x - (x0 + cell));
+            const dz = Math.max(z0 - p.z, 0, p.z - (z0 + cell));
+            return { index, reach: Math.hypot(dx, dz), centre: Math.hypot(p.x - (x0 + cell / 2), p.z - (z0 + cell / 2)) };
+          })
+          .filter((lamp) => lamp.reach <= range)
+          .sort((a, b) => a.centre - b.centre)
+          .slice(0, SLOTS_PER_CELL);
+        const base = (cz * cols + cx) * SLOTS_PER_CELL;
+        reaching.forEach((lamp, slot) => (grid[base + slot] = lamp.index));
+      }
     }
+    this.lampGrid.dispose();
+    this.lampGrid = new THREE.DataTexture(grid, TEXELS_PER_CELL, cols * rows, THREE.RGBAFormat, THREE.FloatType);
+    this.lampGrid.needsUpdate = true;
+    this.gridOrigin.set(minX, minZ);
+    this.cellSize = cell;
+    this.gridCols = cols;
+    this.gridRows = rows;
   }
-  uniforms.lampGrid.value.dispose();
-  uniforms.lampGrid.value = new THREE.DataTexture(grid, TEXELS_PER_CELL, cols * rows, THREE.RGBAFormat, THREE.FloatType);
-  uniforms.lampGrid.value.needsUpdate = true;
-  uniforms.lampGridOrigin.value.set(minX, minZ);
-  uniforms.lampCellSize.value = cell;
-  uniforms.lampGridCols.value = cols;
-  uniforms.lampGridRows.value = rows;
-}
 
-/** Lamps currently served by a real light (left out here, so they don't
- * light things twice). */
-export function setRealLamps(served: Set<number>): void {
-  const texture = uniforms.lampData.value;
-  const data = texture.image.data as Float32Array;
-  lamps.forEach((_, i) => (data[i * 4 + 3] = served.has(i) ? 0 : 1));
-  texture.needsUpdate = true;
-}
+  /** Lamps currently served by a real light (left out here, so they don't
+   * light things twice). */
+  setReal(served: Set<number>): void {
+    const data = this.lampData.image.data as Float32Array;
+    this.lamps.forEach((_, i) => (data[i * 4 + 3] = served.has(i) ? 0 : 1));
+    this.lampData.needsUpdate = true;
+  }
 
-export function setLampIntensity(intensity: number): void {
-  uniforms.lampIntensity.value = intensity;
+  setIntensity(intensity: number): void {
+    this.intensity = intensity;
+  }
+
+  /** Makes these the lamps every patched material draws: before each
+   * render of the view. */
+  activate(): void {
+    uniforms.lampData.value = this.lampData;
+    uniforms.lampGrid.value = this.lampGrid;
+    uniforms.lampGridOrigin.value.copy(this.gridOrigin);
+    uniforms.lampCellSize.value = this.cellSize;
+    uniforms.lampGridCols.value = this.gridCols;
+    uniforms.lampGridRows.value = this.gridRows;
+    uniforms.lampColor.value.copy(this.color);
+    uniforms.lampIntensity.value = this.intensity;
+    uniforms.lampRange.value = this.range;
+  }
+
+  dispose(): void {
+    this.lampData.dispose();
+    this.lampGrid.dispose();
+  }
 }
 
 const VERTEX_DECLARATIONS = /* glsl */ `

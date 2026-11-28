@@ -19,6 +19,7 @@ import {
   fetchDeferredIndicators,
   fetchIndicatorDescriptors,
   fetchScene,
+  fetchScenarios,
   fetchSessionRevision,
   fetchSiteAssets,
   fetchTerrainGrid,
@@ -35,6 +36,7 @@ import type {
   InterventionDisplayMode,
   Panel,
   PlacementType,
+  ScenarioInfo,
   SceneResponse,
   TerrainGrid,
   ViewSpec,
@@ -65,6 +67,10 @@ import { ViewTabs, type AppView } from "./ui/ViewTabs";
 import { LangSwitch } from "./ui/LangSwitch";
 import { TempSwitch } from "./ui/TempSwitch";
 import { ScenarioMenu } from "./ui/ScenarioMenu";
+import { ComparisonPicker } from "./ui/ComparisonPicker";
+import { ComparisonView } from "./ui/ComparisonView";
+import { ComparisonView3D } from "./ui/ComparisonView3D";
+import { initialCompared, keptCompared, sourceKey, sourceLabel, type Compared, type ComparedSource, type Side } from "./comparison";
 import { TeamBadge } from "./ui/TeamBadge";
 import { can, useAccess } from "./access";
 import { panelShown, resolveView, tabAfter, viewInterventionMode, viewTabs } from "./views";
@@ -228,6 +234,10 @@ function App() {
   // The scenario last loaded, and its cards as loaded: an image is named
   // after it while the cards are still those (see imageName).
   const [loadedScenario, setLoadedScenario] = useState<{ name: string; cards: string } | null>(null);
+  // Two scenarios compared (the `compare` panel): each side's source, null
+  // until the scenarios to choose from are first read.
+  const [compared, setCompared] = useState<Compared | null>(null);
+  const [scenarios, setScenarios] = useState<ScenarioInfo[]>([]);
   // Null until known (flat if the site has no terrain grid). The ref is for
   // the tab switches' camera carry-over, which read it outside React.
   const [terrain, setTerrain] = useState<Terrain | null>(null);
@@ -310,6 +320,13 @@ function App() {
     const current = sceneRef.current;
     const scenario = loadedScenario && current && cardsKey(current.interventions) === loadedScenario.cards ? loadedScenario.name : null;
     return imageFileName({ site: current?.site_id ?? "site", team: access.me.team.id, scenario, year: CURRENT_YEAR + t, view });
+  }
+
+  /** The comparison's image: both scenarios, named after both. */
+  function pairImageName(pair: Record<Side, ComparedSource>, view: "2d" | "3d"): string {
+    const name = (side: Side) => (pair[side].scenario === null ? "corrente" : pair[side].label);
+    const scenario = `${name("a")} vs ${name("b")}`;
+    return imageFileName({ site: sceneRef.current?.site_id ?? "site", team: access.me.team.id, scenario, year: CURRENT_YEAR + t, view });
   }
 
   function downloadMapImage() {
@@ -562,9 +579,11 @@ function App() {
     }
   }, [tab]);
 
+  // Not when comparing: the comparison has its own two (ComparisonView3D).
+  const comparingView = views !== null && panelShown(screenView, "compare", me.operations);
   useEffect(() => {
-    if (tab === "3d") setView3dMounted(true);
-  }, [tab]);
+    if (tab === "3d" && !comparingView) setView3dMounted(true);
+  }, [tab, comparingView]);
 
   // A change of view (from the URL, or the phase's): the tab it opens on,
   // if that differs from the last view's or the tab shown isn't one it
@@ -609,6 +628,31 @@ function App() {
   // What's evaluated: the cards turned on (the others are only listed and
   // drawn), so a card turned off and on again finds its fields cached.
   const enabledInterventions = useMemo(() => scene?.interventions.filter((i) => i.enabled) ?? [], [scene?.interventions]);
+
+  // Comparing: the scenarios read when the view or the indicators tab opens
+  // and when the picker is used (one saved meanwhile, in another window);
+  // a side whose scenario is gone goes back to the current scene.
+  const comparing = comparingView;
+  const refreshScenarios = useCallback(() => {
+    fetchScenarios()
+      .then((list) => {
+        setScenarios(list);
+        setCompared((previous) => (previous === null ? initialCompared(list) : keptCompared(previous, list)));
+      })
+      .catch(console.error);
+  }, []);
+  useEffect(() => {
+    if (comparing) refreshScenarios();
+  }, [comparing, tab, refreshScenarios]);
+  // Built at every render (the labels follow the language): the series are
+  // fetched again only when a side's key changes.
+  const comparedSource = (side: Side, chosen: Compared): ComparedSource => ({
+    scenario: chosen[side],
+    label: sourceLabel(chosen[side], scenarios, tr("Scena corrente", "Current scene")),
+    key: sourceKey(chosen[side], scenarios, cardsKey(enabledInterventions)),
+  });
+  const comparison =
+    comparing && compared !== null ? { a: comparedSource("a", compared), b: comparedSource("b", compared) } : undefined;
   const thermalAsIs = interventionMode === "hidden";
   const crowdAsIs = interventionMode !== "simulated";
   const comfortWanted = view3dMounted && features.thermal;
@@ -1050,6 +1094,9 @@ function App() {
           {ready && tab !== "indicators" && shown("interventionMode") && (
             <InterventionsToggle mode={interventionMode} onChange={changeInterventionMode} />
           )}
+          {ready && comparing && compared !== null && (
+            <ComparisonPicker scenarios={scenarios} compared={compared} onChange={setCompared} onRefresh={refreshScenarios} />
+          )}
           {ready && scene && shown("scenarios") && (
             <ScenarioMenu
               interventionCount={scene.interventions.length}
@@ -1086,6 +1133,19 @@ function App() {
       {notice && <div className={restartNeeded ? "map-notice map-notice--lower" : "map-notice"}>{notice}</div>}
       {ready && (
         <>
+          {tab === "2d" && comparison && (
+            <ComparisonView
+              comparison={comparison}
+              t={t}
+              mode={interventionMode}
+              cards={cards}
+              descriptors={indicatorDescriptors}
+              showKpi={shown("kpi")}
+              initialFraming={mapRef.current ? readMapFraming(mapRef.current) : null}
+              onLeave={(framing) => mapRef.current?.jumpTo(framing)}
+              imageName={shown("export") ? () => pairImageName(comparison, "2d") : undefined}
+            />
+          )}
           {tab === "2d" && (
             <>
               {/* The current situation has no cards to place or list; the
@@ -1113,7 +1173,7 @@ function App() {
                 </div>
               )}
               {shown("legend") && <MapLegend />}
-              {shown("export") && (
+              {shown("export") && !comparison && (
                 <button
                   type="button"
                   className="map-download"
@@ -1125,13 +1185,33 @@ function App() {
               )}
             </>
           )}
+          {tab === "3d" && comparison && (
+            <ComparisonView3D
+              comparison={comparison}
+              t={t}
+              onTimeChange={handleTimeChange}
+              showTime={shown("time")}
+              mode={interventionMode}
+              cards={cards}
+              descriptors={indicatorDescriptors}
+              showKpi={shown("kpi")}
+              terrain={terrain}
+              site={scene?.site_boundary ?? null}
+              sunSetting={sunSetting}
+              onSunSettingChange={changeSunSetting}
+              initialView={
+                mapRef.current && scene ? mapToView(mapRef.current, anchorFromPolygon(scene.site_boundary), terrainRef.current) : null
+              }
+              imageName={shown("export") ? () => pairImageName(comparison, "3d") : undefined}
+            />
+          )}
           {view3dMounted && (
             <View3D
               scene={scene}
               terrain={terrain}
               mode={interventionMode}
               cards={cards}
-              active={tab === "3d"}
+              active={tab === "3d" && !comparison}
               t={t}
               onTimeChange={handleTimeChange}
               showTime={shown("time")}
@@ -1154,7 +1234,8 @@ function App() {
               initialView={initial3dView}
             />
           )}
-          {tab !== "indicators" && (
+          {/* Comparing, each pane has its own key indicators. */}
+          {tab !== "indicators" && !comparison && (
             <div className="right-rail">
               {scene && indicatorDescriptors && shown("kpi") && <KpiPanel
                   descriptors={indicatorDescriptors}
@@ -1235,6 +1316,7 @@ function App() {
               asIs={!shown("interventionMode") && interventionMode === "hidden"}
               t={t}
               onTimeChange={handleTimeChange}
+              comparison={comparison}
             />
           )}
           {/* In the 3D view the year is part of its own time panel, together

@@ -336,6 +336,9 @@ def test_teams_apart_and_viewers_looking(pin_app, tmp_path):
     assert [s["id"] for s in pin_app.get("/api/scenarios", headers=viewer1).json()] == ["idea"]
     assert pin_app.get("/api/scenarios", headers=editor2).json() == []
     assert pin_app.post("/api/scenarios/idea/load", headers=editor2).status_code == 404
+    # Looked at (to compare) by the team's viewers too; not by team 2.
+    assert pin_app.get("/api/scene?scenario=idea", headers=viewer1).status_code == 200
+    assert pin_app.get("/api/scene?scenario=idea", headers=editor2).status_code == 404
 
     # In the state: a document per team.
     session = json.loads((tmp_path / "tests/toy_pack/data/sessions/team-1.json").read_text())

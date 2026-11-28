@@ -13,8 +13,10 @@ import { TimeSlider } from "./TimeSlider";
 import { MiniMap, type MiniMapHandle } from "./MiniMap";
 import { crowdActivity, type LifeMode } from "../three/people/activity";
 import { PerfPanel } from "./PerfPanel";
+import { LifeSwitch } from "./LifeSwitch";
 import { tr } from "../i18n/lang";
 import { activePack } from "../pack";
+import { viewSettings } from "../three/viewSettings";
 
 interface View3DProps {
   scene: SceneResponse | null;
@@ -64,27 +66,15 @@ interface View3DProps {
   viewRef?: Ref<View3DViewHandle>;
   /** The 2D map's framing, to open on the first time (see `viewRef`). */
   initialView?: CameraPose | null;
+  /** One of two views side by side (a comparison): drawn lighter (see
+   * three/viewSettings.ts). */
+  split?: boolean;
 }
 
 export type View3DViewHandle = Pick<ViewerHandle, "readView" | "showView">;
 
 // `?comfort=off`: URL-only, so read once, and carried over as it came in.
 const COMFORT_REACT = readDebugParams().comfort;
-
-const LIFE_LABELS: Record<LifeMode, { label: () => string; title: () => string }> = {
-  off: {
-    label: () => tr("Nascosti", "Hidden"),
-    title: () => tr("Solo lo spazio, senza persone, animali e auto", "Only the space, without people, animals and cars"),
-  },
-  still: {
-    label: () => tr("Fermi", "Still"),
-    title: () => tr("Persone e traffico fermi, come in una fotografia", "People and traffic stopped, as in a photograph"),
-  },
-  live: {
-    label: () => tr("In movimento", "Moving"),
-    title: () => tr("Persone che camminano e auto che circolano", "People walking and cars driving around"),
-  },
-};
 
 /** The "Vista 3D" tab: the realistic view, full-size, with a plan mini-map
  * for placing the viewpoint and one panel for year, day and hour. */
@@ -114,10 +104,13 @@ export function View3D({
   showPerf = false,
   viewRef,
   initialView,
+  split = false,
 }: View3DProps) {
+  // How heavy it's drawn, read once: the single view's, or a split's.
+  const [settings] = useState(() => viewSettings(split));
   // People and traffic are the domain's (see FrontendPack.features).
   const hasLife = activePack().features.life;
-  const [lifeMode, setLifeMode] = useState<LifeMode>(hasLife ? (initialLifeMode ?? "live") : "off");
+  const [lifeMode, setLifeMode] = useState<LifeMode>(hasLife ? (settings.life ?? initialLifeMode ?? "live") : "off");
   const [urlCopied, setUrlCopied] = useState(false);
   const viewerRef = useRef<ViewerHandle>(null);
   const miniMapRef = useRef<MiniMapHandle>(null);
@@ -218,6 +211,7 @@ export function View3D({
         onThermalReading={onThermalReading}
         comfort={comfort}
         onCrowdExposure={onCrowdExposure}
+        settings={settings}
       />
       <div className="view-3d__left">
         <MiniMap
@@ -244,22 +238,7 @@ export function View3D({
             {urlCopied ? tr("Copiato!", "Copied!") : tr("Copia URL vista", "Copy view URL")}
           </button>
         </div>
-        {hasLife && <div className="view-3d__life" role="group" aria-label={tr("Persone e traffico", "People and traffic")}>
-          <span>{tr("Persone e traffico", "People and traffic")}</span>
-          <div>
-            {(Object.keys(LIFE_LABELS) as LifeMode[]).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                aria-pressed={lifeMode === mode}
-                title={LIFE_LABELS[mode].title()}
-                onClick={() => setLifeMode(mode)}
-              >
-                {LIFE_LABELS[mode].label()}
-              </button>
-            ))}
-          </div>
-        </div>}
+        {hasLife && <LifeSwitch mode={lifeMode} onChange={setLifeMode} />}
         {showPerf && (
           <PerfPanel
             viewerRef={viewerRef}

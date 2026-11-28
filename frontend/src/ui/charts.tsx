@@ -3,7 +3,7 @@
  * Deliberately plain: a year axis, a value axis, and a cursor at the current
  * scenario year that can be moved by clicking the chart. A charting library
  * becomes worth its weight once the requirements for richer interaction
- * (hover read-outs, zooming, comparing scenarios) are clear — not before.
+ * (hover read-outs, zooming) are clear — not before.
  */
 
 import type { MouseEvent } from "react";
@@ -17,9 +17,13 @@ const PLOT_W = WIDTH - MARGIN.left - MARGIN.right;
 const PLOT_H = HEIGHT - MARGIN.top - MARGIN.bottom;
 const YEAR_TICKS = [0, 10, 20, 30];
 
+/** The as-is, the simulation, or one of two scenarios compared (A, B):
+ * each drawn in its own style (App.css, `chart__line--<variant>`). */
+export type LineVariant = "baseline" | "scenario" | "a" | "b";
+
 export interface LineSeries {
   values: (number | null)[];
-  variant: "baseline" | "scenario";
+  variant: LineVariant;
 }
 
 interface Frame {

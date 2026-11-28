@@ -89,6 +89,27 @@ A card can be turned off (`PATCH /api/interventions/{id}/enabled`,
 the scene, drawn grey on the map, but the scene, the indicators and the
 pack's fields are computed without it, and saving a scenario leaves it out;
 a scenario's cards are all on when it's loaded.
+A saved scenario (or a preset) can also be looked at without loading it, to
+compare it with the current scene or another: `scenario=<id>` on
+`GET /api/scene`, `/api/indicators/deferred` and `/api/indicators/series`
+(and on the pack's routes that follow it), the session left alone. The
+evaluations of the last 32 sets of cards are kept
+(`CIVIC_ENGAGEMENT_EVALUATIONS`), enough for five teams comparing two each.
+A view with the `compare` panel shows two of them side by side, A and B,
+each the current scene, a saved scenario or a preset, picked in the top bar.
+In the 2D tab, two maps, read-only, their cameras moved together, each with
+its key indicators; its image (`export`) is the pair, each labelled,
+`<site>_<team>_<A>-vs-<B>_<year>_2d.png`. In the indicators tab, three
+curves per chart (the as-is, A and B), the values of A and B at the year
+chosen, each with its change from the as-is, and B − A. In the 3D tab, two
+3D views, their cameras moved together, with one year, day and hour and one
+people-and-traffic switch, and the pair as an image. They are drawn lighter
+than the single view — two views cost the graphics card about twice one:
+one shadow-casting streetlight, lighter trees, people and traffic hidden
+at first (`SPLIT_DEFAULTS` in `frontend/src/three/viewSettings.ts`; a pack
+changes them in `scene3d.split`, and `?realLights=`, `?detail=` and
+`?life=` still win, for testing). Measured on a Radeon 860M laptop: over
+36 fps by day and by night, about 16 with people moving by day.
 `CIVIC_ENGAGEMENT_SCENARIO=<id>` loads a scenario when the backend starts — at
 every start, `--reload` restarts included, so leave it out once a workshop
 is under way.

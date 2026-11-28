@@ -13,6 +13,7 @@
  * file.
  */
 
+import type { ViewContext } from "./viewSettings";
 import * as THREE from "three";
 import { Water } from "three/examples/jsm/objects/Water.js";
 import type { DiscreteElement, SceneResponse } from "../api/types";
@@ -90,6 +91,7 @@ export function disposeScene(built: BuiltScene): void {
 export async function buildScene(
   scene: SceneResponse,
   materials: MaterialLibrary,
+  view: ViewContext,
   showInterventions = true,
   terrain: Terrain = FLAT_TERRAIN
 ): Promise<BuiltScene> {
@@ -143,7 +145,7 @@ export async function buildScene(
   const ribbonTypes = new Set(scene3d.ribbonTypes);
   group.add(named(buildPaths(elements.filter((e) => ribbonTypes.has(e.type)), anchor, materials, terrain), "paths"));
   group.add(named(await ACTIVE_PROVIDER.build(buildings, { anchor, materials, terrain }), "buildings"));
-  const vegetation = await buildVegetation(elements, anchor, materials, terrain);
+  const vegetation = await buildVegetation(elements, anchor, materials, terrain, view);
   named(vegetation.group, "trees");
   parts.push({ object: vegetation.group, frame: vegetation.frame });
   // The forest the pack grows from the covers, if it does (see forest.ts).
@@ -153,7 +155,7 @@ export async function buildScene(
     parts.push(forest.part);
   }
 
-  for (const build of scene3d.parts) parts.push(await build({ elements, covers, anchor, materials, terrain }));
+  for (const build of scene3d.parts) parts.push(await build({ elements, covers, anchor, materials, terrain, view }));
   const water = buildWater(covers, anchor, terrain);
   named(water.object, "water");
   parts.push(water);

@@ -1,6 +1,9 @@
-/** Pool of persistent module workers that build tree geometry off the main
+/** Pools of persistent module workers that build tree geometry off the main
  * thread — see `treeWorker.ts` for what actually runs in each one, and
- * `treeJobs.ts` for the message shapes.
+ * `treeJobs.ts` for the message shapes. One pool per 3D view (two side by
+ * side when comparing): a view's new build cancels its own build in
+ * flight, never the other view's. The built trees are cached for all of
+ * them (see below).
  *
  * Workers are lazily created on first use and kept alive across calls —
  * spawning a worker isn't free, and recreating the whole pool on every
@@ -25,6 +28,8 @@
 import type { TreeBuildResult, TreeJob, TreeWorkerRequest, TreeWorkerResponse } from "./treeJobs";
 
 const POOL_SIZE = Math.max(1, Math.min(navigator.hardwareConcurrency || 4, 8));
+
+type Pending = { generation: number; resolve: (results: TreeBuildResult[]) => void; reject: (error: unknown) => void };
 
 /** Bounded by size, not by count: one scenario year's trees for Piazza
  * Dante are about 500 MB of typed arrays (full canopy, measured as 460 MB
@@ -94,127 +99,126 @@ function cacheSet(key: string, result: TreeBuildResult): void {
   }
 }
 
-let workers: Worker[] | null = null;
-let generationCounter = 0;
+/** One view's workers. */
+export class TreeWorkerPool {
+  private workers: Worker[] | null = null;
+  private generationCounter = 0;
+  /** Set while a build is in flight, so a new call can detect (and
+   * hard-cancel) a superseded one before it finishes. */
+  private pending: Pending | null = null;
 
-/** Set while a build is in flight, so a new call can detect (and hard-cancel)
- * a superseded one before it finishes. */
-let pending: { generation: number; resolve: (results: TreeBuildResult[]) => void; reject: (error: unknown) => void } | null = null;
-
-function spawnWorkers(): Worker[] {
-  const pool: Worker[] = [];
-  for (let i = 0; i < POOL_SIZE; i++) {
-    pool.push(new Worker(new URL("./treeWorker.ts", import.meta.url), { type: "module" }));
-  }
-  return pool;
-}
-
-function ensureWorkers(): Worker[] {
-  if (!workers) workers = spawnWorkers();
-  return workers;
-}
-
-/** Builds every tree's geometry, serving whatever's already cached (see
- * module docstring) straight from memory and sending only genuine misses
- * across the worker pool. Result order does not match `jobs` order —
- * nothing downstream cares (`vegetation.ts` merges every tree's geometry
- * into shared meshes regardless of arrival order) — so results are simply
- * concatenated as each worker's response arrives. */
-export function buildTreesInWorkers(jobs: TreeJob[]): Promise<TreeBuildResult[]> {
-  const generation = ++generationCounter;
-
-  if (pending) {
-    // A previous build is still in flight — hard-cancel it (terminate +
-    // respawn) so the pool is fully available for this one, rather than
-    // splitting cores between a result that's about to be discarded and the
-    // one that actually matters. The stale call's promise resolves quietly
-    // (not rejects) with an empty result: its caller already has its own
-    // staleness flag (see Viewer.tsx's scene-rebuild effect) and discards
-    // whatever it gets, so there's nothing to treat as an error here.
-    for (const worker of ensureWorkers()) worker.terminate();
-    workers = null;
-    pending.resolve([]);
-    pending = null;
-  }
-
-  const results: TreeBuildResult[] = [];
-  const missKeysById = new Map<string, string>();
-  const misses: TreeJob[] = [];
-  for (const job of jobs) {
-    const key = treeJobKey(job);
-    const cached = cacheGet(key);
-    if (cached) {
-      results.push(cached);
-    } else {
-      missKeysById.set(job.id, key);
-      misses.push(job);
+  private ensureWorkers(): Worker[] {
+    if (!this.workers) {
+      this.workers = [];
+      for (let i = 0; i < POOL_SIZE; i++) {
+        this.workers.push(new Worker(new URL("./treeWorker.ts", import.meta.url), { type: "module" }));
+      }
     }
+    return this.workers;
   }
 
-  if (misses.length === 0) return Promise.resolve(results);
+  /** Builds every tree's geometry, serving whatever's already cached (see
+   * module docstring) straight from memory and sending only genuine misses
+   * across the pool. Result order does not match `jobs` order — nothing
+   * downstream cares (`vegetation.ts` merges every tree's geometry into
+   * shared meshes regardless of arrival order) — so results are simply
+   * concatenated as each worker's response arrives. */
+  build(jobs: TreeJob[]): Promise<TreeBuildResult[]> {
+    const generation = ++this.generationCounter;
 
-  return new Promise((resolve, reject) => {
-    pending = { generation, resolve, reject };
+    if (this.pending) {
+      // A previous build is still in flight — hard-cancel it (terminate +
+      // respawn) so the pool is fully available for this one, rather than
+      // splitting cores between a result that's about to be discarded and
+      // the one that actually matters. The stale call's promise resolves
+      // quietly (not rejects) with an empty result: its caller already has
+      // its own staleness flag (see Viewer.tsx's scene-rebuild effect) and
+      // discards whatever it gets, so there's nothing to treat as an error.
+      for (const worker of this.ensureWorkers()) worker.terminate();
+      this.workers = null;
+      this.pending.resolve([]);
+      this.pending = null;
+    }
 
-    const pool = ensureWorkers();
-    const chunks: TreeJob[][] = Array.from({ length: pool.length }, () => []);
-    misses.forEach((job, i) => chunks[i % pool.length].push(job));
+    const results: TreeBuildResult[] = [];
+    const missKeysById = new Map<string, string>();
+    const misses: TreeJob[] = [];
+    for (const job of jobs) {
+      const key = treeJobKey(job);
+      const cached = cacheGet(key);
+      if (cached) {
+        results.push(cached);
+      } else {
+        missKeysById.set(job.id, key);
+        misses.push(job);
+      }
+    }
 
-    let outstanding = 0;
+    if (misses.length === 0) return Promise.resolve(results);
 
-    const settle = (fn: () => void) => {
-      // Guards against a terminated worker's listener still firing after
-      // this generation has already been superseded and replaced.
-      if (pending?.generation !== generation) return;
-      fn();
-    };
+    return new Promise((resolve, reject) => {
+      this.pending = { generation, resolve, reject };
 
-    for (let i = 0; i < pool.length; i++) {
-      const chunk = chunks[i];
-      if (chunk.length === 0) continue;
-      outstanding++;
+      const pool = this.ensureWorkers();
+      const chunks: TreeJob[][] = Array.from({ length: pool.length }, () => []);
+      misses.forEach((job, i) => chunks[i % pool.length].push(job));
 
-      const worker = pool[i];
-      const onMessage = (event: MessageEvent<TreeWorkerResponse>) => {
-        if (event.data.generation !== generation) return; // stale response from a since-superseded build
-        worker.removeEventListener("message", onMessage);
-        worker.removeEventListener("error", onError);
-        for (const result of event.data.results) {
-          const key = missKeysById.get(result.id);
-          if (key) cacheSet(key, result);
-          results.push(result);
-        }
-        outstanding--;
-        if (outstanding === 0) {
+      let outstanding = 0;
+
+      const settle = (fn: () => void) => {
+        // Guards against a terminated worker's listener still firing after
+        // this generation has already been superseded and replaced.
+        if (this.pending?.generation !== generation) return;
+        fn();
+      };
+
+      for (let i = 0; i < pool.length; i++) {
+        const chunk = chunks[i];
+        if (chunk.length === 0) continue;
+        outstanding++;
+
+        const worker = pool[i];
+        const onMessage = (event: MessageEvent<TreeWorkerResponse>) => {
+          if (event.data.generation !== generation) return; // stale response from a since-superseded build
+          worker.removeEventListener("message", onMessage);
+          worker.removeEventListener("error", onError);
+          for (const result of event.data.results) {
+            const key = missKeysById.get(result.id);
+            if (key) cacheSet(key, result);
+            results.push(result);
+          }
+          outstanding--;
+          if (outstanding === 0) {
+            settle(() => {
+              this.pending = null;
+              resolve(results);
+            });
+          }
+        };
+        const onError = (event: ErrorEvent) => {
+          worker.removeEventListener("message", onMessage);
+          worker.removeEventListener("error", onError);
           settle(() => {
-            pending = null;
-            resolve(results);
+            this.pending = null;
+            reject(event.error ?? new Error(event.message));
           });
-        }
-      };
-      const onError = (event: ErrorEvent) => {
-        worker.removeEventListener("message", onMessage);
-        worker.removeEventListener("error", onError);
-        settle(() => {
-          pending = null;
-          reject(event.error ?? new Error(event.message));
-        });
-      };
-      worker.addEventListener("message", onMessage);
-      worker.addEventListener("error", onError);
+        };
+        worker.addEventListener("message", onMessage);
+        worker.addEventListener("error", onError);
 
-      const request: TreeWorkerRequest = { generation, jobs: chunk };
-      worker.postMessage(request);
-    }
-  });
-}
+        const request: TreeWorkerRequest = { generation, jobs: chunk };
+        worker.postMessage(request);
+      }
+    });
+  }
 
-/** Terminates every pool worker — called from `Viewer.tsx`'s unmount
- * cleanup, alongside its other renderer/material disposal, so closing the
- * 3D panel doesn't leave workers running in the background. */
-export function terminateTreeWorkerPool(): void {
-  if (!workers) return;
-  for (const worker of workers) worker.terminate();
-  workers = null;
-  pending = null;
+  /** Terminates the pool's workers — called from `Viewer.tsx`'s unmount
+   * cleanup, alongside its other renderer/material disposal, so closing
+   * the 3D view doesn't leave workers running in the background. */
+  dispose(): void {
+    if (!this.workers) return;
+    for (const worker of this.workers) worker.terminate();
+    this.workers = null;
+    this.pending = null;
+  }
 }

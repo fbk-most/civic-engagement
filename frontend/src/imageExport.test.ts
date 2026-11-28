@@ -15,5 +15,9 @@ describe("image file names", () => {
     expect(imageFileName({ site: "piazza", team: "default", scenario: null, year: 2026, view: "2d" })).toBe(
       "piazza_default_corrente_2026_2d.png"
     );
+    // A comparison: both scenarios (App's pairImageName).
+    expect(imageFileName({ site: "piazza", team: "tavolo-1", scenario: "corrente vs Più ombra", year: 2031, view: "2d" })).toBe(
+      "piazza_tavolo-1_corrente-vs-piu-ombra_2031_2d.png"
+    );
   });
 });

@@ -4,6 +4,7 @@ import type { GeoAnchor } from "./geo";
 import type { MaterialLibrary } from "./materials";
 import type { Terrain } from "./terrain";
 import type { SunPosition } from "./sun";
+import type { ViewContext } from "./viewSettings";
 
 /** One part of the 3D scene (the water, the pack's furniture or
  * streetlights...), with what it needs to follow the sun and the camera —
@@ -29,6 +30,8 @@ export interface PartInputs {
   materials: MaterialLibrary;
   /** The ground things stand on (flat on a flat site). */
   terrain: Terrain;
+  /** The view built for: its settings (say, how many real streetlights). */
+  view: ViewContext;
 }
 
 /** Builds a part of the scene: the pack's own (`FrontendPack.scene3d`). */
